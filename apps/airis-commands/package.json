@@ -15,7 +15,7 @@
   "author": "Agile Technology <hello@agiletec.jp>",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.22.0",
+    "@modelcontextprotocol/sdk": "^1.24.0",
     "simple-git": "^3.27.0"
   },
   "devDependencies": {
