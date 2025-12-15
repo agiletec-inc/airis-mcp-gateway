@@ -485,6 +485,49 @@ class ProcessRunner:
         await self._proc.stdin.drain()
         self._last_used = time.time()
 
+    async def _handle_server_request(self, request: dict[str, Any]):
+        """
+        Handle server-initiated requests (bidirectional MCP communication).
+
+        MCP servers can request information from clients:
+        - roots/list: List available roots (directories/contexts)
+        - sampling/createMessage: Request LLM sampling (not supported)
+        """
+        method = request.get("method", "")
+        request_id = request.get("id")
+
+        print(f"[ProcessRunner] {self.config.name} server request: {method} (id={request_id})")
+
+        response: dict[str, Any] = {
+            "jsonrpc": "2.0",
+            "id": request_id,
+        }
+
+        if method == "roots/list":
+            # Return empty roots list - we don't expose any directories to MCP servers
+            response["result"] = {"roots": []}
+
+        elif method == "sampling/createMessage":
+            # We don't support LLM sampling requests from MCP servers
+            response["error"] = {
+                "code": -32601,
+                "message": "Sampling not supported by this client"
+            }
+
+        else:
+            # Unknown method - return method not found error
+            response["error"] = {
+                "code": -32601,
+                "message": f"Method not found: {method}"
+            }
+
+        # Send response
+        if self._proc and self._proc.stdin:
+            data = json.dumps(response) + "\n"
+            self._proc.stdin.write(data.encode())
+            await self._proc.stdin.drain()
+            print(f"[ProcessRunner] {self.config.name} responded to {method}")
+
     async def _stdout_reader(self):
         """Read JSON-RPC responses from stdout."""
         if not self._proc or not self._proc.stdout:
@@ -504,14 +547,18 @@ class ProcessRunner:
                     print(f"[ProcessRunner] {self.config.name} invalid JSON: {line_str[:100]}")
                     continue
 
-                # Handle response
-                if "id" in message:
+                # Handle server-initiated requests (has both "id" and "method")
+                if "id" in message and "method" in message:
+                    await self._handle_server_request(message)
+
+                # Handle response (has "id" but no "method")
+                elif "id" in message:
                     request_id = message["id"]
                     future = self._pending_requests.pop(request_id, None)
                     if future and not future.done():
                         future.set_result(message)
 
-                # Handle server-initiated notifications
+                # Handle server-initiated notifications (has "method" but no "id")
                 elif "method" in message:
                     # Log notifications for debugging
                     print(f"[ProcessRunner] {self.config.name} notification: {message.get('method')}")
