@@ -1,0 +1,51 @@
+version: '3'
+
+vars:
+  AIRIS_COMMANDS_DIR: "{{.REPO_ROOT}}/apps/airis-commands"
+  GATEWAY_CONTROL_DIR: "{{.REPO_ROOT}}/apps/gateway-control"
+
+tasks:
+  mcp:
+    desc: Build all MCP servers
+    cmds:
+      - task: mcp:airis-commands
+      - task: mcp:gateway-control
+
+  mcp:airis-commands:
+    desc: Build airis-commands MCP server
+    dir: "{{.AIRIS_COMMANDS_DIR}}"
+    cmds:
+      - pnpm install
+      - pnpm run build
+    sources:
+      - "{{.AIRIS_COMMANDS_DIR}}/src/**/*.ts"
+      - "{{.AIRIS_COMMANDS_DIR}}/package.json"
+    generates:
+      - "{{.AIRIS_COMMANDS_DIR}}/dist/index.js"
+
+  mcp:gateway-control:
+    desc: Build gateway-control MCP server
+    dir: "{{.GATEWAY_CONTROL_DIR}}"
+    cmds:
+      - pnpm install
+      - pnpm run build
+    sources:
+      - "{{.GATEWAY_CONTROL_DIR}}/src/**/*.ts"
+      - "{{.GATEWAY_CONTROL_DIR}}/package.json"
+    generates:
+      - "{{.GATEWAY_CONTROL_DIR}}/dist/index.js"
+
+  clean:
+    desc: Clean all build artifacts
+    cmds:
+      - rm -rf {{.AIRIS_COMMANDS_DIR}}/dist
+      - rm -rf {{.AIRIS_COMMANDS_DIR}}/node_modules
+      - rm -rf {{.GATEWAY_CONTROL_DIR}}/dist
+      - rm -rf {{.GATEWAY_CONTROL_DIR}}/node_modules
+      - echo "Build artifacts cleaned"
+
+  typecheck:
+    desc: Run TypeScript type checking
+    cmds:
+      - cd {{.AIRIS_COMMANDS_DIR}} && pnpm run typecheck
+      - cd {{.GATEWAY_CONTROL_DIR}} && pnpm run typecheck

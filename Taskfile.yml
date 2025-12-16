@@ -1,0 +1,39 @@
+version: '3'
+
+vars:
+  REPO_ROOT:
+    sh: git rev-parse --show-toplevel
+
+includes:
+  docker:
+    taskfile: .tasks.d/docker.yml
+    optional: false
+  dev:
+    taskfile: .tasks.d/dev.yml
+    optional: false
+  build:
+    taskfile: .tasks.d/build.yml
+    optional: false
+  test:
+    taskfile: .tasks.d/test.yml
+    optional: false
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list-all
+
+  init:
+    desc: Initialize development environment
+    cmds:
+      - task: build:mcp
+      - task: docker:up
+      - echo "Stack ready at http://localhost:9400"
+
+  status:
+    desc: Quick status check
+    cmds:
+      - task: docker:ps
+      - echo ""
+      - task: test:health

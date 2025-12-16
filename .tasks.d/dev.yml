@@ -1,0 +1,42 @@
+version: '3'
+
+vars:
+  COMPOSE_FILE: "{{.REPO_ROOT}}/docker-compose.yml"
+  COMPOSE_DEV_FILE: "{{.REPO_ROOT}}/docker-compose.dev.yml"
+
+tasks:
+  up:
+    desc: Start stack in development mode (hot reload)
+    deps:
+      - build:local
+    cmds:
+      - docker compose -f {{.COMPOSE_FILE}} -f {{.COMPOSE_DEV_FILE}} up -d
+
+  down:
+    desc: Stop development stack
+    cmds:
+      - docker compose -f {{.COMPOSE_FILE}} -f {{.COMPOSE_DEV_FILE}} down
+
+  restart:
+    desc: Restart API in dev mode
+    cmds:
+      - docker compose -f {{.COMPOSE_FILE}} -f {{.COMPOSE_DEV_FILE}} restart api
+
+  logs:
+    desc: Follow dev logs
+    cmds:
+      - docker compose -f {{.COMPOSE_FILE}} -f {{.COMPOSE_DEV_FILE}} logs -f api
+
+  build:local:
+    desc: Build MCP servers locally (for dev volume mounts)
+    cmds:
+      - task: build:mcp
+
+  watch:
+    desc: Watch and rebuild MCP servers on change
+    cmds:
+      - |
+        echo "Watching for TypeScript changes..."
+        watchexec -w {{.REPO_ROOT}}/apps/airis-commands/src \
+                  -w {{.REPO_ROOT}}/apps/gateway-control/src \
+                  -- task build:mcp

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
+  "packages": [
+    "go-task@latest",
+    "git@latest",
+    "docker@latest",
+    "docker-compose@latest",
+    "python312@latest",
+    "nodejs_22@latest",
+    "uv@latest",
+    "pnpm@latest",
+    "jq@latest",
+    "curl@latest",
+    "gh@latest",
+    "watchexec@latest",
+    "lazydocker@latest",
+    "lazygit@latest"
+  ],
+  "shell": {
+    "init_hook": [
+      "task --silent default 2>/dev/null || echo 'Run: task --list-all'"
+    ],
+    "scripts": {
+      "up": "task docker:up",
+      "down": "task docker:down",
+      "dev": "task dev:up",
+      "logs": "task docker:logs",
+      "test": "task test:e2e",
+      "build": "task build:mcp",
+      "status": "task status"
+    }
+  }
+}

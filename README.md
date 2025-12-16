@@ -122,28 +122,78 @@ docker compose restart api
 
 ## Commands
 
+All commands are managed via [go-task](https://taskfile.dev). Enter the development shell first:
+
 ```bash
-docker compose up -d          # Start
-docker compose down           # Stop
-docker compose restart api    # Restart API
-docker compose logs -f api    # View API logs
-docker compose pull && docker compose up -d  # Update
+devbox shell              # Enter dev environment (or use direnv)
+task --list-all           # Show all available tasks
 ```
+
+### Common Tasks
+
+```bash
+task docker:up            # Start the stack
+task docker:down          # Stop the stack
+task docker:logs          # Follow API logs
+task docker:restart       # Restart API container
+task test:e2e             # Run end-to-end tests
+task status               # Quick health check
+```
+
+### All Task Namespaces
+
+| Namespace | Description |
+|-----------|-------------|
+| `docker:*` | Container lifecycle (up, down, logs, shell, clean) |
+| `dev:*` | Development mode with hot reload |
+| `build:*` | MCP server builds (pnpm/esbuild) |
+| `test:*` | Health checks and e2e tests |
 
 ## Development
 
-For local development with hot reload:
+### Prerequisites
+
+Install [Devbox](https://www.jetify.com/devbox) for a reproducible dev environment:
 
 ```bash
-# 1. Build MCP servers locally (one-time, or after changes)
-cd apps/airis-commands && npm install && npm run build && cd ../..
-cd apps/gateway-control && npm install && npm run build && cd ../..
+curl -fsSL https://get.jetify.com/devbox | bash
+```
 
-# 2. Start with dev overrides
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+### Why Devbox + go-task?
 
-# 3. Watch logs
-docker compose logs -f api
+This project uses Devbox and go-task to solve common development pain points:
+
+**The Problem:**
+- "It works on my machine" - Different Node/Python versions cause subtle bugs
+- Onboarding friction - New contributors spend hours installing dependencies
+- Command sprawl - Scattered scripts, docker commands, and manual steps
+- AI pairing issues - Claude Code struggles with inconsistent environments
+
+**The Solution:**
+
+| Tool | What it does | Why it matters |
+|------|--------------|----------------|
+| **Devbox** | Isolated, reproducible dev environment | Everyone gets identical tools (Node 22, Python 3.12, etc.) without polluting their system. Works on macOS, Linux, and WSL. |
+| **go-task** | Task runner with namespaced commands | One way to do things: `task docker:up` instead of memorizing docker-compose flags. Self-documenting via `task --list-all`. |
+
+**Benefits for AI-assisted development:**
+- Claude Code can reliably run `task test:e2e` knowing it will work
+- Consistent paths via `REPO_ROOT` prevent path-related errors
+- Namespaced tasks are discoverable and predictable
+
+**No Devbox? No problem:**
+```bash
+# Manual alternative (you manage your own tool versions)
+docker compose up -d
+curl http://localhost:9400/health
+```
+
+### Dev Workflow
+
+```bash
+devbox shell              # Enter dev environment
+task dev:up               # Start with hot reload
+task docker:logs          # Watch for changes
 ```
 
 **What dev mode provides:**
@@ -151,9 +201,12 @@ docker compose logs -f api
 - Source code mounted - edit `apps/api/src/` and changes apply immediately
 - Node dist folders mounted - rebuild locally, changes reflect without Docker rebuild
 
-**Workflow:**
-1. Edit Python code → auto-reloads
-2. Edit TypeScript → run `npm run build` in the app folder → reflected immediately
+**TypeScript changes:**
+```bash
+task build:mcp            # Rebuild MCP servers
+# Or use watch mode:
+task dev:watch            # Auto-rebuild on file changes
+```
 
 **Note:** Dev and prod use the same ports (9400). Stop one before starting the other.
 

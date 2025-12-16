@@ -4,28 +4,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build & Test Commands
 
+All commands use go-task. Enter devbox shell first: `devbox shell`
+
 ```bash
-# Docker (primary method)
-docker compose up -d                    # Start gateway + API
-docker compose down                     # Stop all
-docker compose logs -f api              # View API logs
-docker compose restart api              # Restart after config changes
+# Stack management
+task docker:up              # Start gateway + API
+task docker:down            # Stop all
+task docker:logs            # View API logs
+task docker:restart         # Restart after config changes
+task docker:clean           # Remove containers and volumes
 
-# Python API (local development)
-cd apps/api
-uv pip install --system -e .            # Install dependencies
-uvicorn app.main:app --reload --port 8000  # Run locally
-pytest tests/                           # Run all tests
-pytest tests/unit/test_schema_partitioning.py  # Single test file
+# Development mode (hot reload)
+task dev:up                 # Start with hot reload
+task dev:watch              # Auto-rebuild TypeScript on change
+task build:mcp              # Build MCP servers manually
 
-# Database migrations (full mode only)
-alembic upgrade head                    # Apply migrations
-alembic downgrade -1                    # Rollback one
+# Testing
+task test:e2e               # Full end-to-end test
+task test:health            # Quick health check
+task test:status            # Server status
+task test:api               # Run pytest in container
 
-# Frontend (settings UI)
-pnpm install --frozen-lockfile
-pnpm --filter @agiletec/airis-mcp-gateway build
-pnpm --filter @agiletec/airis-mcp-gateway exec tsc --noEmit  # Typecheck
+# All tasks
+task --list-all             # Show all available tasks
 ```
 
 ## Architecture

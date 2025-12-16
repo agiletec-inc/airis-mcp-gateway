@@ -1,6 +1,6 @@
 ---
 description: End-to-end test of AIRIS MCP Gateway - health, tools, persistence
-allowed-tools: Bash(docker*), Bash(curl*), mcp__airis-mcp-gateway__*
+allowed-tools: Bash(task*), Bash(docker*), Bash(curl*), mcp__airis-mcp-gateway__*
 ---
 
 # AIRIS MCP Gateway End-to-End Test
@@ -9,7 +9,7 @@ Run a comprehensive end-to-end test of the AIRIS MCP Gateway.
 
 ## Pre-flight Checks
 
-Container status: !`docker compose ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null || echo "Docker not running"`
+Container status: !`task docker:ps 2>/dev/null || docker compose ps 2>/dev/null || echo "Stack not running"`
 
 ## Test Sequence
 
@@ -20,7 +20,7 @@ Execute these tests in order:
 - Confirm status is "healthy" and at least some servers are "ready"
 
 ### 2. HOT Server Pre-warming
-- Check docker logs for pre-warm status: `docker compose logs api 2>&1 | grep -E "Pre-warm" | tail -5`
+- Check pre-warm status: `task test:prewarm`
 - Verify all 4 HOT servers (airis-agent, memory, airis-mcp-gateway-control, airis-commands) pre-warmed
 
 ### 3. Tool Functionality
@@ -32,7 +32,7 @@ Test tools from different servers:
 ### 4. Data Persistence (optional)
 If $ARGUMENTS contains "persistence":
 - Create a test entity with `mcp__airis-mcp-gateway__create_entities`
-- Restart container: `docker compose restart api`
+- Restart container: `task docker:restart`
 - Wait 10 seconds for pre-warm
 - Verify entity still exists with `mcp__airis-mcp-gateway__read_graph`
 - Clean up test entity with `mcp__airis-mcp-gateway__delete_entities`

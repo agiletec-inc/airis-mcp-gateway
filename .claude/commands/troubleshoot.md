@@ -1,6 +1,6 @@
 ---
 description: Diagnose issues with AIRIS MCP Gateway
-allowed-tools: Bash(docker*), Bash(curl*), Read, Grep
+allowed-tools: Bash(task*), Bash(docker*), Bash(curl*), Read, Grep
 argument-hint: [issue-type]
 ---
 
@@ -16,7 +16,7 @@ Common issue types: `startup`, `timeout`, `tools`, `persistence`, `connection`
 
 ### 1. Container Logs (last 50 lines)
 ```bash
-docker compose logs --tail 50 api 2>&1
+task docker:logs:tail
 ```
 
 ### 2. Error Patterns
@@ -27,7 +27,7 @@ Look for these in logs:
 
 ### 3. Process Server Status
 ```bash
-curl -s http://localhost:9400/process/servers | jq '.[] | {name, status, error}'
+task test:status
 ```
 
 ### 4. Configuration Check
@@ -40,13 +40,14 @@ Review @mcp-config.json for:
 
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
-| "Name or service not known" | DNS resolution | Add `dns: [8.8.8.8]` to docker-compose.yml |
-| Tools timeout on first call | Cold start | Check pre-warm logs, verify HOT mode |
-| "Cannot find module" | Missing build | Rebuild with `docker compose build --no-cache` |
+| "Name or service not known" | DNS resolution | Check `dns:` in docker-compose.yml |
+| Tools timeout on first call | Cold start | Run `task test:prewarm` to check |
+| "Cannot find module" | Missing build | Run `task docker:build:nocache` |
 | Data lost on restart | No persistence | Check volume mounts in docker-compose.yml |
+| Task not found | Not in devbox | Run `devbox shell` first |
 
 ## Output
 
 1. Identified issue(s)
 2. Root cause analysis
-3. Recommended fix with exact commands
+3. Recommended fix with exact commands (use `task` commands where possible)
