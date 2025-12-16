@@ -47,6 +47,9 @@ RUN uv pip install --system -e .
 COPY mcp-config.json /app/mcp-config.json
 COPY config /app/config
 
+# Create data directory for persistent storage (memory.json, etc.)
+RUN mkdir -p /app/data
+
 EXPOSE 8000
 
 # Run from api-src directory where the package is installed

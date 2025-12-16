@@ -68,7 +68,9 @@
         "-y",
         "@modelcontextprotocol/server-memory"
       ],
-      "env": {},
+      "env": {
+        "MEMORY_FILE_PATH": "/app/data/memory.json"
+      },
       "enabled": true,
       "mode": "cold"
     },

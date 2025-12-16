@@ -95,7 +95,10 @@ services:
       - ./mcp-config.json:/app/mcp-config.json:ro
       - ./config/gateway-config.yaml:/app/config/gateway-config.yaml:ro
       - ./profiles:/app/profiles:rw
-      - uv-cache:/root/.cache/uv
+      # Persistent data volumes
+      - cache-uv:/root/.cache/uv        # uvx package cache (faster restarts)
+      - cache-npm:/root/.npm            # npm package cache (faster restarts)
+      - memory-data:/app/data           # Knowledge graph persistence
     depends_on:
       gateway:
         condition: service_healthy
@@ -107,5 +110,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  mindbase-data:
-  uv-cache:
+  mindbase-data:    # PostgreSQL data for pgvector
+  cache-uv:         # uvx package cache (persists airis-agent packages)
+  cache-npm:        # npm package cache (persists npx server packages)
+  memory-data:      # Knowledge graph JSON file
