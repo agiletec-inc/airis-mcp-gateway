@@ -268,6 +268,12 @@ async def proxy_sse_stream(request: Request):
                             if captured_session_id:
                                 remove_response_queue(captured_session_id)
                             return
+                        except (httpx.ReadError, httpx.RemoteProtocolError, httpx.ConnectError) as e:
+                            # Client disconnected - this is normal, exit gracefully
+                            print(f"[MCP Proxy] Client disconnected: {type(e).__name__}")
+                            if captured_session_id:
+                                remove_response_queue(captured_session_id)
+                            return
 
                         if source == "tick":
                             queue_task = None
@@ -369,7 +375,15 @@ async def proxy_sse_stream(request: Request):
                         else:
                             yield f"{line}\n"
             finally:
-                # Cleanup
+                # Cancel any pending tasks to prevent "Task exception was never retrieved"
+                for task in [gateway_task, queue_task]:
+                    if task is not None and not task.done():
+                        task.cancel()
+                        try:
+                            await task
+                        except (asyncio.CancelledError, StopAsyncIteration):
+                            pass
+                # Cleanup session queue
                 if captured_session_id:
                     remove_response_queue(captured_session_id)
 
