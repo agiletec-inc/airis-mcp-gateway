@@ -1,0 +1,40 @@
+# Development overrides - hot reload and source mounts
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Prerequisites:
+#   - Build MCP servers locally first:
+#     cd apps/airis-commands && npm install && npm run build
+#     cd apps/gateway-control && npm install && npm run build
+
+services:
+  api:
+    # Use pre-built image, override command for hot reload
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+    volumes:
+      # Config files (same as prod)
+      - ./mcp-config.json:/app/mcp-config.json:ro
+      - ./config/gateway-config.yaml:/app/config/gateway-config.yaml:ro
+      - ./profiles:/app/profiles:rw
+
+      # Persistent data (same as prod)
+      - cache-uv:/root/.cache/uv
+      - cache-npm:/root/.npm
+      - memory-data:/app/data
+
+      # DEV: Mount Python source for hot reload
+      - ./apps/api/src/app:/app/api-src/src/app:ro
+
+      # DEV: Mount Node dist folders from host (rebuild locally, changes reflect immediately)
+      - ./apps/gateway-control/dist:/app/gateway-control:ro
+      - ./apps/airis-commands/dist:/app/airis-commands:ro
+
+    environment:
+      # Inherit all env vars from base, add dev-specific ones
+      - MCP_GATEWAY_URL=http://gateway:9390
+      - MCP_CONFIG_PATH=/app/mcp-config.json
+      - GATEWAY_CONFIG_PATH=/app/config/gateway-config.yaml
+      - SERENA_MODE=${SERENA_MODE:-serena-local}
+      # DEV: Enable Python debug logging
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1

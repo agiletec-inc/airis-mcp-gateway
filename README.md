@@ -130,6 +130,33 @@ docker compose logs -f api    # View API logs
 docker compose pull && docker compose up -d  # Update
 ```
 
+## Development
+
+For local development with hot reload:
+
+```bash
+# 1. Build MCP servers locally (one-time, or after changes)
+cd apps/airis-commands && npm install && npm run build && cd ../..
+cd apps/gateway-control && npm install && npm run build && cd ../..
+
+# 2. Start with dev overrides
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+# 3. Watch logs
+docker compose logs -f api
+```
+
+**What dev mode provides:**
+- Python hot reload (uvicorn `--reload`)
+- Source code mounted - edit `apps/api/src/` and changes apply immediately
+- Node dist folders mounted - rebuild locally, changes reflect without Docker rebuild
+
+**Workflow:**
+1. Edit Python code → auto-reloads
+2. Edit TypeScript → run `npm run build` in the app folder → reflected immediately
+
+**Note:** Dev and prod use the same ports (9400). Stop one before starting the other.
+
 ## Verify Installation
 
 ```bash
