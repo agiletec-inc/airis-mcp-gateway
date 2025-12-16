@@ -79,8 +79,8 @@ services:
   api:
     container_name: airis-mcp-gateway
     build:
-      context: ./apps/api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/api/Dockerfile
     ports:
       - "9400:8000"
     dns:
@@ -94,8 +94,6 @@ services:
     volumes:
       - ./mcp-config.json:/app/mcp-config.json:ro
       - ./config/gateway-config.yaml:/app/config/gateway-config.yaml:ro
-      - ./apps/gateway-control/dist:/app/gateway-control:ro
-      - ./apps/airis-commands/dist:/app/airis-commands:ro
       - ./profiles:/app/profiles:rw
       - uv-cache:/root/.cache/uv
     depends_on:
