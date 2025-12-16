@@ -817,14 +817,15 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
     if not hasattr(_proxy_jsonrpc_request, '_initialized_sessions'):
         _proxy_jsonrpc_request._initialized_sessions = set()
 
-    # tools/call の前に完全な初期化シーケンスを実行（未初期化セッションの場合）
+    # Auto-initialize session if tools/call arrives for uninitialized session
+    # This is a fallback for clients that don't follow proper MCP init sequence
     if method == "tools/call" and session_id and session_id not in _proxy_jsonrpc_request._initialized_sessions:
-        print(f"[MCP Proxy] Session {session_id} not initialized, running full init sequence")
+        print(f"[MCP Proxy] Session {session_id} not initialized, running init sequence")
         gateway_post_url = f"{settings.MCP_GATEWAY_URL.rstrip('/')}/sse?sessionid={session_id}"
 
-        async with httpx.AsyncClient(timeout=10.0) as init_client:
+        async with httpx.AsyncClient(timeout=30.0) as init_client:
             try:
-                # Step 1: initialize リクエストを送信
+                # Step 1: Send initialize request
                 initialize_request = {
                     "jsonrpc": "2.0",
                     "id": 1,
@@ -838,35 +839,42 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
                         }
                     }
                 }
-                init_req_response = await init_client.post(
+                init_response = await init_client.post(
                     gateway_post_url,
                     json=initialize_request,
                     headers={"Content-Type": "application/json"}
                 )
-                print(f"[MCP Proxy] Initialize request sent: {init_req_response.status_code}")
 
-                # Step 2: 少し待つ (Gateway が処理する時間)
-                await asyncio.sleep(0.15)
+                # SSE transport returns 202 Accepted for successful POST
+                if init_response.status_code not in (200, 202):
+                    print(f"[MCP Proxy] Initialize request failed: {init_response.status_code}")
+                    # Continue anyway - let the actual request fail with proper error
+                else:
+                    print(f"[MCP Proxy] Initialize request accepted: {init_response.status_code}")
 
-                # Step 3: notifications/initialized を送信
-                initialized_notification = {
-                    "jsonrpc": "2.0",
-                    "method": "notifications/initialized"
-                }
-                init_notif_response = await init_client.post(
-                    gateway_post_url,
-                    json=initialized_notification,
-                    headers={"Content-Type": "application/json"}
-                )
-                print(f"[MCP Proxy] Initialized notification sent: {init_notif_response.status_code}")
+                    # Step 2: Send notifications/initialized
+                    # Per MCP spec, this should come after initialize response, but in SSE transport
+                    # the response comes via stream. Gateway accepts this sequence for recovery.
+                    initialized_notification = {
+                        "jsonrpc": "2.0",
+                        "method": "notifications/initialized"
+                    }
+                    notif_response = await init_client.post(
+                        gateway_post_url,
+                        json=initialized_notification,
+                        headers={"Content-Type": "application/json"}
+                    )
 
-                if init_notif_response.status_code in (200, 202):
-                    _proxy_jsonrpc_request._initialized_sessions.add(session_id)
-                    # Gateway が処理する時間を少し待つ
-                    await asyncio.sleep(0.1)
+                    if notif_response.status_code in (200, 202):
+                        _proxy_jsonrpc_request._initialized_sessions.add(session_id)
+                        print(f"[MCP Proxy] Session {session_id} initialized successfully")
+                    else:
+                        print(f"[MCP Proxy] Initialized notification failed: {notif_response.status_code}")
 
+            except httpx.TimeoutException:
+                print(f"[MCP Proxy] Init sequence timed out for session {session_id}")
             except Exception as e:
-                print(f"[MCP Proxy] Failed to run init sequence: {e}")
+                print(f"[MCP Proxy] Init sequence failed: {e}")
 
     # expandSchema ツールコール処理
     if rpc_request.get("method") == "tools/call":
