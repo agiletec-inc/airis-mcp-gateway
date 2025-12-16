@@ -96,6 +96,65 @@ class ProcessManager:
             if config.enabled and config.mode == ServerMode.COLD
         ]
 
+    async def prewarm_hot_servers(self) -> dict[str, bool]:
+        """
+        Pre-warm all HOT servers by starting them in parallel.
+
+        This should be called during application startup to ensure HOT servers
+        are ready before the first tools/list request, avoiding timeout issues.
+
+        Returns:
+            Dict mapping server name to success status
+        """
+        hot_servers = self.get_hot_servers()
+        if not hot_servers:
+            print("[ProcessManager] No HOT servers to pre-warm")
+            return {}
+
+        print(f"[ProcessManager] Pre-warming {len(hot_servers)} HOT servers: {hot_servers}")
+
+        async def warm_server(name: str) -> tuple[str, bool]:
+            """Start a single server, return (name, success)."""
+            try:
+                runner = self._runners.get(name)
+                if not runner:
+                    return (name, False)
+
+                success = await runner.ensure_ready()
+                if success:
+                    # Cache tool -> server mapping
+                    for tool in runner.tools:
+                        tool_name = tool.get("name", "")
+                        if tool_name:
+                            self._tool_to_server[tool_name] = name
+                    print(f"[ProcessManager] Pre-warmed {name}: {len(runner.tools)} tools")
+                else:
+                    print(f"[ProcessManager] Failed to pre-warm {name}")
+                return (name, success)
+            except Exception as e:
+                print(f"[ProcessManager] Error pre-warming {name}: {e}")
+                return (name, False)
+
+        # Start all HOT servers in parallel
+        results = await asyncio.gather(
+            *[warm_server(name) for name in hot_servers],
+            return_exceptions=True
+        )
+
+        # Build results dict
+        status = {}
+        for result in results:
+            if isinstance(result, tuple):
+                name, success = result
+                status[name] = success
+            else:
+                # Exception case
+                print(f"[ProcessManager] Pre-warm exception: {result}")
+
+        ready_count = sum(1 for v in status.values() if v)
+        print(f"[ProcessManager] Pre-warm complete: {ready_count}/{len(hot_servers)} servers ready")
+        return status
+
     def is_process_server(self, name: str) -> bool:
         """Check if a server is managed by ProcessManager."""
         return name in self._runners

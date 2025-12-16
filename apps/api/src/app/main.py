@@ -32,6 +32,15 @@ async def lifespan(app: FastAPI):
         manager = get_process_manager()
         print(f"   Process servers: {manager.get_server_names()}")
         print(f"   Enabled: {manager.get_enabled_servers()}")
+
+        # Pre-warm HOT servers to avoid cold start timeouts on first tools/list
+        # This runs in parallel and ensures servers are ready before clients connect
+        hot_servers = manager.get_hot_servers()
+        if hot_servers:
+            print(f"   Pre-warming HOT servers: {hot_servers}")
+            prewarm_status = await manager.prewarm_hot_servers()
+            ready = sum(1 for v in prewarm_status.values() if v)
+            print(f"   Pre-warm complete: {ready}/{len(hot_servers)} servers ready")
     except Exception as e:
         print(f"   ProcessManager init failed: {e}")
 
