@@ -83,6 +83,9 @@ services:
       dockerfile: Dockerfile
     ports:
       - "9400:8000"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     environment:
       - MCP_GATEWAY_URL=http://gateway:9390
       - MCP_CONFIG_PATH=/app/mcp-config.json
