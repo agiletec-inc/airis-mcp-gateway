@@ -51,17 +51,30 @@ class McpServerConfig:
     mode: ServerMode = ServerMode.COLD  # Default to cold
     cwd: Optional[str] = None
     runner: Optional[str] = None  # "local" or "remote" for profile-based servers
+    # TTL settings (optional, uses ProcessConfig defaults if not specified)
+    idle_timeout: Optional[int] = None
+    min_ttl: Optional[int] = None
+    max_ttl: Optional[int] = None
+    adaptive_ttl_enabled: Optional[bool] = None
 
     def to_process_config(self, idle_timeout: int = 120) -> ProcessConfig:
         """Convert to ProcessConfig for ProcessRunner."""
-        return ProcessConfig(
+        config = ProcessConfig(
             name=self.name,
             command=self.command,
             args=self.args,
             env=self.env,
             cwd=self.cwd,
-            idle_timeout=idle_timeout,
+            idle_timeout=self.idle_timeout if self.idle_timeout is not None else idle_timeout,
         )
+        # Override TTL settings if specified
+        if self.min_ttl is not None:
+            config.min_ttl = self.min_ttl
+        if self.max_ttl is not None:
+            config.max_ttl = self.max_ttl
+        if self.adaptive_ttl_enabled is not None:
+            config.adaptive_ttl_enabled = self.adaptive_ttl_enabled
+        return config
 
 
 def classify_server_type(command: str) -> ServerType:
@@ -159,6 +172,12 @@ def load_mcp_config(config_path: Optional[str] = None) -> dict[str, McpServerCon
 
         server_type = classify_server_type(command)
 
+        # Parse TTL settings (optional)
+        idle_timeout = server_def.get("idle_timeout")
+        min_ttl = server_def.get("min_ttl")
+        max_ttl = server_def.get("max_ttl")
+        adaptive_ttl_enabled = server_def.get("adaptive_ttl_enabled")
+
         servers[name] = McpServerConfig(
             name=name,
             server_type=server_type,
@@ -168,6 +187,10 @@ def load_mcp_config(config_path: Optional[str] = None) -> dict[str, McpServerCon
             enabled=enabled,
             mode=mode,
             runner=runner,
+            idle_timeout=idle_timeout,
+            min_ttl=min_ttl,
+            max_ttl=max_ttl,
+            adaptive_ttl_enabled=adaptive_ttl_enabled,
         )
 
         print(f"[McpConfigLoader] {name}: type={server_type.value}, mode={mode.value}, enabled={enabled}")

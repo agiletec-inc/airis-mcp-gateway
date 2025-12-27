@@ -1051,7 +1051,8 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
     if auth_header:
         forward_headers["Authorization"] = auth_header
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    # Use configurable timeout (default: 90s) to prevent Claude Code hanging
+    async with httpx.AsyncClient(timeout=settings.TOOL_CALL_TIMEOUT) as client:
         response = await client.post(
             target_url,
             content=body,
@@ -1401,7 +1402,8 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
     print(f"[Dynamic MCP] Proxying airis-exec to Docker Gateway: {tool_name}")
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        # Use configurable timeout (default: 90s) to prevent Claude Code hanging
+        async with httpx.AsyncClient(timeout=settings.TOOL_CALL_TIMEOUT) as client:
             response = await client.post(
                 gateway_post_url,
                 json=gateway_request,
@@ -1426,7 +1428,7 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
                 "id": rpc_request.get("id"),
                 "error": {
                     "code": -32603,
-                    "message": f"Docker gateway timeout for tool: {tool_ref}"
+                    "message": f"Docker gateway timeout ({settings.TOOL_CALL_TIMEOUT}s) for tool: {tool_ref}"
                 }
             }),
             status_code=200,
