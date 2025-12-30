@@ -95,6 +95,8 @@ services:
       # instead of all tools - reduces context token usage by ~98%
       # Set to "false" to disable and expose all tools directly
       - DYNAMIC_MCP=${DYNAMIC_MCP:-true}
+      # External API keys (optional)
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
     volumes:
       - ./mcp-config.json:/app/mcp-config.json:ro
       - ./config/gateway-config.yaml:/app/config/gateway-config.yaml:ro

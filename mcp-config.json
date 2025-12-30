@@ -133,9 +133,7 @@
         "mcp-remote",
         "https://mcp.tavily.com/mcp/?tavilyApiKey=${TAVILY_API_KEY}"
       ],
-      "env": {
-        "TAVILY_API_KEY": "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"
-      },
+      "env": {},
       "enabled": true,
       "mode": "cold"
     },
