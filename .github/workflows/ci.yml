@@ -10,33 +10,86 @@ on:
       - main
 
 jobs:
-  test:
+  # Detect which paths changed
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+      typescript: ${{ steps.filter.outputs.typescript }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            python:
+              - 'apps/api/**'
+              - 'pyproject.toml'
+            typescript:
+              - 'apps/gateway-control/**'
+              - 'apps/airis-commands/**'
+
+  # Python tests (only when Python files change)
+  test-python:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: |
+          cd apps/api
+          uv pip install --system -e ".[test]"
+
+      - name: Run tests
+        run: |
+          cd apps/api
+          python -m pytest tests/unit -v --tb=short
+
+  # TypeScript build (only when TS files change)
+  build-typescript:
+    needs: changes
+    if: needs.changes.outputs.typescript == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: [gateway-control, airis-commands]
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'pnpm'
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build CLI
-        run: pnpm --filter @agiletec/airis-mcp-gateway build
+      - name: Install and build
+        run: |
+          cd apps/${{ matrix.package }}
+          npm install
+          npm run build
 
       - name: Typecheck
-        run: pnpm --filter @agiletec/airis-mcp-gateway exec tsc --noEmit
+        run: |
+          cd apps/${{ matrix.package }}
+          npx tsc --noEmit
 
+  # Auto-merge next to main
   merge-to-main:
-    needs: test
-    if: github.ref == 'refs/heads/next' && github.event_name == 'push'
+    needs: [test-python, build-typescript]
+    if: |
+      always() &&
+      github.ref == 'refs/heads/next' &&
+      github.event_name == 'push' &&
+      !contains(needs.*.result, 'failure')
     runs-on: ubuntu-latest
     permissions:
       contents: write
