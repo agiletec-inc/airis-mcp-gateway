@@ -120,6 +120,53 @@ Claude Code / Cursor / Zed
 
 ## Configuration
 
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DYNAMIC_MCP` | `true` | Enable Dynamic MCP (3 meta-tools vs 60+ tools) |
+| `TOOL_CALL_TIMEOUT` | `90` | Fail-safe timeout (seconds) for MCP tool calls |
+
+#### Fail-Safe Timeout
+
+The gateway includes a configurable fail-safe timeout to prevent Claude Code from hanging indefinitely on frozen MCP tool calls:
+
+```bash
+# In docker-compose.yml or .env
+TOOL_CALL_TIMEOUT=90  # Default: 90 seconds
+```
+
+This timeout applies to both ProcessManager tool calls and Docker Gateway proxy requests.
+
+### Per-Server TTL Settings
+
+Fine-tune idle timeout behavior per server in `mcp-config.json`:
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-playwright"],
+      "enabled": true,
+      "mode": "hot",
+      "idle_timeout": 900,
+      "min_ttl": 300,
+      "max_ttl": 1800
+    }
+  }
+}
+```
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `idle_timeout` | `120` | Seconds before idle server is terminated |
+| `min_ttl` | `60` | Minimum time server stays alive after start |
+| `max_ttl` | `3600` | Maximum time server can run (hard limit) |
+
+**HOT servers** benefit from longer `idle_timeout` (e.g., 900s) to avoid cold starts.
+**COLD servers** use shorter timeouts (e.g., 300s) to free resources.
+
 ### Enable/Disable Servers
 
 Edit `mcp-config.json`:

@@ -18,6 +18,42 @@ from ...core.dynamic_mcp import get_dynamic_mcp
 
 router = APIRouter()
 
+# =============================================================================
+# HTTP Client Timeout Configuration
+# =============================================================================
+# SSE streams are long-lived, but we need timeouts to prevent indefinite hangs:
+# - connect: Time to establish TCP connection (catches network issues)
+# - read: Time to wait for next chunk (catches stale connections)
+# - write: Time to send data (catches slow upstream)
+# - pool: Time to acquire connection from pool
+# =============================================================================
+
+# SSE stream timeout - long read timeout for long-lived connections
+SSE_TIMEOUT = httpx.Timeout(
+    connect=10.0,      # 10s to establish connection
+    read=120.0,        # 120s between chunks (SSE keepalive should be faster)
+    write=10.0,        # 10s to send data
+    pool=10.0          # 10s to acquire connection
+)
+
+# Streaming gateway timeout - similar to SSE
+STREAM_TIMEOUT = httpx.Timeout(
+    connect=10.0,
+    read=120.0,
+    write=10.0,
+    pool=10.0
+)
+
+# Standard JSON-RPC timeout - uses configurable TOOL_CALL_TIMEOUT
+def get_jsonrpc_timeout() -> httpx.Timeout:
+    """Get JSON-RPC timeout using configurable TOOL_CALL_TIMEOUT."""
+    return httpx.Timeout(
+        connect=10.0,
+        read=settings.TOOL_CALL_TIMEOUT,
+        write=10.0,
+        pool=10.0
+    )
+
 # Session-based response queues for ProcessManager responses
 # MCP SSE Transport: responses must be sent via SSE stream, not HTTP response body
 _session_response_queues: dict[str, asyncio.Queue] = {}
@@ -212,7 +248,7 @@ async def proxy_sse_stream(request: Request):
 
     gateway_sse_url = _build_gateway_sse_url(request)
 
-    async with httpx.AsyncClient(timeout=None) as client:
+    async with httpx.AsyncClient(timeout=SSE_TIMEOUT) as client:
         async with client.stream(
             "GET",
             gateway_sse_url,
@@ -240,12 +276,21 @@ async def proxy_sse_stream(request: Request):
                         await asyncio.sleep(0.1)
                         yield ("tick", None)
 
-            # Merge both streams
+            async def keepalive_sender():
+                """Send periodic keepalive comments to prevent connection timeouts"""
+                # SSE comment lines (: comment) are ignored by clients but keep connection alive
+                while True:
+                    await asyncio.sleep(30.0)  # Send keepalive every 30 seconds
+                    yield ("keepalive", None)
+
+            # Merge all streams: gateway, response queue, and keepalive
             gateway_gen = read_gateway_stream()
             queue_gen = read_response_queue()
+            keepalive_gen = keepalive_sender()
 
             gateway_task = None
             queue_task = None
+            keepalive_task = None
 
             try:
                 while True:
@@ -254,10 +299,12 @@ async def proxy_sse_stream(request: Request):
                         gateway_task = asyncio.create_task(gateway_gen.__anext__())
                     if queue_task is None:
                         queue_task = asyncio.create_task(queue_gen.__anext__())
+                    if keepalive_task is None:
+                        keepalive_task = asyncio.create_task(keepalive_gen.__anext__())
 
-                    # Wait for either to complete
+                    # Wait for any to complete
                     done, _ = await asyncio.wait(
-                        [gateway_task, queue_task],
+                        [gateway_task, queue_task, keepalive_task],
                         return_when=asyncio.FIRST_COMPLETED
                     )
 
@@ -275,9 +322,27 @@ async def proxy_sse_stream(request: Request):
                             if captured_session_id:
                                 remove_response_queue(captured_session_id)
                             return
+                        except httpx.ReadTimeout:
+                            # SSE read timeout - connection may be stale
+                            print(f"[MCP Proxy] SSE read timeout (session={captured_session_id})")
+                            if captured_session_id:
+                                remove_response_queue(captured_session_id)
+                            return
+                        except httpx.TimeoutException as e:
+                            # Other timeout (connect, pool, etc.)
+                            print(f"[MCP Proxy] Timeout exception: {type(e).__name__}")
+                            if captured_session_id:
+                                remove_response_queue(captured_session_id)
+                            return
 
                         if source == "tick":
                             queue_task = None
+                            continue
+
+                        if source == "keepalive":
+                            # Send SSE comment as keepalive (ignored by clients)
+                            keepalive_task = None
+                            yield ": keepalive\n\n"
                             continue
 
                         if source == "process_manager":
@@ -377,7 +442,7 @@ async def proxy_sse_stream(request: Request):
                             yield f"{line}\n"
             finally:
                 # Cancel any pending tasks to prevent "Task exception was never retrieved"
-                for task in [gateway_task, queue_task]:
+                for task in [gateway_task, queue_task, keepalive_task]:
                     if task is not None and not task.done():
                         task.cancel()
                         try:
@@ -387,6 +452,7 @@ async def proxy_sse_stream(request: Request):
                 # Cleanup session queue
                 if captured_session_id:
                     remove_response_queue(captured_session_id)
+                print(f"[MCP Proxy] SSE stream cleanup complete (session={captured_session_id})")
 
 
 async def apply_prompts_merging(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -710,7 +776,7 @@ async def _proxy_streaming_gateway_request(
     method = request.method.upper()
     payload = await request.body() if _method_has_body(method) else None
 
-    client = httpx.AsyncClient(timeout=None)
+    client = httpx.AsyncClient(timeout=STREAM_TIMEOUT)
     try:
         upstream_request = client.build_request(
             method,
@@ -1051,7 +1117,8 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
     if auth_header:
         forward_headers["Authorization"] = auth_header
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    # Use configurable timeout (default: 90s) to prevent Claude Code hanging
+    async with httpx.AsyncClient(timeout=get_jsonrpc_timeout()) as client:
         response = await client.post(
             target_url,
             content=body,
@@ -1411,7 +1478,8 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
     print(f"[Dynamic MCP] Proxying airis-exec to Docker Gateway: {tool_name}")
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        # Use configurable timeout (default: 90s) to prevent Claude Code hanging
+        async with httpx.AsyncClient(timeout=get_jsonrpc_timeout()) as client:
             response = await client.post(
                 gateway_post_url,
                 json=gateway_request,
@@ -1436,7 +1504,7 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
                 "id": rpc_request.get("id"),
                 "error": {
                     "code": -32603,
-                    "message": f"Docker gateway timeout for tool: {tool_ref}"
+                    "message": f"Docker gateway timeout ({settings.TOOL_CALL_TIMEOUT}s) for tool: {tool_ref}"
                 }
             }),
             status_code=200,

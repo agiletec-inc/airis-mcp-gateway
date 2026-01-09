@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 from enum import Enum
 
+from .config import settings
+
 # For memory/CPU metrics
 try:
     import psutil
@@ -273,8 +275,8 @@ class ProcessRunner:
         }
 
         try:
-            # Longer timeout for servers that download dependencies on startup (e.g., morphllm)
-            response = await self._send_request(init_request, timeout=60.0)
+            # Use configurable timeout for servers that download dependencies on startup
+            response = await self._send_request(init_request, timeout=settings.TOOL_CALL_TIMEOUT)
 
             if "error" in response:
                 error_msg = str(response['error'])
@@ -400,8 +402,9 @@ class ProcessRunner:
         }
 
         # Track latency and record call for adaptive TTL
+        # Use configurable timeout (default: 90s) to prevent Claude Code hanging
         start_time = time.time()
-        result = await self._send_request(request, timeout=60.0)
+        result = await self._send_request(request, timeout=settings.TOOL_CALL_TIMEOUT)
         latency_ms = (time.time() - start_time) * 1000
         self._call_latencies.append(latency_ms)
         self._total_calls += 1
@@ -425,7 +428,7 @@ class ProcessRunner:
         if "id" not in request:
             request = {**request, "id": self._next_id()}
 
-        return await self._send_request(request, timeout=60.0)
+        return await self._send_request(request, timeout=settings.TOOL_CALL_TIMEOUT)
 
     def _next_id(self) -> int:
         self._request_id += 1

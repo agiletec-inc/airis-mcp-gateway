@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     # instead of all available tools. This dramatically reduces context usage.
     DYNAMIC_MCP: bool = os.getenv("DYNAMIC_MCP", "false").lower() in ("true", "1", "yes")
 
+    # Tool Call Timeout (seconds)
+    # Fail-safe timeout for MCP tool calls to prevent Claude Code from hanging indefinitely.
+    # Applies to ProcessManager tool calls and Docker Gateway proxy requests.
+    TOOL_CALL_TIMEOUT: float = float(os.getenv("TOOL_CALL_TIMEOUT", "90"))
+
     # CORS
     CORS_ORIGINS: list[str] = []
 
