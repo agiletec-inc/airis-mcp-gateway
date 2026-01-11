@@ -118,10 +118,61 @@ install() {
         sleep 2
     done
 
-    # Step 5: Register with Claude Code globally (if available)
+    # Step 5: Install airis-workspace (optional) - direct binary download, no Homebrew needed
+    local workspace_installed=false
+    if [ "${INSTALL_WORKSPACE:-true}" = "true" ]; then
+        log_step "5/6 Installing airis-workspace..."
+        if command -v airis >/dev/null 2>&1; then
+            workspace_installed=true
+            log_info "airis-workspace already installed"
+        else
+            # Detect OS and architecture
+            local os=$(uname -s | tr '[:upper:]' '[:lower:]')
+            local arch=$(uname -m)
+            local target=""
+
+            case "$os-$arch" in
+                darwin-arm64)  target="aarch64-apple-darwin" ;;
+                darwin-x86_64) target="x86_64-apple-darwin" ;;
+                linux-x86_64)  target="x86_64-unknown-linux-gnu" ;;
+                linux-aarch64) target="aarch64-unknown-linux-gnu" ;;
+                *) log_warn "Unsupported platform: $os-$arch"; target="" ;;
+            esac
+
+            if [ -n "$target" ]; then
+                log_info "Downloading latest airis-workspace for $target..."
+
+                # Get latest release version from GitHub API
+                local latest=$(curl -fsSL https://api.github.com/repos/agiletec-inc/airis-workspace/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+
+                if [ -n "$latest" ]; then
+                    local url="https://github.com/agiletec-inc/airis-workspace/releases/download/v${latest}/airis-${latest}-${target}.tar.gz"
+                    local install_dir="${HOME}/.local/bin"
+                    mkdir -p "$install_dir"
+
+                    if curl -fsSL "$url" | tar -xz -C "$install_dir" 2>/dev/null; then
+                        chmod +x "$install_dir/airis"
+                        workspace_installed=true
+                        log_info "airis-workspace v$latest installed to $install_dir/airis"
+
+                        # Add to PATH hint if not already there
+                        if [[ ":$PATH:" != *":$install_dir:"* ]]; then
+                            log_warn "Add to PATH: export PATH=\"$install_dir:\$PATH\""
+                        fi
+                    else
+                        log_warn "Failed to download airis-workspace (optional)"
+                    fi
+                else
+                    log_warn "Could not determine latest version"
+                fi
+            fi
+        fi
+    fi
+
+    # Step 6: Register with Claude Code globally (if available)
     local claude_registered=false
     if command -v claude >/dev/null 2>&1; then
-        log_step "5/5 Registering with Claude Code (global)..."
+        log_step "6/6 Registering with Claude Code (global)..."
 
         # Clean up ALL project-level MCP configs (gateway should be global only)
         if [ -f "$HOME/.claude.json" ] && command -v jq >/dev/null 2>&1; then
@@ -170,6 +221,15 @@ install() {
     else
         echo "  Register with Claude Code (global):"
         echo "    claude mcp add --scope user --transport sse airis-mcp-gateway http://localhost:9400/sse"
+    fi
+    echo ""
+    if $workspace_installed; then
+        echo -e "  airis-workspace: ${GREEN}Installed${NC}"
+        echo "    Run 'airis init' in a project to get started"
+    else
+        echo -e "  airis-workspace: ${YELLOW}Not installed${NC} (optional)"
+        echo "    Re-run with INSTALL_WORKSPACE=true or download from:"
+        echo "    https://github.com/agiletec-inc/airis-workspace/releases"
     fi
     echo ""
     echo "  Commands:"
@@ -244,8 +304,9 @@ case "${1:-install}" in
         echo "  $0 --help       Show this help"
         echo ""
         echo "Environment variables:"
-        echo "  AIRIS_MCP_DIR     Repository directory (default: ~/.local/share/airis-mcp-gateway)"
-        echo "  AIRIS_CONFIG_DIR  Config directory (default: ~/.config/airis-mcp-gateway)"
+        echo "  AIRIS_MCP_DIR       Repository directory (default: ~/.local/share/airis-mcp-gateway)"
+        echo "  AIRIS_CONFIG_DIR    Config directory (default: ~/.config/airis-mcp-gateway)"
+        echo "  INSTALL_WORKSPACE   Install airis-workspace CLI (default: true, set to false to skip)"
         ;;
     *)
         install
