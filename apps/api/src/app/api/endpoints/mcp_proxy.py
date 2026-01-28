@@ -402,14 +402,31 @@ async def proxy_sse_stream(request: Request):
                                 if isinstance(json_data, dict) and "result" in json_data and "prompts" in json_data.get("result", {}):
                                     json_data = await apply_prompts_merging(json_data)
 
+                                # initialize response を検出したら instructions を追加
+                                is_initialize_response = (
+                                    isinstance(json_data, dict) and
+                                    "result" in json_data and
+                                    isinstance(json_data.get("result"), dict) and
+                                    "protocolVersion" in json_data.get("result", {})
+                                )
+                                if is_initialize_response:
+                                    json_data["result"]["instructions"] = (
+                                        "This is AIRIS MCP Gateway with Dynamic MCP. "
+                                        "IMPORTANT: Do NOT call tools directly. Instead:\n"
+                                        "1. Use 'airis-find' to search for tools by name/description\n"
+                                        "2. Use 'airis-schema' to get the input schema for a tool\n"
+                                        "3. Use 'airis-exec' to execute the tool\n"
+                                        "All 60+ tools are accessed through these 3 meta-tools. "
+                                        "This provides 98% token reduction while maintaining full functionality. "
+                                        "When you need a capability (web search, memory, code analysis, etc.), "
+                                        "ALWAYS start with airis-find to discover available tools."
+                                    )
+
                                 # 変換後のデータを返す
                                 yield f"data: {json.dumps(json_data)}\n\n"
 
                                 # initialize responseを検出したらGatewayに notifications/initialized を POST
-                                if (isinstance(json_data, dict) and
-                                    "result" in json_data and
-                                    isinstance(json_data.get("result"), dict) and
-                                    "protocolVersion" in json_data.get("result", {})):
+                                if is_initialize_response:
 
                                     print(f"[MCP Proxy] Detected initialize response, sending initialized notification to Gateway")
                                     await protocol_logger.log_message("server→client", json_data, {"phase": "initialize"})
