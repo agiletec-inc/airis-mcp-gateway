@@ -3,6 +3,19 @@
 # Includes browser automation support for Playwright and chrome-devtools MCP servers
 FROM python:3.12-slim
 
+# Download and install corporate CA certificate for SSL interception proxy
+# Uses -k to skip cert verification for this one download, then all subsequent
+# HTTPS requests will use the proper certificate chain
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+    && curl -k -o /usr/local/share/ca-certificates/thehutgroup.crt \
+       https://thg-certificate.thgaccess.com/thehutgroup.pem \
+    && update-ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set environment variables so curl and Node.js use the updated CA bundle
+ENV CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
+
 # Install system dependencies including Chromium for browser automation
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \

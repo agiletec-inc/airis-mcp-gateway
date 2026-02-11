@@ -431,7 +431,7 @@ class DynamicMCP:
         return [
             {
                 "name": "airis-find",
-                "description": "Search for available MCP tools and servers. Use this to discover what tools are available before calling airis-exec.",
+                "description": "Search for available MCP tools and servers. Use this to discover what tools are available before calling airis-exec. For full parameter schemas, use airis-schema.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -448,7 +448,7 @@ class DynamicMCP:
             },
             {
                 "name": "airis-exec",
-                "description": "Execute any MCP tool by name. First use airis-find to discover available tools, then use this to execute them.",
+                "description": "Execute any MCP tool by name. First use airis-find to discover available tools, then use airis-schema to see required arguments.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -458,7 +458,7 @@ class DynamicMCP:
                         },
                         "arguments": {
                             "type": "object",
-                            "description": "Arguments to pass to the tool. Use airis-find with the tool name to see required arguments."
+                            "description": "Arguments to pass to the tool. Use airis-schema with the tool name to see required arguments."
                         }
                     },
                     "required": ["tool"]

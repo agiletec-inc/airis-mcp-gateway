@@ -52,7 +52,9 @@ services:
   # Manages MCP servers from Docker catalog (time, mindbase via stdio)
   gateway:
     container_name: airis-mcp-gateway-core
-    image: docker/mcp-gateway:latest
+    build:
+      context: .
+      dockerfile: infra/gateway.Dockerfile
     command:
       - --transport=sse
       - --port=9390
@@ -78,6 +80,7 @@ services:
   airis-agent:
     container_name: airis-agent
     image: ghcr.io/agiletec-inc/airis-agent:latest
+    platform: linux/arm64
     expose:
       - "8100"
     environment:
@@ -99,6 +102,7 @@ services:
   airis-workspace:
     container_name: airis-workspace
     image: ghcr.io/agiletec-inc/airis-agent:latest
+    platform: linux/arm64
     entrypoint: ["airis-workspace-mcp-sse"]
     expose:
       - "8200"
@@ -133,6 +137,7 @@ services:
       - MCP_GATEWAY_URL=http://gateway:9390
       - MCP_CONFIG_PATH=/app/mcp-config.json
       - GATEWAY_CONFIG_PATH=/app/config/gateway-config.yaml
+      - SERENA_MODE=${SERENA_MODE:-serena-local}
       # Dynamic MCP: exposes only meta-tools (airis-find, airis-exec, airis-schema)
       # instead of all tools - reduces context token usage by ~98%
       # Set to "false" to disable and expose all tools directly

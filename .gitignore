@@ -68,3 +68,11 @@ secrets.json
 
 # Casks (local macOS app builds)
 Casks/
+/.idea/.gitignore
+/.idea/airis-mcp-gateway.iml
+/.idea/copilot.data.migration.ask2agent.xml
+/.idea/go.imports.xml
+/.idea/misc.xml
+/.idea/modules.xml
+/.idea/PMDPlugin.xml
+/.idea/vcs.xml
