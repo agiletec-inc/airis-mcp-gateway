@@ -234,9 +234,9 @@ class TestToolRouting:
     async def test_call_unknown_tool(self, manager_with_tools):
         """Test calling unknown tool returns error."""
         # Mock list_tools to return empty
-        manager_with_tools._runners["test-hot"].ensure_ready = AsyncMock(return_value=True)
+        manager_with_tools._runners["test-hot"].ensure_ready_with_error = AsyncMock(return_value=(True, None))
         manager_with_tools._runners["test-hot"].tools = []
-        manager_with_tools._runners["test-cold"].ensure_ready = AsyncMock(return_value=True)
+        manager_with_tools._runners["test-cold"].ensure_ready_with_error = AsyncMock(return_value=(True, None))
         manager_with_tools._runners["test-cold"].tools = []
 
         result = await manager_with_tools.call_tool("unknown_tool", {})

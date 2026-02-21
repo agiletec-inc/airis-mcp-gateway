@@ -189,18 +189,21 @@ class ProcessRunner:
     def _default_stderr_handler(self, server_name: str, line: str):
         logger.warning(f"[{server_name}][stderr] {line}")
 
-    async def ensure_ready(self, timeout: float = 30.0) -> bool:
+    async def ensure_ready_with_error(self, timeout: float = 30.0) -> tuple[bool, Optional[str]]:
         """
         Ensure the process is started and initialized.
-        Returns True if ready, False if failed.
+        Returns (True, None) if ready, (False, error_message) if failed.
         """
         async with self._lock:
             if self._state == ProcessState.READY:
                 self._last_used = time.time()
-                return True
+                return (True, None)
 
             if self._state == ProcessState.STOPPED:
-                await self._start_process()
+                try:
+                    await self._start_process()
+                except Exception as e:
+                    return (False, str(e))
 
             if self._state == ProcessState.RUNNING:
                 await self._initialize()
@@ -209,12 +212,22 @@ class ProcessRunner:
         start = time.time()
         while time.time() - start < timeout:
             if self._state == ProcessState.READY:
-                return True
+                return (True, None)
             if self._state == ProcessState.STOPPED:
-                return False
+                return (False, self._last_error)
             await asyncio.sleep(0.05)
 
-        return False
+        return (False, f"Timeout waiting for server to be ready after {timeout}s")
+
+    async def ensure_ready(self, timeout: float = 30.0) -> bool:
+        """
+        Ensure the process is started and initialized.
+        Returns True if ready, False if failed.
+
+        Note: Use ensure_ready_with_error() for detailed error information.
+        """
+        success, _ = await self.ensure_ready_with_error(timeout)
+        return success
 
     async def _start_process(self):
         """Start the subprocess."""
