@@ -2,65 +2,73 @@ version: '3'
 
 vars:
   COMPOSE_FILE: "{{.REPO_ROOT}}/docker-compose.yml"
-  COMPOSE_DEV_FILE: "{{.REPO_ROOT}}/docker-compose.dev.yml"
+  ARM_EMU_FILE: "{{.REPO_ROOT}}/docker-compose.arm-emu.yml"
+  COMPOSE_FILES:
+    sh: |
+      case "$(uname -m)" in
+        x86_64|amd64)
+          echo "-f {{.COMPOSE_FILE}} -f {{.ARM_EMU_FILE}}" ;;
+        *)
+          echo "-f {{.COMPOSE_FILE}}" ;;
+      esac
 
 tasks:
   up:
     desc: Start the stack
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} up -d
+      - docker compose {{.COMPOSE_FILES}} up -d
 
   down:
     desc: Stop the stack
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} down
+      - docker compose {{.COMPOSE_FILES}} down
 
   restart:
     desc: Restart the API container
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} restart api
+      - docker compose {{.COMPOSE_FILES}} restart api
 
   ps:
     desc: Show container status
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} ps
+      - docker compose {{.COMPOSE_FILES}} ps
 
   logs:
     desc: Follow API logs
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} logs -f api
+      - docker compose {{.COMPOSE_FILES}} logs -f api
 
   logs:all:
     desc: Follow all container logs
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} logs -f
+      - docker compose {{.COMPOSE_FILES}} logs -f
 
   logs:tail:
     desc: Show last 50 log lines
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} logs --tail 50 api
+      - docker compose {{.COMPOSE_FILES}} logs --tail 50 api
 
   build:
     desc: Build Docker images
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} build
+      - docker compose {{.COMPOSE_FILES}} build
 
   build:nocache:
     desc: Build Docker images without cache
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} build --no-cache
+      - docker compose {{.COMPOSE_FILES}} build --no-cache
 
   pull:
     desc: Pull latest images
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} pull
+      - docker compose {{.COMPOSE_FILES}} pull
 
   clean:
     desc: Stop and remove all containers, volumes
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} down -v
+      - docker compose {{.COMPOSE_FILES}} down -v
 
   shell:
     desc: Shell into API container
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} exec api /bin/bash
+      - docker compose {{.COMPOSE_FILES}} exec api /bin/bash

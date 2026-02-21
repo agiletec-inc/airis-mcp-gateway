@@ -6,6 +6,24 @@
 
 One command to add 60+ AI tools to Claude Code. No config, no setup, just works.
 
+## THG Fork
+
+This is a THG fork of the [upstream project](https://github.com/agiletec-inc/airis-mcp-gateway). The `airis-agent` and `airis-workspace` images are built for ARM64, so the startup command differs by platform.
+
+**macOS (Apple Silicon)** -- runs natively:
+
+```bash
+docker compose up -d
+```
+
+**WSL / Windows (x86_64)** -- needs ARM emulation via QEMU:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.arm-emu.yml up -d
+```
+
+> If you have [Devbox](https://www.jetify.com/devbox) and go-task installed, `task docker:up` detects your architecture automatically.
+
 ## Quick Start
 
 ```bash

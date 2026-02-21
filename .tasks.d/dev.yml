@@ -3,6 +3,15 @@ version: '3'
 vars:
   COMPOSE_FILE: "{{.REPO_ROOT}}/docker-compose.yml"
   COMPOSE_DEV_FILE: "{{.REPO_ROOT}}/docker-compose.dev.yml"
+  ARM_EMU_FILE: "{{.REPO_ROOT}}/docker-compose.arm-emu.yml"
+  COMPOSE_FILES:
+    sh: |
+      case "$(uname -m)" in
+        x86_64|amd64)
+          echo "-f {{.COMPOSE_FILE}} -f {{.ARM_EMU_FILE}} -f {{.COMPOSE_DEV_FILE}}" ;;
+        *)
+          echo "-f {{.COMPOSE_FILE}} -f {{.COMPOSE_DEV_FILE}}" ;;
+      esac
 
 tasks:
   up:
@@ -10,22 +19,22 @@ tasks:
     deps:
       - build:local
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} -f {{.COMPOSE_DEV_FILE}} up -d
+      - docker compose {{.COMPOSE_FILES}} up -d
 
   down:
     desc: Stop development stack
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} -f {{.COMPOSE_DEV_FILE}} down
+      - docker compose {{.COMPOSE_FILES}} down
 
   restart:
     desc: Restart API in dev mode
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} -f {{.COMPOSE_DEV_FILE}} restart api
+      - docker compose {{.COMPOSE_FILES}} restart api
 
   logs:
     desc: Follow dev logs
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} -f {{.COMPOSE_DEV_FILE}} logs -f api
+      - docker compose {{.COMPOSE_FILES}} logs -f api
 
   build:local:
     desc: Build MCP servers locally (for dev volume mounts)

@@ -103,6 +103,16 @@ sed -e "s|{{DOCKER_COMPOSE_PATH}}|$DOCKER_COMPOSE_PATH|g" \
     -e "s|{{HOME}}|$HOME|g" \
     "$TEMPLATE" > "$PLIST_DEST"
 
+# Detect architecture for ARM emulation
+ARM_EMU_PLIST_ARGS=""
+if [ "$(uname -m)" = "x86_64" ] || [ "$(uname -m)" = "amd64" ]; then
+    ARM_EMU_PLIST_ARGS="        <string>-f</string>
+        <string>$REPO_ROOT/docker-compose.arm-emu.yml</string>"
+    echo "  Architecture: x86_64 (ARM emulation enabled)"
+else
+    echo "  Architecture: $(uname -m) (native)"
+fi
+
 # Since we need 'docker compose' (two args), update plist for compose subcommand
 # The template uses docker, we need to insert 'compose' as second argument
 # Rewrite with proper arguments for docker compose v2
@@ -120,7 +130,8 @@ cat > "$PLIST_DEST" << EOF
         <string>compose</string>
         <string>-f</string>
         <string>$REPO_ROOT/docker-compose.yml</string>
-        <string>up</string>
+${ARM_EMU_PLIST_ARGS:+$ARM_EMU_PLIST_ARGS
+}        <string>up</string>
         <string>-d</string>
     </array>
 

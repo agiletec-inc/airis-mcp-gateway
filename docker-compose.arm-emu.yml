@@ -1,0 +1,13 @@
+# ARM emulation for x86_64 hosts (WSL/Linux)
+# The airis-agent image is built for ARM64 (macOS Apple Silicon).
+# On x86_64 systems, Docker uses QEMU to emulate ARM execution.
+#
+# Automatically applied by Taskfile when uname -m reports x86_64.
+# Manual: docker compose -f docker-compose.yml -f docker-compose.arm-emu.yml up -d
+
+services:
+  airis-agent:
+    platform: linux/arm64
+
+  airis-workspace:
+    platform: linux/arm64

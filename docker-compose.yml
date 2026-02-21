@@ -77,10 +77,10 @@ services:
   # Airis Agent MCP Server (internal, port 8100/SSE)
   # Note: airis-agent only supports HTTP/SSE transport (not stdio)
   # The API container uses mcp-remote to bridge SSE to stdio
+  # Platform: ARM image — on x86_64 hosts, Taskfile auto-applies docker-compose.arm-emu.yml
   airis-agent:
     container_name: airis-agent
     image: ghcr.io/agiletec-inc/airis-agent:latest
-    platform: linux/arm64
     expose:
       - "8100"
     environment:
@@ -102,7 +102,6 @@ services:
   airis-workspace:
     container_name: airis-workspace
     image: ghcr.io/agiletec-inc/airis-agent:latest
-    platform: linux/arm64
     entrypoint: ["airis-workspace-mcp-sse"]
     expose:
       - "8200"
@@ -164,7 +163,7 @@ services:
     healthcheck:
       # Use /ready instead of /health to ensure HOT servers are initialized
       # before accepting connections (fixes Claude Code slash command visibility)
-      test: ["CMD-SHELL", "curl -sf http://localhost:8000/ready | grep -q '\"ready\": true' || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/ready | grep -q '\"ready\":true' || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 10

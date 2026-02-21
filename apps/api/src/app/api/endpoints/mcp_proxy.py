@@ -1474,6 +1474,10 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
     dynamic_mcp = get_dynamic_mcp()
     server_name, tool_name = dynamic_mcp.parse_tool_reference(tool_ref)
 
+    # Fallback: if server not found in cache, try inference from tool name pattern
+    if not server_name:
+        server_name = _infer_server_from_tool_name(tool_name)
+
     logger.info(f"airis-exec: {tool_ref} -> server={server_name}, tool={tool_name}")
 
     if not server_name:

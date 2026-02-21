@@ -54,8 +54,18 @@ if [ ! -f "$TEMPLATE" ]; then
     exit 1
 fi
 
+# Detect architecture for ARM emulation
+ARM_EMU_FLAG=""
+if [ "$(uname -m)" = "x86_64" ] || [ "$(uname -m)" = "amd64" ]; then
+  ARM_EMU_FLAG=" -f $REPO_ROOT/docker-compose.arm-emu.yml"
+  echo "  Architecture: x86_64 (ARM emulation enabled)"
+else
+  echo "  Architecture: $(uname -m) (native)"
+fi
+
 sed -e "s|{{REPO_ROOT}}|$REPO_ROOT|g" \
     -e "s|{{USER}}|$USER|g" \
+    -e "s|{{ARM_EMU_FLAG}}|$ARM_EMU_FLAG|g" \
     "$TEMPLATE" > "$SERVICE_DEST"
 
 echo "  Created: $SERVICE_DEST"

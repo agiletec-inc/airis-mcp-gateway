@@ -68,6 +68,7 @@ class McpServerConfig:
             args=self.args,
             env=self.env,
             cwd=self.cwd,
+            mode=self.mode.value,  # "hot" or "cold"
             idle_timeout=self.idle_timeout if self.idle_timeout is not None else idle_timeout,
         )
         # Override TTL settings if specified

@@ -1,5 +1,17 @@
 version: '3'
 
+vars:
+  COMPOSE_FILE: "{{.REPO_ROOT}}/docker-compose.yml"
+  ARM_EMU_FILE: "{{.REPO_ROOT}}/docker-compose.arm-emu.yml"
+  COMPOSE_FILES:
+    sh: |
+      case "$(uname -m)" in
+        x86_64|amd64)
+          echo "-f {{.COMPOSE_FILE}} -f {{.ARM_EMU_FILE}}" ;;
+        *)
+          echo "-f {{.COMPOSE_FILE}}" ;;
+      esac
+
 tasks:
   health:
     desc: Check API health
@@ -24,7 +36,7 @@ tasks:
   prewarm:
     desc: Check pre-warm status from logs
     cmds:
-      - docker compose logs api 2>&1 | grep -E "Pre-warm" | tail -10
+      - docker compose {{.COMPOSE_FILES}} logs api 2>&1 | grep -E "Pre-warm" | tail -10
 
   e2e:
     desc: Run end-to-end test suite
@@ -46,4 +58,4 @@ tasks:
   api:
     desc: Run Python API tests
     cmds:
-      - docker compose exec api pytest tests/ -v
+      - docker compose {{.COMPOSE_FILES}} exec api pytest tests/ -v
