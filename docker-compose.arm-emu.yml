@@ -2,12 +2,29 @@
 # The airis-agent image is built for ARM64 (macOS Apple Silicon).
 # On x86_64 systems, Docker uses QEMU to emulate ARM execution.
 #
+# Healthcheck timeouts are increased because under QEMU:
+#   - Python startup takes ~1.2s (vs ~0.1s native)
+#   - urllib.request healthcheck takes ~9s (vs <1s native)
+#   - Server startup takes ~4-5 minutes (vs ~5s native)
+#
 # Automatically applied by Taskfile when uname -m reports x86_64.
 # Manual: docker compose -f docker-compose.yml -f docker-compose.arm-emu.yml up -d
 
 services:
   airis-agent:
     platform: linux/arm64
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8100/health')\""]
+      interval: 15s
+      timeout: 30s
+      retries: 5
+      start_period: 300s
 
   airis-workspace:
     platform: linux/arm64
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8200/health')\""]
+      interval: 15s
+      timeout: 30s
+      retries: 5
+      start_period: 300s

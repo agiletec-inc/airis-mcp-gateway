@@ -13,8 +13,18 @@ vars:
       esac
 
 tasks:
+  qemu-setup:
+    desc: Register QEMU binfmt handlers for ARM64 emulation (x86_64 only)
+    platforms: [linux/amd64]
+    status:
+      - test -f /proc/sys/fs/binfmt_misc/qemu-aarch64
+    cmds:
+      - echo "Registering QEMU binfmt handlers for ARM64 emulation..."
+      - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+
   up:
     desc: Start the stack
+    deps: [qemu-setup]
     cmds:
       - docker compose {{.COMPOSE_FILES}} up -d
 
@@ -50,11 +60,13 @@ tasks:
 
   build:
     desc: Build Docker images
+    deps: [qemu-setup]
     cmds:
       - docker compose {{.COMPOSE_FILES}} build
 
   build:nocache:
     desc: Build Docker images without cache
+    deps: [qemu-setup]
     cmds:
       - docker compose {{.COMPOSE_FILES}} build --no-cache
 
