@@ -72,48 +72,6 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # Airis Agent MCP Server (internal, port 8100/SSE)
-  # Note: airis-agent only supports HTTP/SSE transport (not stdio)
-  # The API container uses mcp-remote to bridge SSE to stdio
-  airis-agent:
-    container_name: airis-agent
-    image: ghcr.io/agiletec-inc/airis-agent:latest
-    expose:
-      - "8100"
-    environment:
-      # Gateway URL for orchestrator (connect to API container)
-      # Note: airis-agent uses AIRIS_GATEWAY_URL (not MCP_GATEWAY_URL)
-      - AIRIS_GATEWAY_URL=http://api:8000
-    volumes:
-      - ${HOST_WORKSPACE_DIR:-${HOME}/github}:/workspace:rw
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8100/health')\""]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    restart: unless-stopped
-
-  # Airis Workspace MCP Server (internal, port 8200/SSE)
-  # Thin wrapper around airis CLI for workspace management
-  airis-workspace:
-    container_name: airis-workspace
-    image: ghcr.io/agiletec-inc/airis-agent:latest
-    entrypoint: ["airis-workspace-mcp-sse"]
-    expose:
-      - "8200"
-    environment:
-      - AIRIS_WORKSPACE_PORT=8200
-    volumes:
-      - ${HOST_WORKSPACE_DIR:-${HOME}/github}:/workspace:rw
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8200/health')\""]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    restart: unless-stopped
-
   # FastAPI Proxy (external, port 9400)
   # Hybrid MCP Multiplexer: Docker Gateway + Process (uvx/npx)
   api:
@@ -149,10 +107,6 @@ services:
       - memory-data:/app/data              # Knowledge graph persistence
     depends_on:
       gateway:
-        condition: service_healthy
-      airis-agent:
-        condition: service_healthy
-      airis-workspace:
         condition: service_healthy
       serena:
         condition: service_started

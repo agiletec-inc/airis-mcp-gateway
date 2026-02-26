@@ -435,22 +435,13 @@ async def proxy_sse_stream(request: Request):
                                         "2. Use 'airis-schema' to get the input schema for a tool\n"
                                         "3. Use 'airis-exec' to execute the tool\n"
                                         "All 60+ tools are accessed through these 3 meta-tools. "
-                                        "This provides 98% token reduction while maintaining full functionality. "
+                                        "This provides 98% token reduction while maintaining full functionality.\n\n"
+                                        "## Additional Meta-Tools\n"
+                                        "- 'airis-confidence': Pre-implementation confidence check. Use before starting complex tasks.\n"
+                                        "- 'airis-repo-index': Generate repository structure overview for unfamiliar codebases.\n"
+                                        "- 'airis-suggest': Get tool recommendations from natural language intent.\n\n"
                                         "When you need a capability (web search, memory, code analysis, etc.), "
-                                        "ALWAYS start with airis-find to discover available tools.\n\n"
-                                        "## MANDATORY: Use airis_do for ALL Implementation Tasks\n"
-                                        "For ANY code implementation, modification, or feature development:\n"
-                                        "```\n"
-                                        "airis-exec tool=\"airis-agent:airis_do\" arguments={\"task\": \"...\", \"context\": \"...\"}\n"
-                                        "```\n"
-                                        "airis_do automatically handles:\n"
-                                        "- Intent classification (7 types)\n"
-                                        "- Confidence check (blocks if < 0.90)\n"
-                                        "- Deep research (auto-triggered when confidence is low)\n"
-                                        "- Execution planning and reflection\n"
-                                        "- Self-correction on failure\n\n"
-                                        "DO NOT manually call airis_confidence, airis_deep_research, or implement directly.\n"
-                                        "airis_do orchestrates everything automatically based on context."
+                                        "ALWAYS start with airis-find or airis-suggest to discover available tools."
                                     )
 
                                 # 変換後のデータを返す
@@ -1076,6 +1067,15 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
 
         if tool_name == "airis-schema":
             return await handle_airis_schema(rpc_request, session_id=session_id)
+
+        if tool_name == "airis-confidence":
+            return await handle_airis_confidence(rpc_request, session_id=session_id)
+
+        if tool_name == "airis-repo-index":
+            return await handle_airis_repo_index(rpc_request, session_id=session_id)
+
+        if tool_name == "airis-suggest":
+            return await handle_airis_suggest(rpc_request, session_id=session_id)
 
     # prompts/get リクエスト処理
     if rpc_request.get("method") == "prompts/get":
@@ -1837,6 +1837,231 @@ async def handle_expand_schema(rpc_request: Dict[str, Any]) -> Response:
 
     return Response(
         content=json.dumps(success_response),
+        status_code=200,
+        media_type="application/json"
+    )
+
+
+async def handle_airis_confidence(rpc_request: Dict[str, Any], session_id: Optional[str] = None) -> Response:
+    """
+    airis-confidence: Pre-implementation confidence check
+
+    Args:
+        rpc_request: JSON-RPC 2.0 request
+        session_id: SSE session ID for response routing
+
+    Returns:
+        JSON-RPC 2.0 response
+    """
+    from ...core.confidence_engine import ConfidenceInput, get_confidence_checker
+
+    params = rpc_request.get("params", {})
+    arguments = params.get("arguments", {})
+
+    # Build ConfidenceInput from arguments
+    input_data = ConfidenceInput(
+        task=arguments.get("task", ""),
+        has_official_docs=arguments.get("has_official_docs", False),
+        has_existing_patterns=arguments.get("has_existing_patterns", False),
+        has_clear_path=arguments.get("has_clear_path", False),
+        multiple_approaches=arguments.get("multiple_approaches", False),
+        has_trade_offs=arguments.get("has_trade_offs", False),
+        unclear_requirements=arguments.get("unclear_requirements", False),
+        no_precedent=arguments.get("no_precedent", False),
+        missing_domain_knowledge=arguments.get("missing_domain_knowledge", False),
+    )
+
+    checker = get_confidence_checker()
+    result = checker.assess(input_data)
+
+    # Format result as readable text
+    lines = [
+        f"# Confidence Assessment",
+        "",
+        f"**Score:** {int(result.score * 100)}% ({result.level})",
+        f"**Verdict:** {result.verdict.value}",
+        f"**Should Proceed:** {'Yes' if result.should_proceed else 'No'}",
+        "",
+        "## Reasons",
+    ]
+
+    for reason in result.reasons:
+        lines.append(f"- {reason}")
+
+    if result.questions:
+        lines.append("")
+        lines.append("## Clarifying Questions")
+        for q in result.questions:
+            lines.append(f"- {q}")
+
+    lines.append("")
+    lines.append("## Recommendation")
+    lines.append(checker.get_recommendation(result.score))
+
+    response_text = "\n".join(lines)
+
+    response_data = {
+        "jsonrpc": "2.0",
+        "id": rpc_request.get("id"),
+        "result": {
+            "content": [{"type": "text", "text": response_text}]
+        }
+    }
+
+    # MCP SSE Transport: Response via SSE stream
+    if session_id:
+        queue = await get_response_queue(session_id)
+        await queue.put(response_data)
+        logger.info(f"Queued airis-confidence response for session {session_id}")
+        return Response(status_code=202)
+
+    return Response(
+        content=json.dumps(response_data),
+        status_code=200,
+        media_type="application/json"
+    )
+
+
+async def handle_airis_repo_index(rpc_request: Dict[str, Any], session_id: Optional[str] = None) -> Response:
+    """
+    airis-repo-index: Generate repository index
+
+    Args:
+        rpc_request: JSON-RPC 2.0 request
+        session_id: SSE session ID for response routing
+
+    Returns:
+        JSON-RPC 2.0 response
+    """
+    from ...core.repo_indexer import RepoIndexRequest, generate_repo_index
+
+    params = rpc_request.get("params", {})
+    arguments = params.get("arguments", {})
+
+    repo_path = arguments.get("repo_path")
+    if not repo_path:
+        error_data = {
+            "jsonrpc": "2.0",
+            "id": rpc_request.get("id"),
+            "error": {"code": -32602, "message": "repo_path is required"}
+        }
+        if session_id:
+            queue = await get_response_queue(session_id)
+            await queue.put(error_data)
+            return Response(status_code=202)
+        return Response(
+            content=json.dumps(error_data),
+            status_code=200,
+            media_type="application/json"
+        )
+
+    try:
+        request = RepoIndexRequest(
+            repo_path=repo_path,
+            mode=arguments.get("mode", "full"),
+            include_docs=arguments.get("include_docs", True),
+            include_tests=arguments.get("include_tests", True),
+            max_entries=arguments.get("max_entries", 10),
+        )
+        result = generate_repo_index(request)
+
+        response_data = {
+            "jsonrpc": "2.0",
+            "id": rpc_request.get("id"),
+            "result": {
+                "content": [{"type": "text", "text": result.markdown}]
+            }
+        }
+
+    except FileNotFoundError as e:
+        response_data = {
+            "jsonrpc": "2.0",
+            "id": rpc_request.get("id"),
+            "error": {"code": -32602, "message": str(e)}
+        }
+    except Exception as e:
+        logger.error(f"airis-repo-index failed: {e}")
+        response_data = {
+            "jsonrpc": "2.0",
+            "id": rpc_request.get("id"),
+            "error": {"code": -32603, "message": f"Indexing failed: {str(e)}"}
+        }
+
+    # MCP SSE Transport: Response via SSE stream
+    if session_id:
+        queue = await get_response_queue(session_id)
+        await queue.put(response_data)
+        logger.info(f"Queued airis-repo-index response for session {session_id}")
+        return Response(status_code=202)
+
+    return Response(
+        content=json.dumps(response_data),
+        status_code=200,
+        media_type="application/json"
+    )
+
+
+async def handle_airis_suggest(rpc_request: Dict[str, Any], session_id: Optional[str] = None) -> Response:
+    """
+    airis-suggest: Suggest MCP tools based on natural language intent
+
+    Args:
+        rpc_request: JSON-RPC 2.0 request
+        session_id: SSE session ID for response routing
+
+    Returns:
+        JSON-RPC 2.0 response
+    """
+    from ...core.tool_suggester import SuggestToolRequest, suggest_tool, format_suggestions_as_text
+
+    params = rpc_request.get("params", {})
+    arguments = params.get("arguments", {})
+
+    intent = arguments.get("intent")
+    if not intent:
+        error_data = {
+            "jsonrpc": "2.0",
+            "id": rpc_request.get("id"),
+            "error": {"code": -32602, "message": "intent is required"}
+        }
+        if session_id:
+            queue = await get_response_queue(session_id)
+            await queue.put(error_data)
+            return Response(status_code=202)
+        return Response(
+            content=json.dumps(error_data),
+            status_code=200,
+            media_type="application/json"
+        )
+
+    # Get DynamicMCP instance for live tool lookup
+    dynamic_mcp = get_dynamic_mcp()
+
+    request = SuggestToolRequest(
+        intent=intent,
+        max_results=arguments.get("max_results", 5),
+    )
+    result = suggest_tool(request, dynamic_mcp=dynamic_mcp)
+
+    response_text = format_suggestions_as_text(result)
+
+    response_data = {
+        "jsonrpc": "2.0",
+        "id": rpc_request.get("id"),
+        "result": {
+            "content": [{"type": "text", "text": response_text}]
+        }
+    }
+
+    # MCP SSE Transport: Response via SSE stream
+    if session_id:
+        queue = await get_response_queue(session_id)
+        await queue.put(response_data)
+        logger.info(f"Queued airis-suggest response for session {session_id}")
+        return Response(status_code=202)
+
+    return Response(
+        content=json.dumps(response_data),
         status_code=200,
         media_type="application/json"
     )

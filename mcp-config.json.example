@@ -1,28 +1,5 @@
 {
   "mcpServers": {
-    "airis-agent": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "mcp-remote",
-        "http://airis-agent:8100/sse",
-        "--allow-http"
-      ],
-      "env": {},
-      "enabled": true,
-      "mode": "hot"
-    },
-    "airis-workspace": {
-      "command": "uvx",
-      "args": [
-        "--from",
-        "git+https://github.com/agiletec-inc/airis-agent",
-        "airis-workspace-mcp"
-      ],
-      "env": {},
-      "enabled": false,
-      "mode": "cold"
-    },
     "context7": {
       "command": "npx",
       "args": [
