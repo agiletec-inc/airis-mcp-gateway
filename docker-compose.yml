@@ -38,8 +38,11 @@ services:
       - ide-assistant
     expose:
       - "8000"
+    environment:
+      - SERENA_DOCKER=1
     volumes:
       - ${HOST_WORKSPACE_DIR:-${HOME}/github}:/workspaces/projects:rw
+      - ./config/serena:/workspaces/serena/config:rw
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health 2>/dev/null || exit 0"]
       interval: 30s
@@ -69,6 +72,31 @@ services:
       - ./catalogs:/catalogs:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qS --spider http://localhost:9390/health 2>&1 | grep -q '200'"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # Docker MCP Gateway (streaming transport for Codex/RMCP, internal)
+  gateway-stream:
+    container_name: airis-mcp-gateway-stream
+    build:
+      context: .
+      dockerfile: infra/gateway.Dockerfile
+    command:
+      - --transport=streaming
+      - --port=9391
+      - --watch
+      - --additional-catalog=/catalogs/airis-catalog.yaml
+      - --servers=time,mindbase
+    expose:
+      - "9391"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${HOST_WORKSPACE_DIR:-${HOME}/github}:/workspace:rw
+      - ./catalogs:/catalogs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qS --spider http://localhost:9391/health 2>&1 | grep -q '200'"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -134,6 +162,7 @@ services:
     cpus: 2
     environment:
       - MCP_GATEWAY_URL=http://gateway:9390
+      - MCP_STREAM_GATEWAY_URL=http://gateway-stream:9391/mcp
       - MCP_CONFIG_PATH=/app/mcp-config.json
       - GATEWAY_CONFIG_PATH=/app/config/gateway-config.yaml
       - SERENA_MODE=${SERENA_MODE:-serena-local}
@@ -153,6 +182,8 @@ services:
       - memory-data:/app/data              # Knowledge graph persistence
     depends_on:
       gateway:
+        condition: service_healthy
+      gateway-stream:
         condition: service_healthy
       airis-agent:
         condition: service_healthy

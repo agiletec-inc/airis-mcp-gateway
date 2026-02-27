@@ -1,0 +1,98 @@
+# Serena Docker Configuration
+# See: https://github.com/oraios/serena/blob/main/DOCKER.md
+
+language_backend: LSP
+
+# Disable GUI log window (not supported in Docker)
+gui_log_window: false
+
+# Web dashboard settings for Docker
+web_dashboard: true
+
+# the address the web dashboard will listen on (bind address).
+web_dashboard_listen_address: 0.0.0.0
+
+# whether to open a browser window with the web dashboard when Serena starts (provided that web_dashboard
+# is enabled). See also the web_dashboard option.
+# If set to false, you can still open the dashboard manually by
+# a) telling the LLM to "open the dashboard" (provided that the open_dashboard tool is enabled) or by
+# b) manually navigating to http://localhost:24282/dashboard/ in your web browser (actual port
+#    may be higher if you have multiple instances running; try ports 24283, 24284, etc.)
+# See also: https://oraios.github.io/serena/02-usage/060_dashboard.html
+web_dashboard_open_on_launch: false
+
+# the minimum log level for the GUI log window and the dashboard (10 = debug, 20 = info, 30 = warning, 40 = error)
+log_level: 20
+
+# timeout, in seconds, after which tool executions are terminated
+tool_timeout: 240
+default_max_tool_answer_chars: 150000
+
+# time budget (seconds) for requests when tools request symbol info (currently
+# only supported for LSP-based tools).
+# If the budget is exceeded, Serena stops issuing further symbol-info-related
+# requests and returns partial info results.
+# 0 disables the budget (no early stopping). Negative values are invalid.
+# This is an advanced setting that can help alleviate problems with LSP servers
+# that have a slow implementation of request_hover (clangd is one of those)
+# or with tool calls that find very many symbols.
+# Can be overridden in project.yml.
+symbol_info_budget: 10
+
+# list of mode names that are to be activated by default.
+# The full set of modes to be activated is base_modes + default_modes.
+# These modes can be overridden by the project configuration (project.yml) or through the CLI (--mode).
+default_modes:
+- interactive
+- editing
+
+# Registered project paths (auto-populated by activate_project)
+
+# the list of registered project paths (updated automatically).
+
+# the list of registered project paths (updated automatically).
+projects:
+- /workspaces/projects/shared-workflows
+
+# list of tools to be globally excluded
+excluded_tools: []
+
+# list of optional tools (which are disabled by default) to be included
+included_optional_tools: []
+
+# fixed set of tools to use as the base tool set (if non-empty), replacing Serena's default set of tools.
+# This cannot be combined with non-empty excluded_tools or included_optional_tools.
+fixed_tools: []
+
+# list of mode names to that are always to be included in the set of active modes
+# The full set of modes to be activated is base_modes + default_modes.
+# If this is undefined, no base modes are included.
+# The project configuration (project.yml) may override this setting.
+base_modes:
+
+# whether to trace the communication between Serena and the language servers.
+# This is useful for debugging language server issues.
+trace_lsp_communication: false
+
+# address where JetBrains plugin servers are running (only relevant when using the JetBrains language backend)
+jetbrains_plugin_server_address: 127.0.0.1
+
+# the name of the token count estimator to use for tool usage statistics.
+# See the `RegisteredTokenCountEstimator` enum for available options.
+#
+# By default, a very naive character count estimator is used, which simply counts the number of characters.
+# You can configure this to TIKTOKEN_GPT4 to use a local tiktoken-based estimator for GPT-4 (will download tiktoken
+# data files on first run), or ANTHROPIC_CLAUDE_SONNET_4 which will use the (free of cost) Anthropic API to
+# estimate the token count using the Claude Sonnet 4 tokenizer.
+token_count_estimator: CHAR_COUNT
+
+# advanced configuration option allowing to configure language server-specific options.
+# Maps the language key to the options.
+# Have a look at the docstring of the constructors of the LS implementations within solidlsp (e.g., for C# or PHP) to see which options are available.
+# No documentation on options means no options are available.
+ls_specific_settings: {}
+
+# list of paths to ignore across all projects.
+# Same syntax as gitignore, so you can use * and **.
+# These patterns are merged additively with each project's own ignored_paths.
+ignored_paths: []

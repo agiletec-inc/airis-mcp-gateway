@@ -66,6 +66,10 @@ secrets.json
 # Serena memory (local AI context)
 .serena/
 
+# Serena Docker config (track config, ignore generated files)
+config/serena/*
+!config/serena/serena_config.yml
+
 # Casks (local macOS app builds)
 Casks/
 /.idea/.gitignore
