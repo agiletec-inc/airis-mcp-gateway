@@ -83,7 +83,8 @@
       ],
       "env": {
         "MCP_CONFIG_PATH": "/app/mcp-config.json",
-        "PROFILES_DIR": "/app/profiles"
+        "PROFILES_DIR": "/app/profiles",
+        "HOST_CLAUDE_DIR": "/host-claude"
       },
       "enabled": true,
       "mode": "hot"
