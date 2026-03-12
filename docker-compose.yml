@@ -81,6 +81,8 @@ services:
       dockerfile: apps/api/Dockerfile
     ports:
       - "9400:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     dns:
       - 8.8.8.8
       - 1.1.1.1
@@ -105,6 +107,8 @@ services:
       - cache-uv:/home/appuser/.cache/uv   # uvx package cache (faster restarts)
       - cache-npm:/home/appuser/.npm       # npm package cache (faster restarts)
       - memory-data:/app/data              # Knowledge graph persistence
+      # Host Claude Code config for airis-commands rules/settings management
+      - ${HOME}/.claude:/host-claude:rw
     depends_on:
       gateway:
         condition: service_healthy
