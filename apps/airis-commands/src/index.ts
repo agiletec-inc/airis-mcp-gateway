@@ -156,15 +156,16 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
+      // ── MCP Gateway Config Management ──
       {
         name: "airis_config_get",
-        description: "Get current MCP configuration (all servers and their settings)",
+        description: "Get the current MCP gateway configuration. Returns all servers with their command, args, env, and enabled status as JSON. Use this to understand what MCP servers are available and their current state. Pass server_name to get a single server's config.",
         inputSchema: {
           type: "object",
           properties: {
             server_name: {
               type: "string",
-              description: "Optional: get config for specific server only",
+              description: "Get config for this server only (e.g., 'supabase', 'playwright'). Omit to get all servers.",
             },
           },
           required: [],
@@ -172,17 +173,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "airis_config_set_enabled",
-        description: "Enable or disable a server in the config file",
+        description: "Enable or disable an MCP server. The change is written to mcp-config.json. Requires gateway restart to take effect. Use airis_config_get first to see available servers.",
         inputSchema: {
           type: "object",
           properties: {
             server_name: {
               type: "string",
-              description: "Name of the server",
+              description: "Server name as it appears in mcp-config.json (e.g., 'supabase', 'stripe')",
             },
             enabled: {
               type: "boolean",
-              description: "Whether to enable or disable",
+              description: "true to enable, false to disable",
             },
           },
           required: ["server_name", "enabled"],
@@ -190,30 +191,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "airis_config_add_server",
-        description: "Add a new MCP server to the configuration",
+        description: "Add a new MCP server to the gateway configuration. Specify the command (npx, uvx, node), args, and optional env vars. The server is enabled by default. Requires gateway restart. Use airis_mcp_detect first to auto-discover servers for your tech stack.",
         inputSchema: {
           type: "object",
           properties: {
             name: {
               type: "string",
-              description: "Server name (unique identifier)",
+              description: "Unique server name (e.g., 'my-server'). Must not already exist.",
             },
             command: {
               type: "string",
-              description: "Command to run (uvx, npx, node, etc.)",
+              description: "Command to launch the server (e.g., 'npx', 'uvx', 'node')",
             },
             args: {
               type: "array",
               items: { type: "string" },
-              description: "Command arguments",
+              description: "Command arguments (e.g., ['-y', '@stripe/mcp', '--tools=all'])",
             },
             env: {
               type: "object",
-              description: "Environment variables",
+              description: "Environment variables as key-value pairs. Use ${VAR_NAME} for values from host env.",
             },
             enabled: {
               type: "boolean",
-              description: "Whether to enable on add (default: true)",
+              description: "Whether to enable immediately (default: true). Set false if env vars aren't configured yet.",
             },
           },
           required: ["name", "command", "args"],
@@ -221,27 +222,29 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "airis_config_remove_server",
-        description: "Remove a server from the configuration",
+        description: "Remove an MCP server from the gateway configuration permanently. This deletes the server entry from mcp-config.json. Use airis_config_set_enabled with enabled=false to disable without removing.",
         inputSchema: {
           type: "object",
           properties: {
             server_name: {
               type: "string",
-              description: "Name of the server to remove",
+              description: "Server name to remove (must exist in config)",
             },
           },
           required: ["server_name"],
         },
       },
+
+      // ── Profile Management ──
       {
         name: "airis_profile_save",
-        description: "Save current configuration as a named profile",
+        description: "Save the entire current MCP configuration as a named profile. Profiles are stored in /app/profiles/ and can be loaded later to switch between different server configurations (e.g., 'minimal', 'full', 'project-x').",
         inputSchema: {
           type: "object",
           properties: {
             profile_name: {
               type: "string",
-              description: "Name for the profile",
+              description: "Profile name (e.g., 'minimal', 'full-stack', 'frontend-only')",
             },
           },
           required: ["profile_name"],
@@ -249,13 +252,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "airis_profile_load",
-        description: "Load a saved profile (replaces current config)",
+        description: "Load a saved profile, replacing the current MCP configuration entirely. Use airis_profile_list to see available profiles. Requires gateway restart to apply.",
         inputSchema: {
           type: "object",
           properties: {
             profile_name: {
               type: "string",
-              description: "Name of the profile to load",
+              description: "Profile name to load (must exist in profiles directory)",
             },
           },
           required: ["profile_name"],
@@ -263,23 +266,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "airis_profile_list",
-        description: "List all saved profiles",
+        description: "List all saved MCP configuration profiles. Returns profile names that can be loaded with airis_profile_load.",
         inputSchema: {
           type: "object",
           properties: {},
           required: [],
         },
       },
+
+      // ── Quick Actions ──
       {
         name: "airis_quick_enable",
-        description: "Quickly enable multiple servers by name",
+        description: "Enable multiple MCP servers at once by name. Useful for quickly activating a set of servers (e.g., ['supabase', 'stripe', 'playwright']). Skips servers not found in config. Requires gateway restart.",
         inputSchema: {
           type: "object",
           properties: {
             servers: {
               type: "array",
               items: { type: "string" },
-              description: "List of server names to enable",
+              description: "List of server names to enable (e.g., ['supabase', 'stripe'])",
             },
           },
           required: ["servers"],
@@ -287,14 +292,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "airis_quick_disable_all",
-        description: "Disable all servers (for minimal config)",
+        description: "Disable all MCP servers at once, optionally keeping some enabled. Useful for reducing resource usage or isolating specific servers for debugging. Requires gateway restart.",
         inputSchema: {
           type: "object",
           properties: {
             except: {
               type: "array",
               items: { type: "string" },
-              description: "Servers to keep enabled",
+              description: "Servers to keep enabled (e.g., ['memory', 'sequential-thinking']). Omit to disable all.",
             },
           },
           required: [],
@@ -302,25 +307,27 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "airis_mcp_detect",
-        description: "Detect tech stack in a repository and suggest relevant MCPs to add",
+        description: "Scan a repository's package.json/requirements.txt to detect tech stack and suggest relevant MCP servers. For example, finding '@supabase/supabase-js' suggests adding the Supabase MCP server. Set autoAdd=true to automatically add detected servers (disabled by default, so you can set env vars first).",
         inputSchema: {
           type: "object",
           properties: {
             path: {
               type: "string",
-              description: "Path to repository (default: /workspace/host)",
+              description: "Repository path to scan (default: /workspace/host). Must contain package.json or requirements.txt.",
             },
             autoAdd: {
               type: "boolean",
-              description: "Automatically add detected MCPs (default: false, just suggest)",
+              description: "true = add detected servers to config (disabled, awaiting env vars). false = just show suggestions (default).",
             },
           },
           required: [],
         },
       },
+
+      // ── Claude Code Rules Management ──
       {
         name: "airis_rules_list",
-        description: "List all Claude Code rules in ~/.claude/rules/",
+        description: "List all Claude Code rule files in ~/.claude/rules/ with their full content. Rules are markdown files that Claude Code loads as system instructions for every conversation. Use this to understand what rules are currently active before adding, updating, or removing rules.",
         inputSchema: {
           type: "object",
           properties: {},
@@ -329,17 +336,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "airis_rules_write",
-        description: "Write a rule file to ~/.claude/rules/",
+        description: "Create or overwrite a Claude Code rule file in ~/.claude/rules/. Rules are markdown files that Claude Code automatically loads as instructions. Use descriptive filenames like 'docker-first.md', 'commit-format.md'. Content should be concise markdown with clear directives. Changes take effect on the next Claude Code conversation.",
         inputSchema: {
           type: "object",
           properties: {
             filename: {
               type: "string",
-              description: "Rule filename (e.g., 'my-rule.md')",
+              description: "Rule filename ending in .md (e.g., 'docker-first.md', 'naming-conventions.md'). No path separators allowed.",
             },
             content: {
               type: "string",
-              description: "Rule content (markdown)",
+              description: "Rule content in markdown. Start with a # heading. Keep rules focused on a single topic. Use tables for forbidden/alternative patterns.",
             },
           },
           required: ["filename", "content"],
@@ -347,41 +354,45 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "airis_rules_delete",
-        description: "Delete a rule file from ~/.claude/rules/",
+        description: "Delete a Claude Code rule file from ~/.claude/rules/. The rule will no longer be loaded in new conversations. Use airis_rules_list first to see current rules and their filenames.",
         inputSchema: {
           type: "object",
           properties: {
             filename: {
               type: "string",
-              description: "Rule filename to delete",
+              description: "Exact filename to delete (e.g., 'airis-docker-first.md'). Use airis_rules_list to see available files.",
             },
           },
           required: ["filename"],
         },
       },
+
+      // ── Claude Code Status & Diagnostics ──
       {
         name: "airis_claude_status",
-        description: "Check Claude Code configuration status: rules, CLAUDE.md, settings.json, project CLAUDE.md",
+        description: "Get a comprehensive overview of the Claude Code configuration. Returns: (1) list of rule files in ~/.claude/rules/, (2) global ~/.claude/CLAUDE.md existence and preview, (3) ~/.claude/settings.json content (hooks, permissions), (4) project-level CLAUDE.md existence and preview. Use this as the starting point to understand and optimize a user's Claude Code setup.",
         inputSchema: {
           type: "object",
           properties: {
             project_path: {
               type: "string",
-              description: "Optional project path to check for project-level CLAUDE.md",
+              description: "Project directory to check for project-level CLAUDE.md (default: current workspace). Also checks for manifest.toml in this path.",
             },
           },
           required: [],
         },
       },
+
+      // ── Manifest & Guard Tools ──
       {
         name: "airis_manifest_read",
-        description: "Read and return the contents of a manifest.toml file",
+        description: "Read an airis manifest.toml file and return its raw TOML content. The manifest defines the workspace: apps, libs, commands, guards (forbidden commands), remap rules, Docker config, and version catalog. Use this to understand project structure before generating rules or checking guards.",
         inputSchema: {
           type: "object",
           properties: {
             manifest_path: {
               type: "string",
-              description: "Path to manifest.toml (default: WORKSPACE_DIR/manifest.toml)",
+              description: "Absolute path to manifest.toml. Default: WORKSPACE_DIR/manifest.toml. For monorepos, each app may have its own manifest.",
             },
           },
           required: [],
@@ -389,17 +400,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "airis_guard_check",
-        description: "Check a command against manifest.toml [guards] for violations",
+        description: "Check if a command is blocked by manifest.toml [guards]. Returns {allowed: true} if safe, or {allowed: false, reason: '...', remap_to: '...'} if blocked. The remap_to field shows the safe alternative from [remap] section (e.g., 'pnpm install' → 'airis install'). Use this before executing commands in Docker-first projects to prevent host pollution.",
         inputSchema: {
           type: "object",
           properties: {
             command: {
               type: "string",
-              description: "Command string to check (e.g., 'pnpm install')",
+              description: "Full command to check (e.g., 'pnpm install', 'npm run build', 'docker compose up')",
             },
             manifest_path: {
               type: "string",
-              description: "Path to manifest.toml (default: WORKSPACE_DIR/manifest.toml)",
+              description: "Path to manifest.toml containing [guards] section. Default: WORKSPACE_DIR/manifest.toml.",
             },
           },
           required: ["command"],
