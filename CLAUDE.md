@@ -267,6 +267,13 @@ Built-in commands in `.claude/commands/`:
 | `/status` | Quick status check |
 | `/troubleshoot [issue]` | Diagnose issues |
 
+## Screenshot Verification
+
+- `browser-use` スキル禁止。ホスト側でブラウザプロセスを起動するな
+- スクリーンショット検証は Playwright headless を Docker コンテナ内で実行すること
+- Playwright 入りの Docker イメージを用意し、コンテナ内で `page.screenshot()` して画像をアーティファクトとして保存
+- ホストのプロセステーブルを汚すな
+
 ## CI/CD
 
 Path-based CI triggers - only runs relevant jobs:
