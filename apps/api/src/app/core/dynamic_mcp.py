@@ -572,6 +572,24 @@ class DynamicMCP:
                     },
                     "required": ["intent"]
                 }
+            },
+            {
+                "name": "airis-route",
+                "description": "Route a task to the optimal tool chain. Matches task against known patterns and returns the recommended tool execution order. Faster than airis-find for common workflows.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "task": {
+                            "type": "string",
+                            "description": "Natural language task description. Examples: 'research best practices for React hooks', 'query user table in database', 'create a Stripe invoice'"
+                        },
+                        "max_results": {
+                            "type": "integer",
+                            "description": "Maximum number of additional suggestions to return (default: 5)"
+                        }
+                    },
+                    "required": ["task"]
+                }
             }
         ]
 

@@ -15,6 +15,7 @@ from ...core.config import settings
 from ...core.protocol_logger import protocol_logger
 from ...core.process_manager import get_process_manager
 from ...core.dynamic_mcp import get_dynamic_mcp
+from ...core.routing_engine import format_routing_table_as_instructions
 from ...core.logging import get_logger
 from ...core.mcp_config_loader import ServerMode
 
@@ -478,6 +479,10 @@ async def proxy_sse_stream(request: Request):
                                         "When you need a capability (web search, memory, code analysis, etc.), "
                                         "ALWAYS start with airis-find or airis-suggest to discover available tools."
                                     )
+                                    # Append routing table hints if available
+                                    routing_instructions = format_routing_table_as_instructions()
+                                    if routing_instructions:
+                                        json_data["result"]["instructions"] += "\n\n" + routing_instructions
 
                                 # 変換後のデータを返す
                                 yield f"data: {json.dumps(json_data)}\n\n"
@@ -1111,6 +1116,9 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
 
         if tool_name == "airis-suggest":
             return await handle_airis_suggest(rpc_request, session_id=session_id)
+
+        if tool_name == "airis-route":
+            return await handle_airis_route(rpc_request, session_id=session_id)
 
     # prompts/get リクエスト処理
     if rpc_request.get("method") == "prompts/get":
@@ -2093,6 +2101,81 @@ async def handle_airis_suggest(rpc_request: Dict[str, Any], session_id: Optional
         queue = await get_response_queue(session_id)
         await queue.put(response_data)
         logger.info(f"Queued airis-suggest response for session {session_id}")
+        return Response(status_code=202)
+
+    return Response(
+        content=json.dumps(response_data),
+        status_code=200,
+        media_type="application/json"
+    )
+
+
+async def handle_airis_route(rpc_request: Dict[str, Any], session_id: Optional[str] = None) -> Response:
+    """
+    airis-route: Route a task to the optimal tool chain.
+
+    Args:
+        rpc_request: JSON-RPC 2.0 request
+        session_id: SSE session ID for response routing
+
+    Returns:
+        JSON-RPC 2.0 response
+    """
+    from ...core.routing_engine import load_routing_table, route_task
+
+    params = rpc_request.get("params", {}).get("arguments", {})
+    task = params.get("task", "")
+    max_results = params.get("max_results", 5)
+
+    if not task:
+        response_data = {
+            "jsonrpc": "2.0",
+            "id": rpc_request.get("id"),
+            "error": {"code": -32602, "message": "Missing required parameter: task"}
+        }
+    else:
+        dynamic_mcp = get_dynamic_mcp()
+        routing_table = load_routing_table()
+        result = route_task(
+            task=task,
+            routing_table=routing_table,
+            dynamic_mcp=dynamic_mcp,
+            max_results=max_results,
+        )
+
+        # Format as readable text
+        lines = []
+        if result.chain:
+            lines.append(f"## Route: {result.hint}")
+            lines.append(f"Chain: {' → '.join(result.chain)}")
+            lines.append(f"Pattern: `{result.pattern}`")
+        else:
+            lines.append("## No direct route found")
+            lines.append("Falling back to tool suggestions.")
+
+        if result.suggestions:
+            lines.append("")
+            lines.append("## Suggested Tools")
+            for i, s in enumerate(result.suggestions, 1):
+                score_pct = int(s["score"] * 100)
+                lines.append(f"{i}. **{s['server']}:{s['tool']}** ({score_pct}%) — {s['reason']}")
+
+        lines.append("")
+        lines.append("Use `airis-exec` to execute tools in the chain.")
+
+        response_data = {
+            "jsonrpc": "2.0",
+            "id": rpc_request.get("id"),
+            "result": {
+                "content": [{"type": "text", "text": "\n".join(lines)}]
+            }
+        }
+
+    # MCP SSE Transport: Response via SSE stream
+    if session_id:
+        queue = await get_response_queue(session_id)
+        await queue.put(response_data)
+        logger.info(f"Queued airis-route response for session {session_id}")
         return Response(status_code=202)
 
     return Response(

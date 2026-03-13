@@ -190,11 +190,15 @@ class TestDynamicMCPMetaTools:
         """Test getting meta-tool definitions"""
         tools = dynamic_mcp.get_meta_tools()
 
-        assert len(tools) == 3
+        assert len(tools) == 7
         tool_names = [t["name"] for t in tools]
         assert "airis-find" in tool_names
         assert "airis-exec" in tool_names
         assert "airis-schema" in tool_names
+        assert "airis-confidence" in tool_names
+        assert "airis-repo-index" in tool_names
+        assert "airis-suggest" in tool_names
+        assert "airis-route" in tool_names
 
     def test_meta_tools_have_schemas(self, dynamic_mcp):
         """Test that meta-tools have valid input schemas"""
@@ -359,12 +363,12 @@ class TestDynamicMCPModeWithHotTools:
         return mcp
 
     def test_meta_tools_count(self, dynamic_mcp):
-        """Meta-tools should be exactly 3: airis-find, airis-exec, airis-schema."""
+        """Meta-tools should include all 7 meta-tools."""
         meta_tools = dynamic_mcp.get_meta_tools()
 
-        assert len(meta_tools) == 3
+        assert len(meta_tools) == 7
         names = {t["name"] for t in meta_tools}
-        assert names == {"airis-find", "airis-exec", "airis-schema"}
+        assert names == {"airis-find", "airis-exec", "airis-schema", "airis-confidence", "airis-repo-index", "airis-suggest", "airis-route"}
 
     def test_hot_server_tools_separate_from_cold(self, mcp_with_hot_and_cold):
         """HOT and COLD server tools should be properly categorized."""
@@ -393,12 +397,12 @@ class TestDynamicMCPModeWithHotTools:
         # All tools (HOT and COLD) are accessed via airis-exec
         dynamic_tools = list(meta_tools)
 
-        # Expected: 3 meta-tools ONLY
-        assert len(dynamic_tools) == 3
+        # Expected: 7 meta-tools ONLY
+        assert len(dynamic_tools) == 7
 
         # Verify ONLY meta-tools are present
         tool_names = {t["name"] for t in dynamic_tools}
-        assert tool_names == {"airis-find", "airis-exec", "airis-schema"}
+        assert tool_names == {"airis-find", "airis-exec", "airis-schema", "airis-confidence", "airis-repo-index", "airis-suggest", "airis-route"}
 
         # Verify HOT tools are NOT directly exposed
         assert "gateway_list_servers" not in tool_names
@@ -443,18 +447,18 @@ class TestDynamicMCPModeWithHotTools:
 
         # Dynamic mode: meta-tools ONLY (no HOT tools exposed directly)
         meta_tools = mcp.get_meta_tools()
-        dynamic_tools_count = len(meta_tools)  # 3 tools only
+        dynamic_tools_count = len(meta_tools)  # 7 meta-tools only
 
         # Token estimate (300 tokens per tool schema)
         full_mode_tokens = all_tools_count * 300  # 31,500 tokens
-        dynamic_mode_tokens = dynamic_tools_count * 300  # 900 tokens
+        dynamic_mode_tokens = dynamic_tools_count * 300  # 2,100 tokens
 
         # Calculate savings
         savings_percent = (1 - dynamic_mode_tokens / full_mode_tokens) * 100
 
-        # Should have significant savings (> 97% with meta-tools only)
-        assert savings_percent > 97, \
-            f"Expected >97% savings, got {savings_percent:.1f}%"
+        # Should have significant savings (> 90% with meta-tools only)
+        assert savings_percent > 90, \
+            f"Expected >90% savings, got {savings_percent:.1f}%"
 
         print(f"Token savings: {savings_percent:.1f}% "
               f"({full_mode_tokens:,} -> {dynamic_mode_tokens:,} tokens)")

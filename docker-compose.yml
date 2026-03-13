@@ -101,6 +101,7 @@ services:
       - TAVILY_API_KEY=${TAVILY_API_KEY:-}
     volumes:
       - ./mcp-config.json:/app/mcp-config.json:ro
+      - ./routing-table.json:/app/routing-table.json:ro
       - ./config/gateway-config.yaml:/app/config/gateway-config.yaml:ro
       - ./profiles:/app/profiles:rw
       # Persistent data volumes (appuser home directory)

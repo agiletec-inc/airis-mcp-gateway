@@ -1,0 +1,10 @@
+{ "routes": [
+  {"pattern": "research|investigate|search web", "chain": ["tavily:search"], "hint": "Web research"},
+  {"pattern": "implement|build|code", "chain": ["airis-confidence","context7:get-library-docs"], "hint": "Implementation"},
+  {"pattern": "database|sql|query", "chain": ["supabase:query"], "hint": "Database"},
+  {"pattern": "payment|invoice|billing", "chain": ["stripe:*"], "hint": "Payments"},
+  {"pattern": "memory|remember|recall", "chain": ["memory:*"], "hint": "Knowledge graph"},
+  {"pattern": "browse|screenshot|web page", "chain": ["playwright:*"], "hint": "Browser automation"},
+  {"pattern": "code analysis|symbol|codebase", "chain": ["serena:*"], "hint": "Code intelligence"},
+  {"pattern": "docs|documentation|reference", "chain": ["context7:resolve-library-id","context7:get-library-docs"], "hint": "Official docs"}
+]}
