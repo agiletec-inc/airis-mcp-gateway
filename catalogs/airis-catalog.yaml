@@ -4,36 +4,8 @@ displayName: Airis Custom MCP Catalog
 registry:
   # === AIRIS CORE SERVERS ===
 
-  airis-agent:
-    title: Airis Agent
-    description: Confidence check, deep research, repo indexing - prevents wrong-direction work
-    type: server
-    image: ghcr.io/agiletec-inc/airis-agent:latest
-    command: ["airis-agent-mcp"]
-    category: AIRIS Core
-    readme: https://github.com/agiletec-inc/airis-agent
-    tools:
-      - name: execute_task
-      - name: plan_task
-    volumes:
-      - '/workspace:/workspace'
-    allowHosts:
-      - "*"
-
-  airis-workspace:
-    title: Airis Workspace
-    description: Workspace management (init, validate, sync)
-    type: server
-    image: ghcr.io/agiletec-inc/airis-agent:latest
-    command: ["airis-workspace-mcp"]
-    category: AIRIS Core
-    readme: https://github.com/agiletec-inc/airis-agent
-    tools:
-      - name: workspace_init
-      - name: workspace_validate
-      - name: workspace_sync
-    volumes:
-      - '/workspace:/workspace'
+  # NOTE: airis-agent has been integrated into airis-mcp-gateway as native tools
+  # (airis-confidence, airis-repo-index, airis-suggest, airis-route)
 
   mindbase:
     title: MindBase MCP Server

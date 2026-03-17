@@ -127,6 +127,6 @@ services:
 
 volumes:
   mindbase-data:    # PostgreSQL data for pgvector
-  cache-uv:         # uvx package cache (persists airis-agent packages)
+  cache-uv:         # uvx package cache (persists uvx packages)
   cache-npm:        # npm package cache (persists npx server packages)
   memory-data:      # Knowledge graph JSON file

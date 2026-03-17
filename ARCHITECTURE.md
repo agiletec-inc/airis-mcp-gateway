@@ -6,8 +6,7 @@ Each repository has ONE responsibility and produces ONE OCI image.
 
 | Repository | Responsibility | Image |
 |------------|---------------|-------|
-| `airis-mcp-gateway` | MCP routing/proxy | `ghcr.io/agiletec-inc/airis-mcp-gateway` |
-| `airis-agent` | PM logic (Confidence, Self-Check, Reflexion, PDCA) | `ghcr.io/agiletec-inc/airis-agent` |
+| `airis-mcp-gateway` | MCP routing/proxy + intelligence layer | `ghcr.io/agiletec-inc/airis-mcp-gateway` |
 | `mindbase` | Long-term memory storage | `ghcr.io/agiletec-inc/mindbase` |
 | `airis-workspace` | Toolchain (monorepo management) | `ghcr.io/agiletec-inc/airis-workspace` |
 
@@ -20,13 +19,17 @@ Each repository has ONE responsibility and produces ONE OCI image.
 - Process server management (lazy loading, idle kill)
 - Schema partitioning for token optimization
 - Server enable/disable at runtime
+- Pre-implementation confidence assessment (`airis-confidence`)
+- Repository structure indexing (`airis-repo-index`)
+- MCP tool suggestion from natural language (`airis-suggest`)
+- Task-to-tool-chain routing (`airis-route`)
 - Prometheus metrics
 - Rate limiting and auth (future)
 - Audit logging (future)
 
 ### Why Schema Partitioning Must Be Here
 
-Schema partitioning **cannot** be moved to airis-agent because:
+Schema partitioning **cannot** be moved to a separate agent because:
 
 ```
 Claude Code
@@ -36,22 +39,14 @@ Gateway ← Must intercept HERE to reduce tokens
 MCP servers (return full schemas)
 ```
 
-- airis-agent is just ONE MCP server among many
-- It cannot intercept other servers' responses (tavily, context7, mindbase, etc.)
 - Token optimization must happen at the proxy layer
-
-**Separation:**
-- Gateway: **Execution** of schema partitioning (technical necessity)
-- Agent: **Configuration/rules** for what to partition (via settings)
+- No external agent can intercept other servers' responses
 
 ### Prohibited
 
-- **NO PM Logic**: ConfidenceChecker, SelfCheckProtocol, ReflexionPattern
-- **NO Intent Detection**: 7-verb intent routing
-- **NO Capability Routing**: Decision logic for which server to use
 - **NO Orchestration**: PDCA cycles, multi-step workflows
-
-These belong in `airis-agent`.
+- **NO Intent Detection**: 7-verb intent routing
+- **NO PDCA**: Plan-Do-Check-Act loops
 
 ## Cross-Repository Communication
 
@@ -63,13 +58,13 @@ Claude Code
     v
 airis-mcp-gateway (port 9400)
     |
+    +-- Dynamic MCP Layer (airis-find, airis-exec, airis-schema)
+    |
+    +-- Native Tools (airis-confidence, airis-repo-index, airis-suggest, airis-route)
+    |
     +-- MCP proxy --> Docker MCP Gateway --> mindbase, time, etc.
     |
-    +-- Process mgmt --> airis-agent (uvx)
-                         |
-                         +-- PM logic (Confidence, Self-Check, Reflexion)
-                         +-- 7-verb Intent Routing
-                         +-- PDCA Orchestrator
+    +-- Process mgmt --> context7, memory, stripe, playwright, etc.
 ```
 
 ## Deployment
@@ -92,13 +87,9 @@ docker compose -f infra/compose.yaml --profile full up -d
 
 ## Adding New Features
 
-### If the feature is routing/proxy related:
+### If the feature is routing/proxy/intelligence related:
 
 Add to `airis-mcp-gateway`.
-
-### If the feature involves decision-making, learning, or orchestration:
-
-Add to `airis-agent` and expose via MCP tool.
 
 ### If the feature involves persistent storage or memory:
 

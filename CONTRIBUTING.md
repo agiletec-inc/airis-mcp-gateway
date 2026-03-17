@@ -2,7 +2,7 @@
 
 ## Repository Scope
 
-This repository is **routing/proxy only**. Before contributing, read [ARCHITECTURE.md](./ARCHITECTURE.md).
+This repository handles **MCP routing/proxy and intelligence layer**. Before contributing, read [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## What Belongs Here
 
@@ -10,6 +10,10 @@ This repository is **routing/proxy only**. Before contributing, read [ARCHITECTU
 - Server lifecycle management (start, stop, health check)
 - Request routing and proxying
 - Schema partitioning and token optimization
+- Pre-implementation confidence checks
+- Repository structure indexing
+- Tool suggestion from natural language
+- Task-to-tool-chain routing
 - Metrics and observability
 - Rate limiting and authentication
 
@@ -17,20 +21,16 @@ This repository is **routing/proxy only**. Before contributing, read [ARCHITECTU
 
 | Feature | Correct Repository |
 |---------|-------------------|
-| Intent detection | `airis-agent` |
-| Capability routing | `airis-agent` |
-| ConfidenceChecker | `airis-agent` |
-| SelfCheckProtocol | `airis-agent` |
-| ReflexionPattern | `airis-agent` |
-| PDCA Orchestrator | `airis-agent` |
+| Orchestration (PDCA) | Not supported (use Claude Code's built-in planning) |
+| Intent detection | Not supported |
 | Memory storage | `mindbase` |
 | Graph relationships | `mindbase` |
 
 ## Pull Request Checklist
 
-- [ ] Does this change add PM logic? If yes, submit to `airis-agent` instead.
+- [ ] Does this change add orchestration logic? If yes, reconsider the design.
 - [ ] Does this change add storage logic? If yes, submit to `mindbase` instead.
-- [ ] Is the change routing/proxy focused?
+- [ ] Is the change routing/proxy/intelligence focused?
 - [ ] Are tests included?
 - [ ] Is documentation updated?
 

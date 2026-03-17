@@ -2,8 +2,7 @@
 # Production deployment using GHCR images
 #
 # Responsibility = Repository = OCI Image
-# - airis-mcp-gateway: MCP routing/proxy only
-# - airis-agent: PM logic (Confidence, Self-Check, Reflexion, PDCA)
+# - airis-mcp-gateway: MCP routing/proxy + intelligence layer
 # - mindbase: Long-term memory storage
 # - airis-workspace: Toolchain (optional)
 #
@@ -45,7 +44,7 @@ services:
   # - SSE/JSON-RPC transport proxy
   # - Process server management (lazy load, idle kill)
   # - Schema partitioning for token optimization
-  # - NO PM logic (Confidence, Self-Check, Reflexion)
+  # - Native intelligence tools (confidence, repo-index, suggest, route)
   gateway:
     container_name: airis-gateway
     image: ghcr.io/agiletec-inc/airis-mcp-gateway:${GATEWAY_VERSION:-latest}
@@ -94,29 +93,8 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # ==========================================================================
-  # AIRIS Agent (PM Logic)
-  # ==========================================================================
-  # Responsibilities:
-  # - ConfidenceChecker (pre-implementation assessment)
-  # - SelfCheckProtocol (self-verification)
-  # - ReflexionPattern (learning from failures)
-  # - 7-Verb Intent Routing (search, summarize, retrieve, plan, edit, execute, record)
-  # - PDCA Orchestrator
-  # - 30+ slash commands
-  #
-  # Accessed via MCP tools: airis_do, airis_confidence_check, airis_agent, etc.
-  agent:
-    container_name: airis-agent
-    image: ghcr.io/agiletec-inc/airis-agent:${AGENT_VERSION:-latest}
-    profiles: ["full"]  # Only in full deployment
-    environment:
-      - MINDBASE_URL=http://mindbase:18003
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-airis}:${POSTGRES_PASSWORD:-airis}@postgres:5432/${POSTGRES_DB:-airis}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
+  # NOTE: airis-agent has been integrated into airis-mcp-gateway as native tools
+  # (airis-confidence, airis-repo-index, airis-suggest, airis-route)
 
   # ==========================================================================
   # Mindbase (Long-term Memory)

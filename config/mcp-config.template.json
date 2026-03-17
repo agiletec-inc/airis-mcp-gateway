@@ -1,15 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/agiletec-inc/airis-mcp-gateway/main/config/mcp-config.schema.json",
   "mcpServers": {
-    "airis-agent": {
-      "command": "npx",
-      "args": ["-y", "mcp-remote", "http://airis-agent:8100/sse", "--allow-http"],
-      "env": {},
-      "enabled": true,
-      "mode": "hot",
-      "description": "PDCA/CoT orchestrator with confidence checks and deep research",
-      "_comment": "Managed by Docker Compose as dedicated service (port 8100/SSE)"
-    },
     "mindbase": {
       "command": "uvx",
       "args": [

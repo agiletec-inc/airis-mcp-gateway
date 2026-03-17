@@ -1,11 +1,5 @@
 {
   "mcpServers": {
-    "airis-agent": {
-      "command": "uvx",
-      "args": ["--from", "git+https://github.com/agiletec-inc/airis-agent", "airis-agent-mcp"],
-      "env": {},
-      "enabled": true
-    },
     "context7": {
       "command": "npx",
       "args": ["-y", "@upstash/context7-mcp"],

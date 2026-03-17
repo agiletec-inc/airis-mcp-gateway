@@ -723,6 +723,10 @@ class TestApplySchemaPartitioningDynamicMode:
             {"name": "airis-find", "description": "Find tools", "inputSchema": {"type": "object"}},
             {"name": "airis-exec", "description": "Execute tool", "inputSchema": {"type": "object"}},
             {"name": "airis-schema", "description": "Get schema", "inputSchema": {"type": "object"}},
+            {"name": "airis-confidence", "description": "Confidence check", "inputSchema": {"type": "object"}},
+            {"name": "airis-repo-index", "description": "Repo index", "inputSchema": {"type": "object"}},
+            {"name": "airis-suggest", "description": "Suggest tools", "inputSchema": {"type": "object"}},
+            {"name": "airis-route", "description": "Route task", "inputSchema": {"type": "object"}},
         ]
 
         # Input data with docker tools
@@ -740,16 +744,19 @@ class TestApplySchemaPartitioningDynamicMode:
 
             result = await apply_schema_partitioning(data)
 
-        # Should return ONLY meta-tools (3)
+        # Should return meta-tools (7) + HOT tools (1)
         tools = result["result"]["tools"]
-        assert len(tools) == 3
+        assert len(tools) == 8
 
         tool_names = {t["name"] for t in tools}
-        assert tool_names == {"airis-find", "airis-exec", "airis-schema"}
+        assert {"airis-find", "airis-exec", "airis-schema",
+                "airis-confidence", "airis-repo-index", "airis-suggest", "airis-route"}.issubset(tool_names)
 
-        # Should NOT include docker tools or HOT tools
+        # HOT tools are included alongside meta-tools
+        assert "hot_tool_1" in tool_names
+
+        # Docker tools should NOT be included
         assert "docker_tool_1" not in tool_names
-        assert "hot_tool_1" not in tool_names
 
     @pytest.mark.asyncio
     async def test_standard_mode_includes_hot_tools(self):

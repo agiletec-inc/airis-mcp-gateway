@@ -62,7 +62,7 @@ services:
     environment:
       - MCP_GATEWAY_URL=http://gateway:9390
       - MCP_CONFIG_PATH=/app/mcp-config.json
-      # Embedded mode (default): mindbase/airis-agent run locally
+      # Embedded mode (default): mindbase runs locally
       # Remote mode: set URLs to external services
       - AIRIS_MODE=${AIRIS_MODE:-embedded}
       - MINDBASE_URL=${MINDBASE_URL:-http://host.docker.internal:18003}

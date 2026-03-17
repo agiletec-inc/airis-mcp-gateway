@@ -94,16 +94,8 @@ capabilities:
   plan:
     description: "Task planning, decomposition, and strategy"
     implementations:
-      - name: airis-agent
-        priority: 1
-        mode: hot
-        conditions:
-          intents: [pdca_cycle, confidence_check, complex_planning, project_management]
-          complexity: [high, very_high]
-          features: [self_correction, reflexion]
-
       - name: sequential-thinking
-        priority: 2
+        priority: 1
         mode: cold
         conditions:
           intents: [simple_planning, step_decomposition]
@@ -151,12 +143,6 @@ capabilities:
         mode: null  # Native shell
         conditions:
           intents: [shell_command, script_execution, build_run]
-
-      - name: airis-agent
-        priority: 2
-        mode: hot
-        conditions:
-          intents: [orchestrated_workflow, multi_step_execution, agent_coordination]
 
     fallback: bash
 
@@ -247,7 +233,7 @@ intent_patterns:
       - "create a roadmap"
       - "what are the steps"
     capability: plan
-    implementation_hint: airis-agent
+    implementation_hint: sequential-thinking
 
   # Edit intents
   code_refactoring:
@@ -289,7 +275,6 @@ server_modes:
   hot:
     description: "Always-on servers for immediate response"
     servers:
-      - airis-agent      # PDCA orchestration
       - mindbase         # Long-term memory
       - memory           # Session memory
     characteristics:
@@ -315,7 +300,7 @@ server_modes:
 routing:
   # Default behavior when intent is unclear
   default_capability: plan
-  default_implementation: airis-agent
+  default_implementation: native
 
   # Confidence thresholds
   thresholds:

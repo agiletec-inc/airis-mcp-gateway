@@ -22,15 +22,19 @@ Done! You now have access to 60+ tools via **Dynamic MCP** - a token-efficient w
 
 ## Dynamic MCP (Default)
 
-Instead of exposing all 60+ tools directly (which bloats context), Dynamic MCP exposes only 3 meta-tools:
+Instead of exposing all 60+ tools directly (which bloats context), Dynamic MCP exposes 7 meta-tools:
 
 | Meta-Tool | Description |
 |-----------|-------------|
 | `airis-find` | Search for tools by name, description, or server |
 | `airis-exec` | Execute any tool by `server:tool_name` |
 | `airis-schema` | Get full input schema for a tool |
+| `airis-confidence` | Pre-implementation confidence check |
+| `airis-repo-index` | Generate repository structure overview |
+| `airis-suggest` | Tool recommendations from natural language |
+| `airis-route` | Route task to optimal tool chain |
 
-All other tools (HOT and COLD) are accessed via `airis-exec`. This follows the [Lasso MCP Gateway](https://github.com/lasso-security/mcp-gateway) pattern for maximum token efficiency.
+External tools (HOT and COLD) are accessed via `airis-exec`. This follows the [Lasso MCP Gateway](https://github.com/lasso-security/mcp-gateway) pattern for maximum token efficiency.
 
 ### How It Works
 
@@ -69,7 +73,7 @@ When `airis-exec` is called on a disabled server:
 
 ```
 Traditional: 60+ tools × ~700 tokens = ~42,000 tokens
-Dynamic MCP: 3 tools × ~200 tokens = ~600 tokens (98% reduction)
+Dynamic MCP: 7 meta-tools × ~200 tokens = ~1,400 tokens (97% reduction)
 ```
 
 This matches [Anthropic's recommendation](https://www.anthropic.com/engineering/code-execution-with-mcp) for progressive disclosure - only load tool definitions when needed.
@@ -88,7 +92,6 @@ DYNAMIC_MCP=false docker compose up -d
 
 | Server | Runner | Mode | Description |
 |--------|--------|------|-------------|
-| **airis-agent** | uvx | COLD | Confidence check, deep research, repo indexing |
 | **airis-mcp-gateway-control** | node | HOT | Gateway management tools |
 | **airis-commands** | node | HOT | Config and profile management |
 | **context7** | npx | COLD | Library documentation lookup |
@@ -132,16 +135,19 @@ Claude Code / Cursor / Zed
 │                                                         │
 │  ┌─────────────────────────────────────────────────┐    │
 │  │  Dynamic MCP Layer                              │    │
-│  │  ├─ airis-find    (discover all servers/tools)  │    │
-│  │  ├─ airis-exec    (execute + auto-enable)       │    │
-│  │  └─ airis-schema  (get tool input schema)       │    │
+│  │  ├─ airis-find       (discover all servers/tools)│    │
+│  │  ├─ airis-exec       (execute + auto-enable)    │    │
+│  │  ├─ airis-schema     (get tool input schema)    │    │
+│  │  ├─ airis-confidence (pre-impl confidence)      │    │
+│  │  ├─ airis-repo-index (repo structure overview)  │    │
+│  │  ├─ airis-suggest    (NL tool recommendations)  │    │
+│  │  └─ airis-route      (task→tool chain routing)  │    │
 │  └─────────────────────────────────────────────────┘    │
 │                                                         │
 │  ┌─────────────────────────────────────────────────┐    │
 │  │  ProcessManager (Lazy start + idle-kill)        │    │
 │  │  ├─ gateway-control (node)  HOT                 │    │
 │  │  ├─ airis-commands (node)   HOT                 │    │
-│  │  ├─ airis-agent (uvx)       COLD                │    │
 │  │  ├─ memory (npx)            COLD                │    │
 │  │  ├─ context7 (npx)          COLD                │    │
 │  │  ├─ serena (mcp-remote)     COLD                │    │
@@ -470,13 +476,13 @@ curl http://localhost:9400/api/tools/status | jq '.servers[] | {name, status}'
 }
 ```
 
-## Related Projects
+## Ecosystem
 
 | Project | Description |
 |---------|-------------|
-| [airis-agent](https://github.com/agiletec-inc/airis-agent) | Intelligence layer - confidence checks, deep research |
+| [airis-monorepo](https://github.com/agiletec-inc/airis-monorepo) | `airis` CLI - Docker-first monorepo manager |
 | [mindbase](https://github.com/agiletec-inc/mindbase) | Cross-session semantic memory |
-| [airis-workspace](https://github.com/agiletec-inc/airis-workspace) | Docker-first monorepo manager |
+| ~~[airis-agent](https://github.com/agiletec-inc/airis-agent)~~ | Archived - intelligence layer integrated into this gateway |
 
 ## Troubleshooting
 
