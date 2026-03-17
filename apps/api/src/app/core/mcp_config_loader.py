@@ -43,6 +43,14 @@ PROCESS_COMMANDS = {
 
 
 @dataclass
+class BehaviorConfig:
+    """Proactive tool usage behavior definition."""
+    triggers: list[str]       # Usage scenarios (1-3 items)
+    instruction: str          # One-line action instruction
+    priority: str = "medium"  # high / medium / low
+
+
+@dataclass
 class McpServerConfig:
     """Parsed MCP server configuration."""
     name: str
@@ -61,6 +69,8 @@ class McpServerConfig:
     adaptive_ttl_enabled: Optional[bool] = None
     # Tool index for COLD/disabled servers (enables discovery without starting server)
     tools_index: list[dict] = None
+    # Proactive behavior definition
+    behavior: Optional[BehaviorConfig] = None
 
     def __post_init__(self):
         if self.tools_index is None:
@@ -196,6 +206,16 @@ def load_mcp_config(config_path: Optional[str] = None) -> dict[str, McpServerCon
         # Parse tools_index for COLD/disabled server discovery
         tools_index = server_def.get("tools_index", [])
 
+        # Parse behavior config for proactive tool guidance
+        behavior_raw = server_def.get("behavior")
+        behavior = None
+        if isinstance(behavior_raw, dict):
+            behavior = BehaviorConfig(
+                triggers=behavior_raw.get("triggers", []),
+                instruction=behavior_raw.get("instruction", ""),
+                priority=behavior_raw.get("priority", "medium"),
+            )
+
         servers[name] = McpServerConfig(
             name=name,
             server_type=server_type,
@@ -210,6 +230,7 @@ def load_mcp_config(config_path: Optional[str] = None) -> dict[str, McpServerCon
             max_ttl=max_ttl,
             adaptive_ttl_enabled=adaptive_ttl_enabled,
             tools_index=tools_index,
+            behavior=behavior,
         )
 
         logger.debug(f"{name}: type={server_type.value}, mode={mode.value}, enabled={enabled}")

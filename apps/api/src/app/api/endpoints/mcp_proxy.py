@@ -15,7 +15,7 @@ from ...core.config import settings
 from ...core.protocol_logger import protocol_logger
 from ...core.process_manager import get_process_manager
 from ...core.dynamic_mcp import get_dynamic_mcp
-from ...core.routing_engine import format_routing_table_as_instructions
+from ...core.behavior_compiler import compile_instructions
 from ...core.logging import get_logger
 from ...core.mcp_config_loader import ServerMode
 
@@ -464,25 +464,9 @@ async def proxy_sse_stream(request: Request):
                                     "protocolVersion" in json_data.get("result", {})
                                 )
                                 if is_initialize_response:
-                                    json_data["result"]["instructions"] = (
-                                        "This is AIRIS MCP Gateway with Dynamic MCP. "
-                                        "IMPORTANT: Do NOT call tools directly. Instead:\n"
-                                        "1. Use 'airis-find' to search for tools by name/description\n"
-                                        "2. Use 'airis-schema' to get the input schema for a tool\n"
-                                        "3. Use 'airis-exec' to execute the tool\n"
-                                        "All 60+ tools are accessed through these 3 meta-tools. "
-                                        "This provides 98% token reduction while maintaining full functionality.\n\n"
-                                        "## Additional Meta-Tools\n"
-                                        "- 'airis-confidence': Pre-implementation confidence check. Use before starting complex tasks.\n"
-                                        "- 'airis-repo-index': Generate repository structure overview for unfamiliar codebases.\n"
-                                        "- 'airis-suggest': Get tool recommendations from natural language intent.\n\n"
-                                        "When you need a capability (web search, memory, code analysis, etc.), "
-                                        "ALWAYS start with airis-find or airis-suggest to discover available tools."
-                                    )
-                                    # Append routing table hints if available
-                                    routing_instructions = format_routing_table_as_instructions()
-                                    if routing_instructions:
-                                        json_data["result"]["instructions"] += "\n\n" + routing_instructions
+                                    from ...core.mcp_config_loader import load_mcp_config
+                                    server_configs = load_mcp_config()
+                                    json_data["result"]["instructions"] = compile_instructions(server_configs)
 
                                 # 変換後のデータを返す
                                 yield f"data: {json.dumps(json_data)}\n\n"
@@ -597,24 +581,48 @@ async def apply_schema_partitioning(data: Dict[str, Any]) -> Dict[str, Any]:
     docker_tools = list(data["result"]["tools"])
     process_manager = get_process_manager()
 
-    # Dynamic MCP mode: return ONLY meta-tools (airis-find, airis-exec, airis-schema)
-    # All other tools (HOT and COLD) are accessed via airis-exec
-    # This follows the Lasso MCP Gateway pattern for maximum token efficiency
-    # Reference: https://github.com/lasso-security/mcp-gateway
+    # Dynamic MCP mode: meta-tools + HOT server tools with full schema
+    # COLD servers are still accessed via airis-find → airis-exec
     if settings.DYNAMIC_MCP:
-        logger.info("Mode enabled - returning meta-tools only (3 tools)")
-
         dynamic_mcp = get_dynamic_mcp()
         tools = list(dynamic_mcp.get_meta_tools())
+        meta_count = len(tools)
 
-        # HOT servers remain running for fast response, but tools are NOT exposed directly
-        # Users discover tools via airis-find and execute via airis-exec
+        # HOT servers: expose full schema directly (skip internal management servers)
+        # Uses asyncio.gather for parallel startup, with per-server timeout
+        excluded_servers = {"airis-mcp-gateway-control", "airis-commands"}
+        try:
+            hot_servers = [
+                s for s in process_manager.get_hot_servers()
+                if s not in excluded_servers
+            ]
+
+            async def get_tools_for_server(name: str) -> list[dict]:
+                try:
+                    return await asyncio.wait_for(
+                        process_manager.list_tools(server_name=name),
+                        timeout=10.0,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(f"Timeout listing tools for {name}, skipping")
+                    return []
+                except Exception as e:
+                    logger.error(f"Error listing tools for {name}: {e}")
+                    return []
+
+            results = await asyncio.gather(
+                *[get_tools_for_server(s) for s in hot_servers]
+            )
+            for server_tools in results:
+                tools.extend(server_tools)
+        except Exception as e:
+            logger.error(f"Failed to list HOT tools: {e}")
 
         data["result"]["tools"] = tools
-        logger.info(f"Returning {len(tools)} meta-tools only")
+        hot_count = len(tools) - meta_count
+        logger.info(f"Returning {len(tools)} tools ({meta_count} meta + {hot_count} HOT)")
 
         # Schedule background cache refresh (non-blocking)
-        import asyncio
         asyncio.create_task(_refresh_dynamic_mcp_cache(process_manager, docker_tools))
 
         return data

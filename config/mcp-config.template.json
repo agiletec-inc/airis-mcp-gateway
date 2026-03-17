@@ -21,7 +21,12 @@
       "env": {},
       "enabled": true,
       "mode": "cold",
-      "description": "Official library documentation (15,000+ libraries)"
+      "description": "Official library documentation (15,000+ libraries)",
+      "behavior": {
+        "triggers": ["implementing with any library/framework", "unsure about API usage"],
+        "instruction": "Lookup docs BEFORE writing code",
+        "priority": "high"
+      }
     },
     "sequential-thinking": {
       "command": "npx",
@@ -47,7 +52,12 @@
       },
       "enabled": true,
       "mode": "cold",
-      "description": "Web search for deep research"
+      "description": "Web search for deep research",
+      "behavior": {
+        "triggers": ["need current/external information", "researching best practices"],
+        "instruction": "Search web for up-to-date info",
+        "priority": "medium"
+      }
     },
     "fetch": {
       "command": "uvx",

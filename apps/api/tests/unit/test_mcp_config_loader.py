@@ -17,6 +17,7 @@ from app.core.mcp_config_loader import (
     ServerType,
     ServerMode,
     McpServerConfig,
+    BehaviorConfig,
     classify_server_type,
     load_mcp_config,
     get_process_servers,
@@ -242,6 +243,77 @@ class TestLoadMcpConfig:
         """Test loading non-existent config returns empty dict."""
         result = load_mcp_config("/nonexistent/path/config.json")
         assert result == {}
+
+    def test_load_config_with_behavior(self):
+        """Test that behavior field is parsed correctly."""
+        config_data = {
+            "mcpServers": {
+                "test-behavior": {
+                    "command": "npx",
+                    "args": ["-y", "test-package"],
+                    "enabled": True,
+                    "mode": "hot",
+                    "behavior": {
+                        "triggers": ["implementing with library", "unsure about API"],
+                        "instruction": "Lookup docs BEFORE writing code",
+                        "priority": "high"
+                    }
+                },
+                "test-no-behavior": {
+                    "command": "npx",
+                    "args": ["-y", "other-package"],
+                    "enabled": True,
+                    "mode": "cold"
+                }
+            }
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(config_data, f)
+            f.flush()
+
+            try:
+                result = load_mcp_config(f.name)
+
+                # Server with behavior
+                server = result["test-behavior"]
+                assert server.behavior is not None
+                assert isinstance(server.behavior, BehaviorConfig)
+                assert server.behavior.triggers == ["implementing with library", "unsure about API"]
+                assert server.behavior.instruction == "Lookup docs BEFORE writing code"
+                assert server.behavior.priority == "high"
+
+                # Server without behavior
+                server_no = result["test-no-behavior"]
+                assert server_no.behavior is None
+            finally:
+                os.unlink(f.name)
+
+    def test_load_config_behavior_default_priority(self):
+        """Test that behavior priority defaults to 'medium'."""
+        config_data = {
+            "mcpServers": {
+                "test": {
+                    "command": "npx",
+                    "args": [],
+                    "enabled": True,
+                    "behavior": {
+                        "triggers": ["some trigger"],
+                        "instruction": "do something"
+                    }
+                }
+            }
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(config_data, f)
+            f.flush()
+
+            try:
+                result = load_mcp_config(f.name)
+                assert result["test"].behavior.priority == "medium"
+            finally:
+                os.unlink(f.name)
 
     def test_invalid_mode_defaults_to_cold(self):
         """Test that invalid mode defaults to COLD."""
