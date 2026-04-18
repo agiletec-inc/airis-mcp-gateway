@@ -109,6 +109,16 @@ export const MCP_MAPPINGS: Record<string, McpMapping> = {
     envRequired: [],
     description: "Browser automation",
   },
+  "airis-workspace": {
+    packages: [],
+    detect: ["manifest.toml"],
+    mcp: "airis-workspace",
+    command: "uvx",
+    args: ["--from", "git+https://github.com/agiletec-inc/airis-agent", "airis-workspace-mcp"],
+    env: {},
+    envRequired: [],
+    description: "Airis workspace manager (manifest.toml source of truth)",
+  },
 };
 
 // ── Pure Functions ──
