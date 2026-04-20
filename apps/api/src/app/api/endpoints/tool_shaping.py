@@ -285,6 +285,18 @@ async def apply_schema_partitioning(data: Dict[str, Any]) -> Dict[str, Any]:
 
         tools = list(dynamic_mcp.get_meta_tools(mode=settings.META_TOOLS_MODE))
         meta_count = len(tools)
+
+        # Lazy Schema: strip every HOT tool's inputSchema down to
+        # {"type": "object"} before exposing it. The full schema remains in
+        # schema_partitioner / DynamicMCP caches and is served on demand via
+        # airis-schema or injected into -32602 error payloads on retry. Copy
+        # each dict first so we do not mutate ProcessRunner's cached tools.
+        if settings.SCHEMA_MODE == "lazy":
+            hot_tools_list = [
+                {**t, "inputSchema": {"type": "object"}}
+                for t in hot_tools_list
+            ]
+
         tools.extend(hot_tools_list)
         active_tools_list = dynamic_mcp.get_active_tool_definitions(
             excluded_servers=excluded_servers,

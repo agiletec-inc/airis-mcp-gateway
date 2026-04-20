@@ -103,6 +103,13 @@ class Settings(BaseSettings):
     # instead of all available tools. This dramatically reduces context usage.
     DYNAMIC_MCP: bool = os.getenv("DYNAMIC_MCP", "true").lower() in ("true", "1", "yes")
 
+    # Schema Mode: "lazy" (default) stubs every tool's inputSchema to
+    # {"type": "object"} so clients see names only; the full schema is
+    # fetched on demand via airis-schema or injected into -32602 errors
+    # on retry. "full" preserves the backend's original inputSchema (legacy
+    # behavior) and is only intended for clients that cannot self-heal.
+    SCHEMA_MODE: str = os.getenv("SCHEMA_MODE", "lazy")
+
     # Meta-Tools Mode: "core" (3 tools: find/exec/schema) or "full" (all 7 including confidence/suggest/route)
     META_TOOLS_MODE: str = os.getenv("META_TOOLS_MODE", "core")
 
