@@ -113,11 +113,11 @@ export const MCP_MAPPINGS: Record<string, McpMapping> = {
     packages: [],
     detect: ["manifest.toml"],
     mcp: "airis-workspace",
-    command: "uvx",
-    args: ["--from", "git+https://github.com/agiletec-inc/airis-agent", "airis-workspace-mcp"],
+    command: "airis",
+    args: ["mcp"],
     env: {},
     envRequired: [],
-    description: "Airis workspace manager (manifest.toml source of truth)",
+    description: "Airis workspace manager (stdio MCP server exposed by the airis CLI)",
   },
 };
 
