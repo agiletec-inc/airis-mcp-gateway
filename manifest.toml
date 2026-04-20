@@ -1,18 +1,30 @@
+version = 1
+mode = "docker-first"
+
+[project]
+id = "airis-mcp-gateway"
+description = "Hybrid MCP Multiplexer — Docker Gateway + process (uvx/npx) servers behind a unified Streamable HTTP / SSE transport"
+
 [workspace]
 name = "airis-mcp-gateway"
-version_file = "VERSION"
+package_manager = "pnpm@10"
+service = "api"
 
 [commands]
+# Minimal pre-push smoke test. Assumes `docker compose up -d` is already
+# running — verifies the gateway answers `/health` before letting a push
+# through. Full unit tests live in apps/api/tests and are run manually
+# or in CI; they need dev deps that are not baked into the prod image.
 test = "curl -sf http://localhost:9400/health"
 
-[packages]
-workspaces = ["apps/*"]
+[apps.api]
+path = "apps/api"
+type = "python"
 
-[[packages.app]]
-pattern = "apps/api"
+[apps.airis-commands]
+path = "apps/airis-commands"
+type = "node"
 
-[[packages.app]]
-pattern = "apps/airis-commands"
-
-[[packages.app]]
-pattern = "apps/gateway-control"
+[apps.gateway-control]
+path = "apps/gateway-control"
+type = "node"
