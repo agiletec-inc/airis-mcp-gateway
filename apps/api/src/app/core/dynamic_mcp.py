@@ -626,7 +626,7 @@ class DynamicMCP:
         excluded_servers: set[str] | None = None,
         excluded_tool_names: set[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """Return tool definitions for activated native tools."""
+        """Return tool definitions with lazy schemas for all activated tools."""
         excluded_servers = excluded_servers or set()
         excluded_tool_names = excluded_tool_names or set()
         definitions: list[dict[str, Any]] = []
@@ -637,10 +637,11 @@ class DynamicMCP:
             info = self._tools.get(tool_name)
             if not info or info.server in excluded_servers:
                 continue
+            # Lazy Schema Implementation: stub inputSchema to minimize context window impact
             definitions.append({
                 "name": info.name,
                 "description": info.description or f"{info.server}:{info.name}",
-                "inputSchema": info.input_schema or {"type": "object", "properties": {}},
+                "inputSchema": {"type": "object"},
             })
         return definitions
 
@@ -655,13 +656,12 @@ class DynamicMCP:
         tools = [
             {
                 "name": "airis-activate",
-                "description": "Activate a toolset so its native MCP tools become directly callable. Prefer this before using large cold providers.",
+                "description": "[DEPRECATED] Activate is no longer needed. Native MCP tools are now dynamically exposed. Call them directly.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "toolset": {
-                            "type": "string",
-                            "description": "Toolset ref like 'stripe.customers' or server name like 'stripe' to activate all of its toolsets"
+                            "type": "string"
                         }
                     },
                     "required": ["toolset"]
@@ -669,34 +669,27 @@ class DynamicMCP:
             },
             {
                 "name": "airis-find",
-                "description": "Optional fallback search across available MCP servers, toolsets, and tools. Use when the right capability slice is unclear.",
+                "description": "Optional fallback search for finding tools.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "query": {
-                            "type": "string",
-                            "description": "Search query to match against tool names, descriptions, or server names. Examples: 'memory', 'file', 'browser'"
-                        },
-                        "server": {
-                            "type": "string",
-                            "description": "Filter results to a specific server name"
+                            "type": "string"
                         }
                     }
                 }
             },
             {
                 "name": "airis-exec",
-                "description": "Deprecated compatibility wrapper for executing a tool by name. Prefer activating a toolset and calling the native MCP tool directly.",
+                "description": "[DEPRECATED] Direct tool invocation is now supported natively. Please call tools directly by name.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "tool": {
-                            "type": "string",
-                            "description": "Tool name in 'server:tool_name' format"
+                            "type": "string"
                         },
                         "arguments": {
-                            "type": "object",
-                            "description": "Arguments to pass to the tool"
+                            "type": "object"
                         }
                     },
                     "required": ["tool"]
