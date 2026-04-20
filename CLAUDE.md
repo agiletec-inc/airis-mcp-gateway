@@ -2,364 +2,119 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Build & Test Commands
+## What this is
 
-All commands use go-task. Enter devbox shell first: `devbox shell`
+FastAPI-based MCP multiplexer that exposes many MCP servers (process + Docker Gateway) through two transports:
+- **Streamable HTTP** at `http://localhost:9400/mcp/` — for Codex and Claude Code (recommended)
+- **SSE** at `http://localhost:9400/sse` — for Gemini CLI, Cursor, Windsurf
 
-```bash
-# Stack management
-task docker:up              # Start gateway + API
-task docker:down            # Stop all
-task docker:logs            # View API logs
-task docker:restart         # Restart after config changes
-task docker:clean           # Remove containers and volumes
+Dynamic MCP mode (default) exposes only 3–4 meta-tools (`airis-find`, `airis-exec`, `airis-schema`) instead of 60+ raw tools, and lazily starts cold servers on first use.
 
-# Auto-start (boot persistence)
-task autostart:install      # Enable auto-start on login (macOS/Linux)
-task autostart:uninstall    # Disable auto-start
-task autostart:status       # Check auto-start status
-task autostart:logs         # View auto-start logs
+Source of truth for server config: `mcp-config.json` (runtime) and `workflows/*.yaml` (compiled into MCP `initialize` instructions by `apps/api/src/app/core/behavior_compiler.py`).
 
-# Development mode (hot reload)
-task dev:up                 # Start with hot reload
-task dev:watch              # Auto-rebuild TypeScript on change
-task build:mcp              # Build MCP servers manually
+## Commands
 
-# Testing
-task test:e2e               # Full end-to-end test
-task test:health            # Quick health check
-task test:status            # Server status
-task test:api               # Run pytest in container
+All commands use go-task inside `devbox shell`. Run `task --list-all` for the full list.
 
-# Local testing (without Docker)
-cd apps/api && uv pip install -e ".[test]"
-uv run python -m pytest tests/unit -v                      # All unit tests
-uv run python -m pytest tests/unit/test_dynamic_mcp.py -v  # Single file
-uv run python -m pytest tests/unit -k "test_find"          # By test name
+Most used: `task docker:up` / `task docker:down` / `task docker:logs` / `task docker:restart` / `task test:e2e` / `task test:api`.
 
-# TypeScript tests
-cd apps/gateway-control && pnpm test
-cd apps/airis-commands && pnpm test
-
-# All tasks
-task --list-all             # Show all available tasks
-```
-
-## Project Structure
-
-```
-apps/
-├── api/                    # FastAPI MCP multiplexer (Python)
-│   ├── src/app/
-│   │   ├── main.py         # App entry point
-│   │   ├── core/           # Business logic (process_manager, dynamic_mcp, circuit)
-│   │   ├── api/endpoints/  # REST + SSE handlers (mcp_proxy is the main one)
-│   │   ├── models/         # SQLAlchemy models
-│   │   ├── schemas/        # Pydantic schemas
-│   │   └── crud/           # Database operations
-│   └── tests/
-│       ├── unit/           # Fast, no Docker required
-│       ├── integration/    # Requires database
-│       └── e2e/            # Full stack tests
-├── gateway-control/        # Gateway management MCP server (TypeScript)
-└── airis-commands/         # Config/profile MCP server (TypeScript)
-```
+Python tests locally without Docker: `cd apps/api && uv pip install -e ".[test]" && uv run python -m pytest tests/unit -v`.
 
 ## Architecture
 
+### Transport layer
+
+The API in `apps/api/src/app/api/endpoints/` is split into focused modules:
+
+| Module | Responsibility |
+|--------|---------------|
+| `gateway_stream_bridge.py` | Bridges Streamable HTTP clients → Docker Gateway SSE. Holds `StreamBridgeSession` (httpx client + SSE stream + asyncio.Queue + background reader task). 15-min idle TTL. |
+| `session_queue.py` | Per-session `asyncio.Queue` for classic SSE proxy responses. 10-min idle TTL. |
+| `sse_protocol.py` | Pure wire-format helpers: `format_sse_event()`, `parse_sse_json()`, `SSEEventBuffer`. No I/O. |
+| `tool_shaping.py` | Rewrites `tools/list` and `prompts/list` responses: schema partitioning, description modes (FULL/SUMMARY/BRIEF/NONE via `DESCRIPTION_MODE` env), HOT/COLD split, meta-tool injection. |
+| `mcp_proxy.py` | Main router. Imports from sibling modules. Decision at `_proxy_jsonrpc_request()`: if no `sessionid` query param → `send_via_stream_bridge()` for Streamable HTTP; otherwise classic SSE proxy. |
+
+### HOT/COLD server split
+
+- **HOT**: ProcessManager process servers (uvx/npx) always listed in `tools/list` — start on first call, idle-kill after 120s.
+- **COLD**: Docker Gateway backend servers — not listed directly; accessed via `airis-exec <server>:<tool>`, auto-enabled on first call.
+
+In DYNAMIC_MCP mode, `tools/list` returns only meta-tools + currently active HOT server tools. Full tool discovery goes through `airis-find`.
+
+### Schema partitioning
+
+`apply_schema_partitioning()` strips verbose JSON schemas from `tools/list` and injects a synthetic `expandSchema` tool. Clients call `expandSchema` on-demand to get the full schema for a specific tool. Saves significant tokens per `initialize`.
+
+### Streamable HTTP bridge internals
+
+`_open_stream_bridge_session()` opens a persistent GET `/sse` to Docker Gateway, reads the endpoint URL via `__anext__()` (NOT `async for ... break` — that calls `aclose()`), then passes the same iterator to `_stream_bridge_reader()` which drains SSE events into a queue. `send_via_stream_bridge()` POSTs to the backend, then waits on the queue for the matching response id.
+
+## Dynamic MCP
+
+`DYNAMIC_MCP=true` (default) exposes 3 meta-tools: `airis-find` (discover), `airis-exec` (execute + auto-enable), `airis-schema` (get input schema). `META_TOOLS_MODE=full` adds `airis-confidence`, `airis-repo-index`, `airis-suggest`, `airis-route`. Disabled servers auto-enable when `airis-exec` calls them.
+
+Instructions returned on `initialize` are compiled from `workflows/*.yaml` — **edit the YAML, not the Python**. Each workflow needs `name`, `compile_to: mcp_instructions`, `priority`, and a `text:` block. Missing `text` makes it emit literal `compile_to` values (bug: 2026-04-14).
+
+## Tool Routing Guide
+
+When working in a project that uses this gateway, pick tools by this decision flow:
+
 ```
-Claude Code / Cursor / Zed
-    │
-    ▼ SSE (http://localhost:9400/sse)
-┌─────────────────────────────────────────────────────────┐
-│  FastAPI Hybrid MCP Multiplexer (port 9400)             │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │  Dynamic MCP Layer                              │    │
-│  │  ├─ airis-find    (discover ALL servers/tools)  │    │
-│  │  ├─ airis-exec    (execute + auto-enable)       │    │
-│  │  └─ airis-schema  (get tool input schema)       │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │  ProcessManager (Lazy start + idle-kill)        │    │
-│  │  ├─ gateway-control (node)  HOT                 │    │
-│  │  ├─ airis-commands (node)   HOT                 │    │
-│  │  ├─ memory (npx)            COLD                │    │
-│  │  ├─ stripe (npx)            COLD                │    │
-│  │  ├─ supabase (npx)          COLD                │    │
-│  │  └─ ... (20+ more servers)                      │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │  Docker Gateway (9390) - mindbase, etc.         │    │
-│  └─────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────┘
-```
-
-**Key patterns:**
-- **Dynamic MCP** (default): 3 core meta-tools exposed (airis-find, airis-exec, airis-schema). Set `META_TOOLS_MODE=full` for 7 (+ airis-confidence, airis-repo-index, airis-suggest, airis-route)
-- **Auto-enable**: Disabled servers are auto-enabled when airis-exec is called
-- **Lazy loading**: Process servers start on first request, not at startup
-- **Idle-kill**: Unused servers terminate after 120s (configurable)
-- **Tool routing**: ProcessManager maps tool names to server names dynamically
-
-## Dynamic MCP Mode
-
-By default, `DYNAMIC_MCP=true` exposes 3 core meta-tools instead of 60+:
-
-| Tool | Purpose |
-|------|---------|
-| `airis-find` | Search tools/servers (including disabled ones) |
-| `airis-exec` | Execute tool by name (auto-enables disabled servers) |
-| `airis-schema` | Get full input schema for a tool |
-
-With `META_TOOLS_MODE=full`, 4 additional tools are exposed: airis-confidence, airis-repo-index, airis-suggest, airis-route.
-
-External tools (HOT and COLD) are accessed via `airis-exec`. This follows the [Lasso MCP Gateway](https://github.com/lasso-security/mcp-gateway) pattern.
-
-**Auto-Enable Flow:**
-```
-airis-find query="stripe"
-→ stripe (cold, disabled): 50 tools
-
-airis-exec tool="stripe:create_customer" arguments={...}
-→ Server auto-enabled → Tools loaded → Executed!
+Need official library docs?    → airis-exec context7:resolve-library-id → context7:query-docs
+Need current/external info?    → airis-exec tavily:tavily-search
+Database query or schema?      → airis-exec supabase:query
+Payment/billing?               → airis-exec stripe:*
+DNS/workers/KV?                → airis-exec cloudflare:*
+Figma/design?                  → airis-exec figma:*
+Browser testing/screenshots?   → playwright-cli skill (host Chrome — NOT MCP playwright)
+File generation (docx/xlsx/…)? → claude-api plugin (host filesystem)
+TDD/debugging/planning?        → superpowers plugin
+Git operations?                → gh CLI or native git
+Simple code read/edit/search?  → native Read, Edit, Grep, Glob (no MCP)
 ```
 
-**Token savings:** ~98% reduction (42k → 600 tokens)
+Complexity rule of thumb:
+- **Simple** (1–2 known files): native tools only.
+- **Medium** (new library, need docs): context7 first, then native tools.
+- **Complex** (multi-service, research): `airis-route` to get an optimal chain.
 
-To disable and expose all tools directly:
-```bash
-DYNAMIC_MCP=false docker compose up -d
-```
+What NOT to route through the Gateway:
+- Browser automation — needs host Chrome, Docker image has none. Use `playwright-cli` skill.
+- File generation (docx/xlsx/pdf) — needs host filesystem. Use `claude-api` plugin.
+- Git — `gh` CLI and native git are more reliable than any MCP wrapper.
 
-## Key Files
+## Design principles
 
-| File | Purpose |
-|------|---------|
-| `docker-compose.yml` | gateway (9390) + api (9400) containers |
-| `mcp-config.json` | Server definitions: command, args, env, enabled, mode, TTL |
-| `apps/api/src/app/main.py` | FastAPI app entry point |
-| `apps/api/src/app/core/process_manager.py` | Manages uvx/npx servers |
-| `apps/api/src/app/core/process_runner.py` | Subprocess lifecycle + timeout handling |
-| `apps/api/src/app/core/dynamic_mcp.py` | Dynamic MCP meta-tools + auto-enable logic |
-| `apps/api/src/app/core/mcp_config_loader.py` | Parse mcp-config.json + TTL settings |
-| `apps/api/src/app/api/endpoints/mcp_proxy.py` | SSE proxy + airis-find/exec/schema handlers |
-| `apps/api/src/app/core/circuit.py` | Circuit breaker for failing servers |
-| `apps/api/src/app/core/credentials_provider.py` | Secure credential injection |
-| `apps/api/tests/unit/conftest.py` | Test fixtures and mocks |
-
-## API Endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `/sse` | SSE endpoint for Claude Code |
-| `/health` | Health check |
-| `/process/servers` | List process servers |
-| `/api/tools/combined` | All tools from all sources |
-| `/api/tools/status` | Server status overview |
-| `/metrics` | Prometheus metrics |
-
-## mcp-config.json Format
-
-```json
-{
-  "mcpServers": {
-    "server-name": {
-      "command": "uvx|npx|sh|node",
-      "args": ["arg1", "arg2"],
-      "env": { "KEY": "value" },
-      "enabled": true,
-      "mode": "hot|cold",
-      "idle_timeout": 120,
-      "min_ttl": 60,
-      "max_ttl": 3600
-    }
-  }
-}
-```
-
-- **command types**: `uvx` (Python), `npx` (Node.js), `sh` (Docker via shell), `node` (direct)
-- **mode**: `hot` (always loaded), `cold` (lazy loaded on demand)
-- **enabled**: `true` (active), `false` (discoverable but auto-enabled on use)
-- This file is the gateway runtime config, not a repo-local client config.
-
-## Design Principles
-
-### 1. Global Registration Only
-- MCP Gateway MUST be registered from a single global AIRIS registry, NOT per-project
-- Codex is managed via `airis-gateway init`
-- Claude Code uses the plugin system (`/install-plugin agiletec-inc/airis-mcp-gateway`) — do NOT use `claude mcp add` (causes duplicate MCP error with plugin)
-- Claude Desktop is intentionally unmanaged by AIRIS
-
-### 2. ALL MCP Servers Through Gateway
-- All servers go through gateway - users don't register individual MCP servers
-- Dynamic enable/disable via `airis-exec` (auto-enable on use)
-- Add new servers to `mcp-config.json`, NOT as separate registrations
-- Repository-local `mcp.json` is forbidden after migration
-
-### 3. One-Command Install
-```bash
-airis-gateway up
-airis-gateway init
-```
-- If repo-local `mcp.json` files exist, import and remove them:
-```bash
-airis-gateway import ~/github --apply
-airis-gateway clean ~/github
-airis-gateway doctor ~/github
-```
-
-### 4. Auto-Start on Boot
-To ensure the gateway starts automatically on system reboot:
-```bash
-task autostart:install    # Installs LaunchAgent (macOS) or systemd service (Linux)
-task autostart:status     # Verify installation
-```
-
-**macOS (OrbStack/Docker Desktop):**
-- Creates `~/Library/LaunchAgents/com.agiletec.airis-mcp-gateway.plist`
-- Runs `docker compose up -d` on login
-- Logs: `~/Library/Logs/airis-mcp-gateway.log`
-
-**Linux:**
-- Creates `~/.config/systemd/user/airis-mcp-gateway.service`
-- Enables user lingering for boot persistence
-- Logs: `journalctl --user -u airis-mcp-gateway.service`
-
-## Environment Variables
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `DYNAMIC_MCP` | `true` | Enable Dynamic MCP (3 meta-tools only) |
-| `TOOL_CALL_TIMEOUT` | `90` | Fail-safe timeout (seconds) for MCP tool calls |
-| `AIRIS_API_KEY` | *(none)* | API key for bearer auth (disabled if not set) |
-| `MCP_GATEWAY_URL` | `http://gateway:9390` | Docker gateway URL |
-| `MCP_CONFIG_PATH` | `/app/mcp-config.json` | Server config path |
+1. **Global registration via CLI only.** Register once as a user-scoped MCP server (Streamable HTTP):
+   ```bash
+   claude mcp add --transport http --scope user airis-gateway http://localhost:9400/mcp/
+   ```
+   Do NOT also use `/install-plugin` — duplicate endpoint causes the plugin's MCP connection to be silently ignored. Codex uses Streamable HTTP at `http://localhost:9400/mcp/`. Claude Desktop is intentionally unmanaged.
+2. **All MCP servers go through the gateway.** Users do not register individual servers. Add new ones to `mcp-config.json`. Repo-local `mcp.json` is forbidden after migration — use `airis-gateway import <dir> --apply` + `airis-gateway clean <dir>` to migrate.
+3. **Auto-start on boot.** `task autostart:install` creates a macOS LaunchAgent or Linux systemd user unit. `task autostart:status` to verify.
 
 ## Debugging
 
 ```bash
-# View logs
-task docker:logs                                    # Follow API logs
-docker compose logs api 2>&1 | grep -i error        # Filter errors
-docker compose logs api 2>&1 | grep "server_name"   # Filter by server
-
-# Check server status
-curl http://localhost:9400/process/servers | jq     # All servers
-curl http://localhost:9400/process/servers/memory   # Specific server
-curl http://localhost:9400/metrics                  # Prometheus metrics
-
-# Common issues
-# "Server not found" → Check mcp-config.json, run task docker:restart
-# "Timeout" → Check TOOL_CALL_TIMEOUT env var, server may be slow to start
-# "Circuit open" → Server crashed repeatedly, check logs for root cause
+task docker:logs                              # follow API logs
+curl http://localhost:9400/health             # quick check
+curl http://localhost:9400/process/servers    # list process servers
+curl http://localhost:9400/metrics            # Prometheus metrics
 ```
 
-## MCP Server Instructions
+Common issues:
+- **Server not found** → check `mcp-config.json`, run `task docker:restart`.
+- **Timeout** → check `TOOL_CALL_TIMEOUT` env, server may be slow to start.
+- **Circuit open** → server crashed repeatedly, check logs for root cause.
+- **Instructions look wrong** → compare `docker compose exec api python -c "from app.core.behavior_compiler import compile_instructions; from app.core.mcp_config_loader import load_mcp_config; print(compile_instructions(load_mcp_config().servers))"` against the YAMLs. If they diverge, rebuild the image — coded changes to `behavior_compiler.py` / `workflow_loader.py` need `docker compose build api`.
+- **Stream bridge "content already streamed"** → symptom of `async for ... break` on httpx SSE iterator calling `aclose()`. Fix: use `__anext__()` directly and pass the same iterator to the reader task.
 
-The gateway automatically injects `instructions` into the MCP `initialize` response. This guides LLMs on how to use Dynamic MCP:
+## Screenshot verification
 
-```
-"instructions": "This is AIRIS MCP Gateway with Dynamic MCP. IMPORTANT: Do NOT call tools directly..."
-```
-
-This is implemented in `behavior_compiler.py:24-31`. The instructions direct LLMs to use `airis-exec` directly (tool listing is embedded in its description), with `airis-find` as fallback for unlisted tools.
-
-## Claude Code Slash Commands
-
-Built-in commands in `.claude/commands/`:
-
-| Command | Description |
-|---------|-------------|
-| `/test` | End-to-end test of gateway |
-| `/status` | Quick status check |
-| `/troubleshoot [issue]` | Diagnose issues |
-
-## Screenshot Verification
-
-- `playwright-cli` スキルを使用（ホストの Chrome をヘッドレスで使用）
-- `playwright-cli open <url>` → `playwright-cli screenshot` の流れ
-- MCP Gateway の Playwright は使用しない（Docker 内に Chrome がないため）
-- snapshot（YAML）はスクリーンショットよりトークン効率が良い。視覚確認が不要なら `playwright-cli snapshot` を優先
-
-## Tool Routing Guide
-
-When working with a project that uses airis-mcp-gateway, follow this decision flow to pick the right tool.
-
-### Decision Flow
-
-```
-User request received
-  │
-  ├─ Need official library docs? → context7 (MCP Gateway HOT)
-  │    airis-exec context7:resolve-library-id → context7:query-docs
-  │
-  ├─ Need current/external info? → tavily (MCP Gateway cold)
-  │    airis-exec tavily:tavily-search
-  │
-  ├─ Database query or schema? → supabase (MCP Gateway cold)
-  │    airis-exec supabase:query
-  │
-  ├─ Payment/billing? → stripe (MCP Gateway cold)
-  │    airis-exec stripe:*
-  │
-  ├─ Browser testing/screenshots? → playwright-cli (host skill)
-  │    playwright-cli open → snapshot → screenshot
-  │    NOT MCP playwright (no Chrome in Docker)
-  │
-  ├─ File generation (docx/xlsx/pptx/pdf)? → claude-api plugin
-  │    Skill tool invocation
-  │
-  ├─ TDD/debugging/planning workflow? → superpowers plugin
-  │    Skill tool invocation
-  │
-  └─ Simple code read/edit/search? → Native tools (Read, Edit, Grep, Glob)
-      No MCP needed
-```
-
-### When to use MCP Gateway vs Native Tools
-
-| Complexity | Approach |
-|-----------|---------|
-| Simple (1-2 files, known location) | Native: Read, Edit, Grep, Glob |
-| Medium (new library, need docs) | context7 for docs, then native tools |
-| Complex (multi-service, research) | airis-route for optimal tool chain |
-
-### Auto-Activation Triggers
-
-| Request pattern | Gateway server |
-|----------------|---------------|
-| Library imports, API patterns, "how to use X" | `context7` |
-| "search", "latest", "current", research | `tavily` |
-| Database, SQL, schema, migration | `supabase` |
-| Payment, invoice, subscription | `stripe` |
-| DNS, workers, KV | `cloudflare` |
-| Figma, design file | `figma` |
-
-### What NOT to route through Gateway
-
-- **Browser automation** → `playwright-cli` skill (needs host Chrome)
-- **File generation** (docx/xlsx/pdf) → `claude-api` plugin (needs host filesystem)
-- **Workflow patterns** (TDD, debugging) → `superpowers` plugin (no MCP equivalent)
-- **Git operations** → `gh` CLI or native git (more reliable than MCP)
-
-### Recommended Companion Plugins
-
-These plugins complement the Gateway for capabilities that can't run inside Docker:
-
-```bash
-# Install via /plugin in Claude Code
-superpowers          # TDD, debugging, planning workflows
-claude-api           # File generation (docx/xlsx/pptx/pdf)
-playwright-cli       # Browser automation (install: playwright-cli install --skills)
-```
-
-Keep total plugins to 4-6 max. Everything else goes through the Gateway.
+Use the `playwright-cli` skill (host Chrome, headless). Flow: `playwright-cli open <url>` → `playwright-cli snapshot` (YAML, token-efficient — prefer over screenshot unless visual check is required). Do NOT use the MCP Playwright server (no Chrome in Docker).
 
 ## CI/CD
 
-Path-based CI triggers - only runs relevant jobs:
-- `apps/api/**` changes → Python tests (pytest)
-- `apps/gateway-control/**` or `apps/airis-commands/**` changes → TypeScript build
+Path-based triggers:
+- `apps/api/**` → Python tests (pytest)
+- `apps/gateway-control/**` or `apps/airis-commands/**` → TypeScript build

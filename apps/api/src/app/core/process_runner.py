@@ -14,7 +14,7 @@ import os
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional
 from enum import Enum
 
 from .config import settings
@@ -76,9 +76,14 @@ class ProcessRunner:
         self,
         config: ProcessConfig,
         on_stderr: Optional[Callable[[str, str], None]] = None,
+        on_idle_kill: Optional[Callable[[str], Awaitable[None]]] = None,
     ):
         self.config = config
         self.on_stderr = on_stderr or self._default_stderr_handler
+        # Fires after the idle reaper has killed this process. Used by the
+        # proxy layer to emit `notifications/tools/list_changed` so clients
+        # see the tool set shrink without polling.
+        self._on_idle_kill = on_idle_kill
 
         self._proc: Optional[asyncio.subprocess.Process] = None
         self._state = ProcessState.STOPPED
@@ -744,6 +749,13 @@ class ProcessRunner:
                     logger.info(f"{self.config.name} idle for {idle_time:.0f}s (TTL: {effective_ttl:.0f}s), stopping")
                     self._idle_kill_count += 1
                     await self.stop()
+                    if self._on_idle_kill is not None:
+                        try:
+                            await self._on_idle_kill(self.config.name)
+                        except Exception as exc:  # noqa: BLE001 — never block the reaper
+                            logger.warning(
+                                f"{self.config.name} on_idle_kill callback failed: {exc}"
+                            )
                     return
 
     async def stop(self):

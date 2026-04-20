@@ -48,12 +48,15 @@ Register the gateway once, and access all backend MCP servers (Stripe, Supabase,
 | Client | Connection Command / Setup |
 | :--- | :--- |
 | **Codex** | `codex mcp add airis-mcp-gateway --url http://localhost:9400/mcp` |
-| **Claude Code** | Plugin: `/install-plugin agiletec-inc/airis-mcp-gateway` |
+| **Claude Code** | `claude mcp add --transport http --scope user airis-gateway http://localhost:9400/mcp/` |
 | **Gemini CLI** | `gemini mcp add --transport sse airis-mcp-gateway http://localhost:9400/sse` |
 | **Cursor** | Settings > Features > MCP > **Add New MCP Server**<br>Name: `airis-mcp-gateway`, Type: `SSE`, URL: `http://localhost:9400/sse` |
 | **Windsurf** | Add SSE URL `http://localhost:9400/sse` to `~/.codeium/config.json` |
 
-Docker Compose publishes the API on port `9400`. Codex uses Streamable HTTP at `http://localhost:9400/mcp`, and SSE clients such as Gemini CLI should use `http://localhost:9400/sse`. Claude Code connects via the plugin system (includes MCP connection, permissions, hooks, and skills).
+Docker Compose publishes the API on port `9400`. Codex and Claude Code use Streamable HTTP at `http://localhost:9400/mcp/`. SSE clients (Gemini CLI, Cursor, Windsurf) use `http://localhost:9400/sse`.
+
+> [!NOTE]
+> The `--scope user` flag registers the server globally across all projects. Do NOT also install via `/install-plugin` — duplicate endpoint causes the plugin's MCP connection to be silently ignored.
 
 ---
 
