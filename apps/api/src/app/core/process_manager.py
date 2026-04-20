@@ -10,7 +10,7 @@ Provides:
 """
 
 import asyncio
-from typing import Any, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 from .process_runner import ProcessRunner, ProcessConfig, ProcessState
 from .mcp_config_loader import (
@@ -23,6 +23,15 @@ from .mcp_config_loader import (
 from .logging import get_logger
 
 logger = get_logger(__name__)
+
+# Event names passed to state-change listeners. Kept as module-level
+# constants so listeners can branch on them without importing private
+# enum machinery.
+STATE_CHANGE_ENABLED = "enabled"
+STATE_CHANGE_DISABLED = "disabled"
+STATE_CHANGE_IDLE_KILLED = "idle_killed"
+
+StateChangeListener = Callable[[str, str], Awaitable[None]]
 
 
 class ProcessManager:
@@ -52,6 +61,28 @@ class ProcessManager:
         self._prompt_to_server: dict[str, str] = {}  # prompt_name -> server_name
         self._server_locks: dict[str, asyncio.Lock] = {}  # per-server locks
         self._initialized = False
+        # Listeners for HOT-set membership changes. Invoked whenever a server
+        # is enabled, disabled, or idle-killed so the proxy layer can emit
+        # `notifications/tools/list_changed` to connected clients.
+        self._state_change_listeners: list[StateChangeListener] = []
+
+    def add_state_change_listener(self, listener: StateChangeListener) -> None:
+        """Subscribe a coroutine to HOT-set membership changes."""
+        if listener not in self._state_change_listeners:
+            self._state_change_listeners.append(listener)
+
+    def remove_state_change_listener(self, listener: StateChangeListener) -> None:
+        if listener in self._state_change_listeners:
+            self._state_change_listeners.remove(listener)
+
+    async def _fire_state_change(self, event: str, server_name: str) -> None:
+        for listener in list(self._state_change_listeners):
+            try:
+                await listener(event, server_name)
+            except Exception as exc:  # noqa: BLE001 — listeners must not break the manager
+                logger.warning(
+                    f"state-change listener failed ({event} on {server_name}): {exc}"
+                )
 
     async def initialize(self):
         """Load config and prepare runners (but don't start processes yet)."""
@@ -66,7 +97,8 @@ class ProcessManager:
 
             # Create runner (process not started yet - lazy loading)
             runner = ProcessRunner(
-                server_config.to_process_config(self._idle_timeout)
+                server_config.to_process_config(self._idle_timeout),
+                on_idle_kill=self._handle_idle_kill,
             )
             self._runners[name] = runner
 
@@ -171,8 +203,11 @@ class ProcessManager:
         """Enable a server at runtime."""
         if name not in self._server_configs:
             return False
+        already_enabled = self._server_configs[name].enabled
         self._server_configs[name].enabled = True
         logger.info(f"Enabled server: {name}")
+        if not already_enabled:
+            await self._fire_state_change(STATE_CHANGE_ENABLED, name)
         return True
 
     async def disable_server(self, name: str) -> bool:
@@ -180,6 +215,7 @@ class ProcessManager:
         if name not in self._server_configs:
             return False
 
+        was_enabled = self._server_configs[name].enabled
         self._server_configs[name].enabled = False
 
         runner = self._runners.get(name)
@@ -193,7 +229,23 @@ class ProcessManager:
         }
 
         logger.info(f"Disabled server: {name}")
+        if was_enabled:
+            await self._fire_state_change(STATE_CHANGE_DISABLED, name)
         return True
+
+    async def _handle_idle_kill(self, name: str) -> None:
+        """Called from ProcessRunner after the idle reaper stops a process."""
+        # Drop cached tool/prompt routing so the next tools/list response
+        # reflects the new smaller HOT set.
+        self._tool_to_server = {
+            tool: server for tool, server in self._tool_to_server.items()
+            if server != name
+        }
+        self._prompt_to_server = {
+            prompt: server for prompt, server in self._prompt_to_server.items()
+            if server != name
+        }
+        await self._fire_state_change(STATE_CHANGE_IDLE_KILLED, name)
 
     async def list_tools(
         self,

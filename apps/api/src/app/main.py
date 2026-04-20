@@ -252,6 +252,11 @@ async def lifespan(app: FastAPI):
         logger.info(f"Process servers: {manager.get_server_names()}")
         logger.info(f"Enabled: {manager.get_enabled_servers()}")
 
+        # Subscribe the SSE fan-out so clients are notified whenever a
+        # server enters or leaves the HOT set (enable / disable / idle-kill).
+        from .api.endpoints.tools_list_notifier import install_tools_list_changed_fanout
+        install_tools_list_changed_fanout()
+
         # Pre-warm HOT servers to avoid cold start timeouts on first tools/list
         # This runs in parallel and ensures servers are ready before clients connect
         hot_servers = manager.get_hot_servers()
