@@ -1,17 +1,27 @@
-"""Fan out `notifications/tools/list_changed` to connected SSE clients.
+"""Fan out `notifications/tools/list_changed` to connected clients.
 
 The ProcessManager fires a state-change event whenever a server is
 enabled, disabled, or idle-killed. This module subscribes to that
-event and pushes a JSON-RPC notification into every live SSE session
-queue so the client sees the HOT set shrink (or grow) without having
-to poll `tools/list`.
+event and pushes a JSON-RPC notification into every live client
+session so clients see the HOT set shrink (or grow) without polling
+``tools/list``.
 
-Streamable HTTP clients are not covered by this fan-out: their
-response queue is tied to an in-flight POST and the JSON-only shape of
-``send_via_stream_bridge`` cannot deliver a separate event. Those
-clients pick up the new set on the next tools/list they issue, which
-is frequent enough in practice (Claude Code, Gemini CLI) for the loss
-to be negligible.
+Two session kinds are fanned out to:
+
+* **Classic SSE sessions** — notifications are pushed into the
+  per-session ``asyncio.Queue`` kept in :mod:`session_queue`. The SSE
+  streaming loop drains the queue and writes each payload out as an
+  SSE event directly.
+* **Streamable HTTP bridges** — notifications are pushed into the
+  ``StreamBridgeSession.response_queue``. A waiting POST accumulates
+  them and, on the matching response, emits a ``text/event-stream``
+  response that carries the buffered notifications followed by the
+  request's actual result (see :func:`send_via_stream_bridge`).
+
+If no POST is in flight on a given bridge when a notification fires,
+it still sits in the queue and will be delivered on the next POST —
+the client therefore never misses a list change, only its arrival
+may be deferred a moment.
 """
 from __future__ import annotations
 
@@ -19,6 +29,7 @@ import asyncio
 
 from ...core.logging import get_logger
 from ...core.process_manager import get_process_manager
+from .gateway_stream_bridge import _stream_bridge_lock, _stream_bridge_sessions
 from .session_queue import _session_queues_lock, _session_response_queues
 
 logger = get_logger(__name__)
@@ -31,25 +42,34 @@ TOOLS_LIST_CHANGED_NOTIFICATION: dict = {
 
 
 async def fan_out_tools_list_changed(event: str, server_name: str) -> None:
-    """ProcessManager listener: push tools/list_changed to every SSE session."""
+    """ProcessManager listener: notify every live session of the HOT-set change."""
     async with _session_queues_lock:
-        queues = [entry[0] for entry in _session_response_queues.values()]
+        sse_queues = [entry[0] for entry in _session_response_queues.values()]
 
-    if not queues:
+    async with _stream_bridge_lock:
+        bridge_queues = [
+            session.response_queue
+            for session in _stream_bridge_sessions.values()
+            if not session.closed
+        ]
+
+    total = len(sse_queues) + len(bridge_queues)
+    if total == 0:
         logger.debug(
-            "tools/list_changed (%s on %s) — no SSE sessions to notify",
+            "tools/list_changed (%s on %s) — no sessions to notify",
             event,
             server_name,
         )
         return
 
     logger.info(
-        "Fanning out tools/list_changed (%s on %s) to %d SSE session(s)",
+        "Fanning out tools/list_changed (%s on %s) to %d SSE + %d stream-bridge session(s)",
         event,
         server_name,
-        len(queues),
+        len(sse_queues),
+        len(bridge_queues),
     )
-    for queue in queues:
+    for queue in sse_queues + bridge_queues:
         try:
             queue.put_nowait(TOOLS_LIST_CHANGED_NOTIFICATION)
         except asyncio.QueueFull:

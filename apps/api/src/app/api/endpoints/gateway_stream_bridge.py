@@ -38,7 +38,7 @@ from fastapi import Request, Response
 from ...core.behavior_compiler import compile_instructions
 from ...core.config import settings
 from ...core.logging import get_logger
-from .sse_protocol import parse_sse_json
+from .sse_protocol import format_sse_event, parse_sse_json
 from .tool_shaping import apply_prompts_merging, apply_schema_partitioning
 
 logger = get_logger(__name__)
@@ -370,6 +370,13 @@ async def send_via_stream_bridge(
             headers={stream_session_header_name(): session.public_session_id},
         )
 
+    # Buffer server-to-client notifications that arrive before the matching
+    # response. The MCP Streamable HTTP spec lets the server answer a single
+    # POST with either a JSON body or an SSE event stream; we use the SSE
+    # path only when there's at least one notification to deliver, so the
+    # fast path for routine tool calls stays plain JSON.
+    pending_notifications: list[dict] = []
+
     while True:
         try:
             payload = await asyncio.wait_for(
@@ -412,7 +419,29 @@ async def send_via_stream_bridge(
                 media_type="application/json",
             )
 
+        if (
+            isinstance(payload, dict)
+            and "method" in payload
+            and "id" not in payload
+            and get_response_message_id(payload) != expected_id
+        ):
+            # Server-to-client notification that is not the synthetic
+            # `notifications/initialized` bridge marker — buffer for SSE delivery.
+            pending_notifications.append(payload)
+            continue
+
         if expected_id is None or get_response_message_id(payload) == expected_id:
+            if pending_notifications:
+                body_parts = [
+                    format_sse_event(n) for n in pending_notifications
+                ]
+                body_parts.append(format_sse_event(payload))
+                return Response(
+                    content=b"".join(body_parts),
+                    status_code=200,
+                    media_type="text/event-stream",
+                    headers={stream_session_header_name(): session.public_session_id},
+                )
             return Response(
                 content=json.dumps(payload),
                 status_code=200,
