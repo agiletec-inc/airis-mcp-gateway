@@ -1,6 +1,7 @@
 """Encryption utilities for secret management"""
 import base64
 import os
+import stat
 from pathlib import Path
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
@@ -10,6 +11,59 @@ from .config import settings
 from .logging import get_logger
 
 logger = get_logger(__name__)
+
+_SECURE_FILE_MODE = 0o600
+
+
+def _is_production() -> bool:
+    return os.getenv("ENV", "").lower() == "production"
+
+
+def _allow_insecure_perms() -> bool:
+    return os.getenv("ENCRYPTION_ALLOW_INSECURE_KEY_PERMS", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+
+def _chmod_strict(path: Path, *, description: str) -> None:
+    """chmod a secret file to 0o600 and fail-closed if the result is wrong.
+
+    Some filesystems (Windows shares, NFS without ACL, tmpfs in locked-down
+    containers) silently ignore chmod. Detect this and refuse to continue
+    unless the operator explicitly opts in via
+    ENCRYPTION_ALLOW_INSECURE_KEY_PERMS=1.
+    """
+    try:
+        os.chmod(path, _SECURE_FILE_MODE)
+    except OSError as exc:
+        logger.warning("Could not chmod %s on %s: %s", oct(_SECURE_FILE_MODE), path, exc)
+
+    try:
+        actual = stat.S_IMODE(os.stat(path).st_mode)
+    except OSError as exc:
+        raise RuntimeError(
+            f"Failed to stat {description} at {path} after chmod: {exc}"
+        ) from exc
+
+    if actual == _SECURE_FILE_MODE:
+        return
+
+    msg = (
+        f"{description} at {path} has insecure permissions {oct(actual)}; "
+        f"expected {oct(_SECURE_FILE_MODE)}"
+    )
+    if _allow_insecure_perms():
+        logger.warning(
+            "%s (continuing because ENCRYPTION_ALLOW_INSECURE_KEY_PERMS=1)", msg
+        )
+        return
+    raise RuntimeError(
+        msg
+        + ". Refusing to use this file. Set ENCRYPTION_ALLOW_INSECURE_KEY_PERMS=1 "
+        "to override (not recommended)."
+    )
 
 
 def _default_key_path() -> Path:
@@ -37,15 +91,19 @@ class EncryptionManager:
         if master_key is None:
             master_key = os.getenv("ENCRYPTION_MASTER_KEY")
 
+            if not master_key and _is_production():
+                raise RuntimeError(
+                    "ENCRYPTION_MASTER_KEY must be set explicitly in production. "
+                    "Relying on the persisted key file is forbidden because an "
+                    "ephemeral container filesystem would regenerate it on restart "
+                    "and permanently lock existing ciphertext. "
+                    "Generate one with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+                )
+
             if not master_key:
                 master_key = self._load_persisted_key()
 
             if not master_key:
-                if os.getenv("ENV", "").lower() == "production":
-                    raise RuntimeError(
-                        "ENCRYPTION_MASTER_KEY must be set explicitly in production. "
-                        "Generate one with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
-                    )
                 master_key = Fernet.generate_key().decode()
                 self._persist_key(master_key)
                 logger.warning(f"Generated new ENCRYPTION_MASTER_KEY and stored it at {self._key_file_path}")
@@ -71,12 +129,11 @@ class EncryptionManager:
         try:
             salt_path.parent.mkdir(parents=True, exist_ok=True)
             salt_path.write_bytes(salt)
-            try:
-                os.chmod(salt_path, 0o600)
-            except OSError as chmod_exc:
-                logger.warning(f"Could not set 0o600 permissions on {salt_path}: {chmod_exc}")
         except OSError as exc:
             logger.warning(f"Failed to persist encryption salt to {salt_path}: {exc}")
+            return salt
+
+        _chmod_strict(salt_path, description="encryption salt")
         return salt
 
     def _create_fernet(self, master_key: str) -> Fernet:
@@ -131,12 +188,11 @@ class EncryptionManager:
         try:
             self._key_file_path.parent.mkdir(parents=True, exist_ok=True)
             self._key_file_path.write_text(key, encoding="utf-8")
-            try:
-                os.chmod(self._key_file_path, 0o600)
-            except OSError as chmod_exc:
-                logger.warning(f"Could not set 0o600 permissions on {self._key_file_path}: {chmod_exc}")
         except OSError as exc:
             logger.warning(f"Failed to persist ENCRYPTION_MASTER_KEY to {self._key_file_path}: {exc}")
+            return
+
+        _chmod_strict(self._key_file_path, description="encryption master key")
 
     @staticmethod
     def generate_master_key() -> str:

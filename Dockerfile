@@ -1,9 +1,14 @@
-# syntax=docker/dockerfile:1.6
+# syntax=docker/dockerfile:1.7
+
+# NOTE: This file is NOT used by docker-compose.yml. The active build is
+# apps/api/Dockerfile. This multi-stage definition is retained for external
+# tooling (e.g. `docker build --target measurement`). Base image tags are
+# pinned (issue #77) so that whatever still consumes it is reproducible.
 
 ###########################################
 # API (FastAPI + uv + Alembic)
 ###########################################
-FROM python:3.12-slim AS api
+FROM python:3.12.13-slim-trixie AS api
 
 RUN pip install --no-cache-dir uv
 WORKDIR /app
@@ -25,7 +30,7 @@ ENTRYPOINT ["./entrypoint.sh"]
 ###########################################
 # Settings UI (Vite + pnpm + nginx)
 ###########################################
-FROM node:24-alpine AS settings-builder
+FROM node:24.9.0-alpine3.20 AS settings-builder
 
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /monorepo
@@ -40,7 +45,7 @@ RUN pnpm install
 WORKDIR /monorepo/apps/settings
 RUN pnpm build
 
-FROM nginx:1.27-alpine AS settings
+FROM nginx:1.27.5-alpine AS settings
 ENV UI_PORT=5273 \
     API_PROXY_URL=http://api:9400
 
@@ -54,6 +59,8 @@ CMD ["sh", "-c", "envsubst '$$UI_PORT $$API_PROXY_URL' < /etc/nginx/templates/de
 ###########################################
 # Gateway (docker/mcp-gateway base)
 ###########################################
+# NOTE: docker/mcp-gateway does not publish versioned tags on Docker Hub, so
+# we track :latest here. Pin by digest once upstream tags are available.
 FROM docker/mcp-gateway:latest AS gateway
 
 LABEL maintainer="AIRIS MCP Gateway Team"
@@ -66,7 +73,7 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=40s \
 ###########################################
 # MindBase MCP Server Builder
 ###########################################
-FROM node:24-alpine AS mindbase-builder
+FROM node:24.9.0-alpine3.20 AS mindbase-builder
 
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
@@ -76,7 +83,7 @@ CMD ["sh", "-c", "pnpm install && pnpm build && sleep infinity"]
 ###########################################
 # Gateway Control MCP Server Builder
 ###########################################
-FROM node:24-alpine AS gateway-control-builder
+FROM node:24.9.0-alpine3.20 AS gateway-control-builder
 
 WORKDIR /app
 CMD ["sh", "-c", "npm install && npm run build && sleep infinity"]
@@ -85,7 +92,7 @@ CMD ["sh", "-c", "npm install && npm run build && sleep infinity"]
 ###########################################
 # Token Measurement
 ###########################################
-FROM python:3.12-slim AS measurement
+FROM python:3.12.13-slim-trixie AS measurement
 
 WORKDIR /app
 COPY tools/measurement/requirements.txt .

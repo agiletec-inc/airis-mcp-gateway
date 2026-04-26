@@ -21,6 +21,7 @@ import { promisify } from "util";
 import { fileURLToPath } from "url";
 
 const execAsync = promisify(exec);
+import { z, ZodError, ZodSchema } from "zod";
 
 import {
   MCP_MAPPINGS,
@@ -101,25 +102,39 @@ const CONFIG_PATH = process.env.MCP_CONFIG_PATH || "/app/mcp-config.json";
 const PROFILES_DIR = process.env.PROFILES_DIR || "/app/profiles";
 const WORKSPACE_DIR = process.env.HOST_WORKSPACE_DIR || "/workspace/host";
 
-interface AddServerArgs {
-  name: string;
-  command: string;
-  args?: string[];
-  env?: Record<string, string>;
-  enabled?: boolean;
-}
+// ── Tool argument schemas (issue #106) ───────────────────────────────────
+// Using Zod instead of `as unknown as T` so that invalid inputs surface as a
+// clear validation error instead of undefined-access crashes at runtime.
 
-interface ServerNameArgs {
-  server_name: string;
-}
+const AddServerArgsSchema = z.object({
+  name: z.string().min(1, "name must be a non-empty string"),
+  command: z.string().min(1, "command must be a non-empty string"),
+  args: z.array(z.string()).optional(),
+  env: z.record(z.string()).optional(),
+  enabled: z.boolean().optional(),
+});
 
-interface ProfileNameArgs {
-  profile_name: string;
-}
+const ServerNameArgsSchema = z.object({
+  server_name: z.string().min(1, "server_name must be a non-empty string"),
+});
 
-interface DetectArgs {
-  path?: string;
-  autoAdd?: boolean;
+const ProfileNameArgsSchema = z.object({
+  profile_name: z.string().min(1, "profile_name must be a non-empty string"),
+});
+
+const DetectArgsSchema = z.object({
+  path: z.string().optional(),
+  autoAdd: z.boolean().optional(),
+});
+
+function parseArgs<T>(schema: ZodSchema<T>, raw: unknown, toolName: string): T {
+  const result = schema.safeParse(raw ?? {});
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    const path = issue.path.join(".") || "<root>";
+    throw new Error(`Invalid arguments for ${toolName}: ${path}: ${issue.message}`);
+  }
+  return result.data;
 }
 
 const server = new Server(
@@ -265,7 +280,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case "airis_config_add_server": {
-        const { name: serverName, command, args: cmdArgs, env, enabled } = args as unknown as AddServerArgs;
+        const { name: serverName, command, args: cmdArgs, env, enabled } =
+          parseArgs(AddServerArgsSchema, args, "airis_config_add_server");
 
         await addServer(CONFIG_PATH, serverName, {
           command,
@@ -285,7 +301,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "airis_config_remove_server": {
-        const serverName = (args as unknown as ServerNameArgs).server_name;
+        const { server_name: serverName } = parseArgs(
+          ServerNameArgsSchema,
+          args,
+          "airis_config_remove_server",
+        );
         await removeServer(CONFIG_PATH, serverName);
 
         return {
@@ -299,7 +319,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "airis_profile_save": {
-        const profileName = (args as unknown as ProfileNameArgs).profile_name;
+        const { profile_name: profileName } = parseArgs(
+          ProfileNameArgsSchema,
+          args,
+          "airis_profile_save",
+        );
         await saveProfile(CONFIG_PATH, PROFILES_DIR, profileName);
 
         return {
@@ -313,7 +337,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "airis_profile_load": {
-        const profileName = (args as unknown as ProfileNameArgs).profile_name;
+        const { profile_name: profileName } = parseArgs(
+          ProfileNameArgsSchema,
+          args,
+          "airis_profile_load",
+        );
         await loadProfile(CONFIG_PATH, PROFILES_DIR, profileName);
 
         return {
@@ -346,7 +374,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "airis_mcp_detect": {
-        const { path: repoPath = WORKSPACE_DIR, autoAdd = false } = (args ?? {}) as unknown as DetectArgs;
+        const parsed = parseArgs(DetectArgsSchema, args, "airis_mcp_detect");
+        const repoPath = parsed.path ?? WORKSPACE_DIR;
+        const autoAdd = parsed.autoAdd ?? false;
         const config = await readConfig(CONFIG_PATH);
 
         const detected: Array<{
@@ -393,6 +423,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           detected.push(...detectFromRequirementsTxt(reqContent, config.mcpServers, alreadyDetected));
         } catch {
           // No requirements.txt
+        }
+
+        // Scan manifest.toml (Airis workspace)
+        try {
+          const manifestPath = path.join(repoPath, "manifest.toml");
+          await fs.access(manifestPath);
+          const airisMapping = MCP_MAPPINGS["airis-workspace"];
+          if (!detected.find(d => d.name === "airis-workspace")) {
+            detected.push({
+              name: "airis-workspace",
+              reason: "Found manifest.toml",
+              mcp: airisMapping.mcp,
+              description: airisMapping.description,
+              envRequired: airisMapping.envRequired,
+              alreadyExists: !!config.mcpServers["airis-workspace"],
+            });
+          }
+        } catch {
+          // No manifest.toml
         }
 
         if (detected.length === 0) {

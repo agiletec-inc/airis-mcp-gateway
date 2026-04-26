@@ -7,6 +7,7 @@ use Redis-backed rate limiting (see DEPLOYMENT.md).
 
 Key priority: API-Key header > client IP
 """
+import hashlib
 import ipaddress
 import os
 import time
@@ -101,6 +102,43 @@ class RateLimitStore:
         """Clear all entries. Useful for testing."""
         self._store.clear()
 
+    def cleanup_expired(self, window: int = RATE_LIMIT_WINDOW) -> int:
+        """Drop entries whose window has already expired.
+
+        The fixed-window algorithm never needs stale entries: if the window
+        has passed, the very next request for that key would reset it
+        anyway. Returning the stale entries to the garbage collector keeps
+        memory bounded for workloads with a long tail of one-shot clients
+        (short-lived CDN edges, CI runners, pentest scanners, …).
+
+        Args:
+            window: Rate limit window in seconds. Entries older than
+                ``window`` seconds are evicted.
+
+        Returns:
+            Number of entries removed.
+        """
+        now = time.time()
+        expired_keys = [
+            key
+            for key, entry in self._store.items()
+            if now - entry.window_start >= window
+        ]
+        for key in expired_keys:
+            self._store.pop(key, None)
+        return len(expired_keys)
+
+    def __len__(self) -> int:
+        return len(self._store)
+
+
+def _hash_key(key: str) -> str:
+    """Return a short, non-reversible identifier for a rate-limit key.
+
+    Used in log messages so the raw API key / IP never hits the log stream.
+    """
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+
 
 # Global store instance
 _rate_limit_store = RateLimitStore()
@@ -138,7 +176,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         if not allowed:
             logger.warning(
-                f"Rate limit exceeded for key={key[:20]}... limit={limit}/min"
+                "Rate limit exceeded for key=%s limit=%d/min",
+                _hash_key(key),
+                limit,
             )
             return JSONResponse(
                 status_code=429,

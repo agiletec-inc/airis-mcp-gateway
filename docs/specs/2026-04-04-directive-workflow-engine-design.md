@@ -1,5 +1,7 @@
 # Directive Workflow Engine 設計仕様書
 
+> **Status (2026-04-13):** この文書は設計段階のドラフトを保存した履歴で、実装は意図的に簡素化されました。実装と一致する部分だけを参照し、詳細は末尾の **Implementation delta** セクションを優先してください (#76)。
+
 ## コンテキスト
 
 AIRIS MCP Gateway の Dynamic MCP はツールトークンを ~98% 削減済み（42k → ~600 tokens）。しかし LLM は接続された MCP ツールを自発的に使わない。現在の `behavior_compiler.py` は「WHEN X → Use Y」という提案を生成するだけで、LLM はこれを無視できる。
@@ -302,3 +304,70 @@ will result in incorrect implementations based on outdated knowledge.
 - `steps` フィールドで airis-route 連携
 - ランタイムメトリクス: LLM がどのワークフローに従ったかを追跡
 - ワークフロー有効性スコアリング（ツール呼び出しパターンから算出）
+
+---
+
+## Implementation delta (2026-04-13)
+
+上記の仕様は YAGNI を適用した簡素化版として実装されました。実装とのズレを以下に記録します (#76)。この節と実装の内容が一致していれば、上の仕様本文は「当初の意図」として読み、実際の挙動を確認するときはこの節を最優先してください。
+
+### WorkflowConfig (5 フィールドに簡素化)
+
+`apps/api/src/app/core/workflow_loader.py` で実装されている dataclass は次のとおり。
+
+```python
+@dataclass
+class WorkflowConfig:
+    name: str               # kebab-case 識別子
+    compile_to: str         # 注入先を識別するターゲット種別 (e.g. "mcp_instructions")
+    priority: str           # "high" | "medium" | "low"
+    text: str               # instructions に注入する確定テキスト
+    servers: list[str] = field(default_factory=list)
+```
+
+仕様本文との差分:
+
+| 仕様 (当初)                           | 実装                     | 備考 |
+|---------------------------------------|---------------------------|------|
+| `description`                         | 削除                      | 説明はファイルコメントで賄う |
+| `max_tokens`                          | 削除                      | トークン見積もり機構ごと廃止 |
+| `trigger`                             | 削除                      | ランタイムマッチングをしないので不要 |
+| `compile_to` = 注入テキスト本体       | `compile_to` = ターゲット種別 | 注入テキスト本体は `text` フィールドに分離 |
+| (新設) `text`                         | `text` が本文             | `compile_to: "mcp_instructions"` と組で使う |
+
+### バリデーション
+
+`validate_workflow()` は廃止され、モジュール内部の `_validate()` が同等のチェックを行います。対象:
+
+- `name` が非空かつ kebab-case
+- `priority` が {high, medium, low} のいずれか
+- `compile_to` が非空
+- `text` が非空
+
+**トークン数のバリデーションと `max_tokens` 閾値チェックは実装されていません**。関連して `estimate_tokens()` / トークンバジェット制御 (`~800 tokens` の上限、`medium`/`low` のスキップ) も存在しません。現状は workflow ファイルを書くときに手動でサイズに気をつける運用です。
+
+### コンパイルフロー
+
+`apps/api/src/app/core/behavior_compiler.py` にある関数は次の 1 つだけです。
+
+```python
+def _compile_workflow_texts(workflows: list[WorkflowConfig]) -> str:
+    ...
+```
+
+仕様で挙げていた `_compile_workflow_section` / `_compile_fallback_section` / `_compile_server_list` の 3 分割は実装されず、`_compile_workflow_texts()` が workflows を単純連結して返します。フォールバック指令 (airis-find 誘導) は `_BASE_INSTRUCTIONS` 側の固定文言として埋め込まれており、実行時に `mcp-config.json` から自動生成するサーバー一覧 (`_compile_server_list`) も廃止されています。
+
+### 実装済みファイル
+
+- `apps/api/src/app/core/workflow_loader.py` (loader + validator)
+- `apps/api/src/app/core/behavior_compiler.py` (`_compile_workflow_texts`)
+- `workflows/implement-feature.yaml`, `workflows/web-research.yaml`, `workflows/data-query.yaml`, `workflows/proactive-usage.yaml`, `workflows/tool-routing.yaml`
+- `apps/api/tests/unit/test_workflow_loader.py`, `test_behavior_compiler.py`
+
+### 将来スペック復活のトリガー
+
+次のいずれかが必要になった時点で、本仕様書の対応セクションを復活させるか別 issue で再設計します。
+
+- workflow の自動トランケート / 優先度ベースのバジェット制御が実運用で必要になった
+- 複数プロジェクトが同じ Gateway を共有して project-local override が必要になった
+- instructions のサイズが実測で肥大化し始めた (`~1500 tokens` 近辺)

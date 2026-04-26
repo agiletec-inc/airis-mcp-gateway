@@ -79,5 +79,8 @@ Casks/
 # Binary artifacts
 mcp-publisher
 
-# Lock files (pnpm-lock managed per workspace)
+# Lock files — the TypeScript apps are standardised on npm (issue #81),
+# so we track package-lock.json and reject any stray pnpm-lock.yaml that
+# shows up from a developer running pnpm by accident.
 apps/*/pnpm-lock.yaml
+pnpm-lock.yaml

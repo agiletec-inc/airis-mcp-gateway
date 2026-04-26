@@ -4,6 +4,7 @@
   "description": "MCP server for controlling AIRIS MCP Gateway",
   "type": "module",
   "main": "dist/index.js",
+  "packageManager": "npm@10.9.7",
   "scripts": {
     "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
     "typecheck": "tsc --noEmit",
@@ -12,12 +13,17 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.28.0"
+    "@modelcontextprotocol/sdk": "^1.28.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "esbuild": "^0.27.1",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
+  },
+  "overrides": {
+    "hono": "^4.12.12",
+    "@hono/node-server": "^1.19.14"
   }
 }

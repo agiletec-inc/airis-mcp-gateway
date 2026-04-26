@@ -33,6 +33,52 @@ MCP_GATEWAY_URL = os.getenv("MCP_GATEWAY_URL", "http://gateway:9390")
 MCP_CONFIG_PATH = os.getenv("MCP_CONFIG_PATH", "/app/mcp-config.json")
 SHUTDOWN_TIMEOUT = int(os.getenv("SHUTDOWN_TIMEOUT", "30"))  # seconds
 
+# Retain strong references to background tasks so the GC does not collect
+# them mid-execution (see https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task).
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _spawn_background_task(
+    coro,
+    *,
+    name: str | None = None,
+    on_error=None,
+) -> asyncio.Task:
+    """Create a background task that survives until it finishes on its own."""
+    task = asyncio.create_task(coro, name=name)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    if on_error is not None:
+        task.add_done_callback(on_error)
+    return task
+
+
+async def _wait_for_docker_gateway(timeout: float = 30.0) -> bool:
+    """Poll the Docker Gateway /health endpoint until it responds 200.
+
+    Uses exponential backoff so warm restarts recover quickly (~100ms) and
+    cold starts do not flood the gateway with requests.
+
+    Returns True on success, False on timeout.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    delay = 0.1
+    gateway_url = MCP_GATEWAY_URL.rstrip("/")
+
+    async with httpx.AsyncClient(timeout=1.0) as client:
+        while loop.time() < deadline:
+            try:
+                resp = await client.get(f"{gateway_url}/health")
+                if resp.status_code == 200:
+                    return True
+            except (httpx.ConnectError, httpx.ReadTimeout, httpx.HTTPError):
+                pass
+            await asyncio.sleep(delay)
+            delay = min(delay * 1.5, 1.0)
+
+    return False
+
 
 async def _precache_docker_gateway_tools():
     """
@@ -47,8 +93,10 @@ async def _precache_docker_gateway_tools():
     """
     import json
 
-    # Wait for Gateway to be fully ready
-    await asyncio.sleep(2.0)
+    # Wait for the Gateway to accept /health instead of sleeping blindly.
+    if not await _wait_for_docker_gateway(timeout=30.0):
+        logger.warning("[Startup] Docker Gateway did not become ready in 30s; skipping precache")
+        return
 
     gateway_url = MCP_GATEWAY_URL.rstrip("/")
     logger.info(f"[Startup] Pre-caching Docker Gateway tools...")
@@ -129,12 +177,19 @@ async def _precache_docker_gateway_tools():
                         if data_str.startswith("{"):
                             try:
                                 data = json.loads(data_str)
-                                if data.get("id") == 2 and "result" in data:
-                                    docker_tools = data["result"].get("tools", [])
-                                    logger.info(f"[Startup] Received {len(docker_tools)} tools from Gateway")
-                                    break
-                            except json.JSONDecodeError:
-                                pass
+                            except json.JSONDecodeError as e:
+                                # Surface the failure so stuck precache is diagnosable.
+                                logger.warning(
+                                    "[Startup] Discarding non-JSON SSE data from Gateway: %s (raw=%s)",
+                                    e,
+                                    data_str[:200],
+                                )
+                                continue
+
+                            if data.get("id") == 2 and "result" in data:
+                                docker_tools = data["result"].get("tools", [])
+                                logger.info(f"[Startup] Received {len(docker_tools)} tools from Gateway")
+                                break
 
                 # Cancel sender if still running
                 if sender_task and not sender_task.done():
@@ -197,6 +252,11 @@ async def lifespan(app: FastAPI):
         logger.info(f"Process servers: {manager.get_server_names()}")
         logger.info(f"Enabled: {manager.get_enabled_servers()}")
 
+        # Subscribe the SSE fan-out so clients are notified whenever a
+        # server enters or leaves the HOT set (enable / disable / idle-kill).
+        from .api.endpoints.tools_list_notifier import install_tools_list_changed_fanout
+        install_tools_list_changed_fanout()
+
         # Pre-warm HOT servers to avoid cold start timeouts on first tools/list
         # This runs in parallel and ensures servers are ready before clients connect
         hot_servers = manager.get_hot_servers()
@@ -216,28 +276,62 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 logger.info(f"[Startup] Docker Gateway pre-cache task failed: {e}")
 
-        precache_task = asyncio.create_task(_precache_docker_gateway_tools())
-        precache_task.add_done_callback(_handle_precache_error)
+        _spawn_background_task(
+            _precache_docker_gateway_tools(),
+            name="precache_docker_gateway_tools",
+            on_error=_handle_precache_error,
+        )
 
     except Exception as e:
         logger.error(f"ProcessManager init failed: {e}")
 
-    # Start periodic cleanup of stale session queues
+    # Start periodic cleanup of stale session queues and stream bridges.
     async def _periodic_queue_cleanup():
         while True:
             await asyncio.sleep(600)  # every 10 minutes
             try:
-                removed = await mcp_proxy.cleanup_stale_queues()
-                if removed > 0:
-                    logger.info(f"Cleaned up {removed} stale session queue(s)")
+                removed_queues = await mcp_proxy.cleanup_stale_queues()
+                if removed_queues > 0:
+                    logger.info(f"Cleaned up {removed_queues} stale session queue(s)")
             except Exception as e:
                 logger.warning(f"Session queue cleanup error: {e}")
 
-    cleanup_task = asyncio.create_task(_periodic_queue_cleanup())
+            try:
+                removed_bridges = await mcp_proxy.cleanup_stale_stream_bridges()
+                if removed_bridges > 0:
+                    logger.info(f"Cleaned up {removed_bridges} stale stream bridge(s)")
+            except Exception as e:
+                logger.warning(f"Stream bridge cleanup error: {e}")
+
+    cleanup_task = _spawn_background_task(
+        _periodic_queue_cleanup(),
+        name="periodic_queue_cleanup",
+    )
+
+    # Start periodic cleanup of expired rate-limit entries so the in-memory
+    # store does not grow unbounded on long-running instances.
+    async def _periodic_rate_limit_cleanup():
+        from .middleware.rate_limit import get_rate_limit_store
+
+        store = get_rate_limit_store()
+        while True:
+            await asyncio.sleep(300)  # every 5 minutes
+            try:
+                removed = store.cleanup_expired()
+                if removed > 0:
+                    logger.info(f"Cleaned up {removed} expired rate-limit entries")
+            except Exception as e:
+                logger.warning(f"Rate limit cleanup error: {e}")
+
+    rate_limit_cleanup_task = _spawn_background_task(
+        _periodic_rate_limit_cleanup(),
+        name="periodic_rate_limit_cleanup",
+    )
 
     yield
 
     cleanup_task.cancel()
+    rate_limit_cleanup_task.cancel()
 
     # Graceful shutdown with timeout
     logger.info(f"Shutting down (timeout: {SHUTDOWN_TIMEOUT}s)...")

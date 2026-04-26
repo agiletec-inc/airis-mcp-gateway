@@ -1,0 +1,58 @@
+# Version control / CI metadata
+.git/
+.github/
+.gitignore
+.gitattributes
+
+# Python tooling / build artefacts
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+**/htmlcov/
+**/.tox/
+**/.venv/
+**/venv/
+**/*.egg-info/
+**/build/
+**/dist/
+
+# Node tooling / build artefacts
+**/node_modules/
+**/.next/
+**/.turbo/
+**/.pnpm-store/
+**/pnpm-lock.yaml.bak
+
+# Local developer caches
+.cache/
+.devbox/
+.vscode/
+.idea/
+.claude/
+.worktrees/
+.DS_Store
+
+# Secrets and environment files — never ship these in the image context
+.env
+.env.*
+!.env.example
+secrets/
+
+# Large local artefacts that are not needed in the build context
+docs/
+plans/
+testdata/
+tmp/
+*.log
+*.bak
+*.swp
+
+# Project-level cruft
+coverage/
+playwright-report/
+test-results/

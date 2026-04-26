@@ -18,8 +18,30 @@ import {
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { z, ZodSchema } from "zod";
 
 const API_URL = process.env.API_URL || "http://localhost:9400";
+
+// Tool argument schemas (issue #106). See airis-commands/src/index.ts for
+// the rationale: runtime-validated inputs instead of unchecked type casts.
+
+const ServerNameRequiredSchema = z.object({
+  server_name: z.string().min(1, "server_name must be a non-empty string"),
+});
+
+const ServerNameOptionalSchema = z.object({
+  server_name: z.string().min(1).optional(),
+});
+
+function parseArgs<T>(schema: ZodSchema<T>, raw: unknown, toolName: string): T {
+  const result = schema.safeParse(raw ?? {});
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    const path = issue.path.join(".") || "<root>";
+    throw new Error(`Invalid arguments for ${toolName}: ${path}: ${issue.message}`);
+  }
+  return result.data;
+}
 
 interface ServerStatus {
   name: string;
@@ -51,10 +73,6 @@ interface ToolsStatusResponse {
     active_clients?: number;
     total_events_sent?: number;
   };
-}
-
-interface ServerArgs {
-  server_name?: string;
 }
 
 async function fetchApi<T = unknown>(path: string, options?: RequestInit): Promise<T> {
@@ -193,10 +211,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "gateway_enable_server": {
-        const serverName = (args as ServerArgs | undefined)?.server_name;
-        if (!serverName) {
-          throw new Error("server_name is required");
-        }
+        const { server_name: serverName } = parseArgs(
+          ServerNameRequiredSchema,
+          args,
+          "gateway_enable_server",
+        );
 
         const result = await fetchApi<{ state: string }>(`/process/servers/${serverName}/enable`, {
           method: "POST",
@@ -213,10 +232,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "gateway_disable_server": {
-        const serverName = (args as ServerArgs | undefined)?.server_name;
-        if (!serverName) {
-          throw new Error("server_name is required");
-        }
+        const { server_name: serverName } = parseArgs(
+          ServerNameRequiredSchema,
+          args,
+          "gateway_disable_server",
+        );
 
         const result = await fetchApi<{ state: string }>(`/process/servers/${serverName}/disable`, {
           method: "POST",
@@ -233,10 +253,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "gateway_get_server_status": {
-        const serverName = (args as ServerArgs | undefined)?.server_name;
-        if (!serverName) {
-          throw new Error("server_name is required");
-        }
+        const { server_name: serverName } = parseArgs(
+          ServerNameRequiredSchema,
+          args,
+          "gateway_get_server_status",
+        );
 
         const result = await fetchApi<ServerStatus>(`/process/servers/${serverName}`);
 
@@ -251,7 +272,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "gateway_list_tools": {
-        const serverName = (args as ServerArgs | undefined)?.server_name;
+        const { server_name: serverName } = parseArgs(
+          ServerNameOptionalSchema,
+          args,
+          "gateway_list_tools",
+        );
         const path = serverName
           ? `/process/tools?server=${serverName}`
           : "/process/tools";

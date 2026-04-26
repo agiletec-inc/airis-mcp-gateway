@@ -2,6 +2,20 @@
 MCP Proxy Endpoint with OpenMCP Lazy Loading Pattern
 
 Claude Code → FastAPI (/mcp/sse) → Docker MCP Gateway (http://mcp-gateway:9390/sse)
+
+This module is being split by responsibility as part of issue #86. The bits
+that still live here are the SSE proxy streaming loop, the JSON-RPC proxy
+routing, the Dynamic MCP handlers, and the FastAPI routes. Everything else
+has moved to sibling modules:
+
+* :mod:`session_queue` — per-session response queue lifecycle
+* :mod:`sse_protocol` — SSE wire-format helpers (buffer, encode, decode)
+* :mod:`tool_shaping` — tools/list / prompts/list response rewriting
+* :mod:`gateway_stream_bridge` — Streamable HTTP ↔ Gateway SSE bridge
+
+The symbols that other modules and tests import from ``mcp_proxy`` (such as
+``cleanup_stale_queues``, ``_stream_bridge_sessions``, ``apply_schema_partitioning``)
+are re-exported at the bottom of this file so those call sites keep working.
 """
 
 from fastapi import APIRouter, Request, Response
@@ -10,10 +24,7 @@ from typing import Any, AsyncGenerator, Dict, Optional
 import httpx
 import json
 import asyncio
-from dataclasses import dataclass, field
-from contextlib import suppress
-from urllib.parse import urlparse, parse_qs
-import uuid
+import time as _time_module
 from ...core.schema_partitioning import schema_partitioner
 from ...core.config import settings
 from ...core.protocol_logger import protocol_logger
@@ -22,6 +33,47 @@ from ...core.dynamic_mcp import get_dynamic_mcp
 from ...core.behavior_compiler import compile_instructions
 from ...core.logging import get_logger
 from ...core.mcp_config_loader import ServerMode
+
+# Responsibility-split modules. Imported with their public names so the rest
+# of this file reads as if the helpers were still local.
+from .session_queue import (
+    _SESSION_QUEUE_TTL_SECONDS,
+    _session_queues_lock,
+    _session_response_queues,
+    cleanup_stale_queues,
+    get_response_queue,
+    get_session_queue_count,
+    remove_response_queue,
+)
+from .sse_protocol import (
+    SSEEventBuffer,
+    format_sse_event as _format_sse_event,
+    parse_sse_json as _parse_sse_json,
+)
+from .tool_shaping import (
+    DescriptionMode,
+    apply_prompts_merging,
+    apply_schema_partitioning,
+    extract_server_name_from_tool as _extract_server_name_from_tool,
+    summarize_description as _summarize_description,
+)
+from .gateway_stream_bridge import (
+    STREAM_BRIDGE_READY_DELAY,
+    STREAM_TIMEOUT,
+    StreamBridgeSession,
+    _stream_bridge_lock,
+    _stream_bridge_sessions,
+    cleanup_stale_stream_bridges,
+    close_stream_bridge_session as _close_stream_bridge_session,
+    delete_stream_bridge_session as _delete_stream_bridge_session,
+    extract_gateway_session_id as _extract_gateway_session_id,
+    get_or_create_stream_bridge_session as _get_or_create_stream_bridge_session,
+    get_response_message_id as _get_response_message_id,
+    get_stream_bridge_count,
+    get_stream_session_id as _get_stream_session_id,
+    send_via_stream_bridge as _send_via_stream_bridge,
+    stream_session_header_name as _stream_session_header_name,
+)
 
 logger = get_logger(__name__)
 
@@ -74,520 +126,6 @@ def get_jsonrpc_timeout() -> httpx.Timeout:
         write=10.0,
         pool=10.0
     )
-
-# Session-based response queues for ProcessManager responses
-# MCP SSE Transport: responses must be sent via SSE stream, not HTTP response body
-# Each entry stores (queue, last_access_timestamp)
-import time as _time_module
-
-_session_response_queues: dict[str, tuple[asyncio.Queue, float]] = {}
-_session_queues_lock = asyncio.Lock()
-_SESSION_QUEUE_TTL_SECONDS = 3600  # 1 hour
-_stream_bridge_sessions: dict[str, "StreamBridgeSession"] = {}
-_stream_bridge_lock = asyncio.Lock()
-
-
-async def get_response_queue(session_id: str) -> asyncio.Queue:
-    """Get or create a response queue for a session (thread-safe)."""
-    now = _time_module.time()
-    async with _session_queues_lock:
-        if session_id in _session_response_queues:
-            queue, _ = _session_response_queues[session_id]
-            _session_response_queues[session_id] = (queue, now)
-            return queue
-        queue: asyncio.Queue = asyncio.Queue()
-        _session_response_queues[session_id] = (queue, now)
-        return queue
-
-
-async def remove_response_queue(session_id: str):
-    """Remove a response queue when session ends (thread-safe)."""
-    async with _session_queues_lock:
-        _session_response_queues.pop(session_id, None)
-
-
-async def cleanup_stale_queues() -> int:
-    """Remove stale session queues that have been inactive for TTL seconds.
-
-    Returns:
-        Number of queues removed.
-    """
-    now = _time_module.time()
-    threshold = now - _SESSION_QUEUE_TTL_SECONDS
-    removed = 0
-    async with _session_queues_lock:
-        stale_sessions = [
-            sid for sid, (_, last_access) in _session_response_queues.items()
-            if last_access < threshold
-        ]
-        for sid in stale_sessions:
-            _session_response_queues.pop(sid, None)
-            logger.info("Cleaned up stale session queue: %s", sid)
-            removed += 1
-    return removed
-
-
-def get_session_queue_count() -> int:
-    """Get current number of session queues (for monitoring)."""
-    return len(_session_response_queues)
-
-
-class DescriptionMode:
-    """Description verbosity modes for tools/list responses."""
-    FULL = "full"      # Original description (no truncation)
-    SUMMARY = "summary"  # First sentence, max 160 chars (default)
-    BRIEF = "brief"    # Very short, max 60 chars
-    NONE = "none"      # No description (minimal tokens)
-
-
-def _summarize_description(
-    description: str,
-    mode: str = DescriptionMode.SUMMARY,
-    max_length: int | None = None
-) -> str:
-    """
-    Generate a compact summary for tools/list responses.
-
-    Args:
-        description: Original description text
-        mode: One of "full", "summary", "brief", "none"
-        max_length: Override max length (optional)
-
-    Returns:
-        Processed description or empty string
-    """
-    if not description:
-        return ""
-
-    if mode == DescriptionMode.NONE:
-        return ""
-
-    text = description.strip()
-    if not text:
-        return ""
-
-    if mode == DescriptionMode.FULL:
-        return text
-
-    # Determine max length based on mode
-    if max_length is None:
-        max_length = 160 if mode == DescriptionMode.SUMMARY else 60
-
-    # Extract first sentence
-    for delimiter in [". ", "。", "！", "?", "？", "\n"]:
-        idx = text.find(delimiter)
-        if 0 < idx:
-            if delimiter == "\n":
-                text = text[:idx]
-            else:
-                text = text[: idx + len(delimiter.strip())]
-            break
-
-    if len(text) > max_length:
-        text = text[: max_length - 1].rstrip() + "…"
-
-    return text
-
-
-def _extract_server_name_from_tool(tool_name: str) -> Optional[str]:
-    """
-    ツール名からMCPサーバー名を推測して抽出
-
-    Rules:
-    1. expandSchema → None (特殊ツール、常に有効)
-    2. mindbase_*, github_*, tavily_* → prefix部分がサーバー名
-    3. read_file, write_file, list_dir → filesystem or serena (曖昧)
-    4. find_symbol, find_referencing_symbols → serena
-    5. get_time, fetch_url → built-in (always enabled)
-
-    Args:
-        tool_name: ツール名
-
-    Returns:
-        サーバー名 or None (判定不能/常時有効)
-    """
-    if not tool_name:
-        return None
-
-    # expandSchema is a special tool (generated by Proxy)
-    if tool_name == "expandSchema":
-        return None
-
-    # Built-in servers (auto-enabled via --servers at Gateway startup, not stored in DB)
-    builtin_tools = {
-        "get_time", "get_current_time",
-        "fetch", "fetch_url",
-        "git_status", "git_diff", "git_commit", "git_push",
-        "read_memory", "write_memory", "delete_memory"
-    }
-    if tool_name in builtin_tools:
-        return None  # Built-in servers are always enabled
-
-    # Extract prefix by underscore separator
-    parts = tool_name.split("_")
-    if len(parts) >= 2:
-        prefix = parts[0]
-
-        # Known server name patterns
-        known_servers = {
-            "mindbase", "github", "tavily", "stripe", "twilio",
-            "supabase", "notion", "slack", "figma", "cloudflare",
-            "docker", "postgres", "mongodb", "sqlite"
-        }
-
-        if prefix in known_servers:
-            return prefix
-
-    # Ambiguous tools between filesystem and serena
-    # -> Treat as filesystem for now (serena has distinctive tools like find_symbol)
-    filesystem_tools = {
-        "read_file", "write_file", "create_file", "delete_file",
-        "list_dir", "list_directory", "search_files",
-        "read_text_file", "read_media_file", "read_multiple_files", "edit_file"
-    }
-    if tool_name in filesystem_tools:
-        return "filesystem"
-
-    # Serena-specific tools
-    serena_tools = {
-        "find_symbol", "find_referencing_symbols", "get_symbols_overview",
-        "insert_after_symbol", "replace_symbol", "delete_symbol",
-        "activate_project", "switch_modes"
-    }
-    if tool_name in serena_tools:
-        return "serena"
-
-    # context7 tools
-    if tool_name.startswith("context7_") or tool_name in ["search_docs", "get_documentation"]:
-        return "context7"
-
-    # sequential-thinking tools
-    if tool_name in ["think", "sequential_think", "reasoning"]:
-        return "sequential-thinking"
-
-    # gateway-control tools
-    if tool_name in ["list_mcp_servers", "enable_mcp_server", "disable_mcp_server", "get_mcp_server_status"]:
-        return "airis-mcp-gateway-control"
-
-    # playwright/puppeteer tools
-    if any(keyword in tool_name for keyword in ["browser", "page", "click", "navigate", "screenshot"]):
-        # Need more detailed detection, but treat as playwright for now
-        return "playwright"
-
-    # Cannot determine -> use first part as server name
-    return parts[0] if parts else None
-
-
-class SSEEventBuffer:
-    """Buffers SSE lines and emits complete events atomically."""
-
-    def __init__(self):
-        self.buffer: list[str] = []
-
-    def add_line(self, line: str) -> Optional[str]:
-        """Add a line. Returns complete event string when a blank line is seen."""
-        if line.startswith(":"):
-            # SSE comment (keepalive) — pass through immediately
-            return f"{line}\n\n"
-        if line == "":
-            if self.buffer:
-                complete_event = "\n".join(self.buffer) + "\n\n"
-                self.buffer = []
-                return complete_event
-            return None
-        else:
-            self.buffer.append(line)
-            return None
-
-    def flush(self) -> Optional[str]:
-        """Flush any remaining buffered lines."""
-        if self.buffer:
-            complete_event = "\n".join(self.buffer) + "\n\n"
-            self.buffer = []
-            return complete_event
-        return None
-
-
-@dataclass
-class StreamBridgeSession:
-    """Bridges a Streamable HTTP client session onto a Gateway SSE session."""
-
-    public_session_id: str
-    backend_session_id: str
-    client: httpx.AsyncClient
-    stream_context: Any
-    stream_response: httpx.Response
-    response_queue: asyncio.Queue = field(default_factory=asyncio.Queue)
-    closed: bool = False
-    reader_task: Optional[asyncio.Task] = None
-    created_at: float = field(default_factory=_time_module.monotonic)
-
-    async def close(self) -> None:
-        if self.closed:
-            return
-        self.closed = True
-        if self.reader_task is not None:
-            self.reader_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await self.reader_task
-        await self.stream_response.aclose()
-        await self.stream_context.__aexit__(None, None, None)
-        await self.client.aclose()
-
-
-def _stream_session_header_name() -> str:
-    return "Mcp-Session-Id"
-
-
-def _get_stream_session_id(request: Request) -> Optional[str]:
-    return request.headers.get(_stream_session_header_name())
-
-
-def _extract_gateway_session_id(endpoint_url: str) -> Optional[str]:
-    parsed = urlparse(endpoint_url)
-    session_ids = parse_qs(parsed.query).get("sessionid")
-    if session_ids:
-        return session_ids[0]
-    return None
-
-
-def _get_response_message_id(payload: Any) -> Any:
-    if not isinstance(payload, dict):
-        return None
-    if "id" in payload:
-        return payload.get("id")
-    if payload.get("method") == "notifications/initialized":
-        return "__initialized__"
-    return None
-
-
-async def _transform_gateway_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Apply the same response shaping used by the SSE proxy to JSON payloads."""
-    if isinstance(payload, dict) and "result" in payload and "tools" in payload.get("result", {}):
-        payload = await apply_schema_partitioning(payload)
-
-    if isinstance(payload, dict) and "result" in payload and "prompts" in payload.get("result", {}):
-        payload = await apply_prompts_merging(payload)
-
-    is_initialize_response = (
-        isinstance(payload, dict) and
-        "result" in payload and
-        isinstance(payload.get("result"), dict) and
-        "protocolVersion" in payload.get("result", {})
-    )
-    if is_initialize_response:
-        from ...core.mcp_config_loader import load_mcp_config
-        server_configs = load_mcp_config()
-        payload["result"]["instructions"] = compile_instructions(server_configs)
-
-    return payload
-
-
-async def _stream_bridge_reader(session: StreamBridgeSession) -> None:
-    """Read Gateway SSE events and fan out JSON-RPC payloads to the bridge queue."""
-    pending_lines: list[str] = []
-    try:
-        async for raw_line in session.stream_response.aiter_lines():
-            line = raw_line.strip()
-            if line == "":
-                payload = _parse_sse_json(pending_lines)
-                pending_lines = []
-                if payload is None:
-                    continue
-                transformed = await _transform_gateway_payload(payload)
-                await session.response_queue.put(transformed)
-            else:
-                pending_lines.append(line)
-    except asyncio.CancelledError:
-        raise
-    except Exception as exc:
-        logger.warning("Stream bridge reader stopped for %s: %s", session.public_session_id, exc)
-    finally:
-        if pending_lines:
-            payload = _parse_sse_json(pending_lines)
-            if payload is not None:
-                transformed = await _transform_gateway_payload(payload)
-                await session.response_queue.put(transformed)
-        await session.response_queue.put({
-            "jsonrpc": "2.0",
-            "error": {"code": -32000, "message": "Gateway SSE bridge disconnected"},
-        })
-
-
-async def _open_stream_bridge_session() -> StreamBridgeSession:
-    """Create a persistent bridge session for Streamable HTTP clients."""
-    client = httpx.AsyncClient(timeout=STREAM_TIMEOUT)
-    gateway_sse_url = f"{settings.MCP_GATEWAY_URL.rstrip('/')}/sse"
-    stream_context = client.stream(
-        "GET",
-        gateway_sse_url,
-        headers={"Accept": "text/event-stream"},
-    )
-    try:
-        stream_response = await stream_context.__aenter__()
-        backend_session_id: Optional[str] = None
-        async for raw_line in stream_response.aiter_lines():
-            line = raw_line.strip()
-            if not line.startswith("data:"):
-                continue
-            data_str = line[5:].strip()
-            if data_str.startswith("{") or data_str.startswith("["):
-                continue
-            backend_session_id = _extract_gateway_session_id(data_str)
-            if backend_session_id:
-                break
-        if not backend_session_id:
-            raise RuntimeError("Gateway did not provide an SSE session id")
-
-        session = StreamBridgeSession(
-            public_session_id=f"airis-{uuid.uuid4().hex}",
-            backend_session_id=backend_session_id,
-            client=client,
-            stream_context=stream_context,
-            stream_response=stream_response,
-        )
-        session.reader_task = asyncio.create_task(_stream_bridge_reader(session))
-        return session
-    except Exception:
-        await stream_context.__aexit__(None, None, None)
-        await client.aclose()
-        raise
-
-
-async def _get_or_create_stream_bridge_session(request: Request, *, create: bool) -> Optional[StreamBridgeSession]:
-    public_session_id = _get_stream_session_id(request)
-    if public_session_id:
-        async with _stream_bridge_lock:
-            return _stream_bridge_sessions.get(public_session_id)
-    if not create:
-        return None
-    session = await _open_stream_bridge_session()
-    async with _stream_bridge_lock:
-        _stream_bridge_sessions[session.public_session_id] = session
-    return session
-
-
-async def _close_stream_bridge_session(public_session_id: str) -> None:
-    async with _stream_bridge_lock:
-        session = _stream_bridge_sessions.pop(public_session_id, None)
-    if session is not None:
-        await session.close()
-
-
-async def _send_via_stream_bridge(
-    request: Request,
-    rpc_request: Dict[str, Any],
-) -> Response:
-    create_session = rpc_request.get("method") == "initialize"
-    try:
-        session = await _get_or_create_stream_bridge_session(request, create=create_session)
-    except Exception as exc:
-        logger.error("Failed to open stream bridge session: %s", exc)
-        return Response(
-            content=json.dumps({
-                "jsonrpc": "2.0",
-                "id": rpc_request.get("id"),
-                "error": {"code": -32000, "message": f"Failed to open Gateway session: {exc}"},
-            }),
-            status_code=502,
-            media_type="application/json",
-        )
-    if session is None:
-        return Response(
-            content=json.dumps({
-                "jsonrpc": "2.0",
-                "id": rpc_request.get("id"),
-                "error": {"code": -32001, "message": "Unknown or expired MCP session"},
-            }),
-            status_code=400,
-            media_type="application/json",
-        )
-
-    # The Docker Gateway can briefly reject the first POST after the SSE stream
-    # opens with "session not found". Let the backend session settle first.
-    session_age = _time_module.monotonic() - session.created_at
-    if session_age < STREAM_BRIDGE_READY_DELAY:
-        await asyncio.sleep(STREAM_BRIDGE_READY_DELAY - session_age)
-
-    target_url = f"{settings.MCP_GATEWAY_URL.rstrip('/')}/sse?sessionid={session.backend_session_id}"
-    expected_id = _get_response_message_id(rpc_request)
-
-    try:
-        response = await session.client.post(
-            target_url,
-            json=rpc_request,
-            headers={"Content-Type": "application/json"},
-        )
-    except Exception as exc:
-        logger.error("Failed to send bridged request to Gateway: %s", exc)
-        return Response(
-            content=json.dumps({
-                "jsonrpc": "2.0",
-                "id": rpc_request.get("id"),
-                "error": {"code": -32000, "message": f"Failed to reach Gateway session: {exc}"},
-            }),
-            status_code=502,
-            media_type="application/json",
-            headers={_stream_session_header_name(): session.public_session_id},
-        )
-    if response.status_code not in (200, 202):
-        return Response(
-            content=response.text,
-            status_code=response.status_code,
-            media_type=response.headers.get("content-type"),
-        )
-
-    if "id" not in rpc_request:
-        return Response(status_code=202, headers={_stream_session_header_name(): session.public_session_id})
-
-    while True:
-        try:
-            payload = await asyncio.wait_for(
-                session.response_queue.get(),
-                timeout=settings.TOOL_CALL_TIMEOUT,
-            )
-        except asyncio.TimeoutError:
-            return Response(
-                content=json.dumps({
-                    "jsonrpc": "2.0",
-                    "id": rpc_request.get("id"),
-                    "error": {"code": -32001, "message": "Timed out waiting for Gateway response"},
-                }),
-                status_code=504,
-                media_type="application/json",
-                headers={_stream_session_header_name(): session.public_session_id},
-            )
-        if (
-            isinstance(payload, dict) and
-            payload.get("error", {}).get("message") == "Gateway SSE bridge disconnected"
-        ):
-            await _close_stream_bridge_session(session.public_session_id)
-            return Response(
-                content=json.dumps({
-                    "jsonrpc": "2.0",
-                    "id": rpc_request.get("id"),
-                    "error": {"code": -32000, "message": "Gateway session disconnected"},
-                }),
-                status_code=502,
-                media_type="application/json",
-            )
-
-        if expected_id is None or _get_response_message_id(payload) == expected_id:
-            return Response(
-                content=json.dumps(payload),
-                status_code=200,
-                media_type="application/json",
-                headers={_stream_session_header_name(): session.public_session_id},
-            )
-
-
-async def _delete_stream_bridge_session(request: Request) -> Response:
-    public_session_id = _get_stream_session_id(request)
-    if not public_session_id:
-        return Response(status_code=204)
-    await _close_stream_bridge_session(public_session_id)
-    return Response(status_code=204)
-
 
 async def proxy_sse_stream(request: Request):
     """

@@ -96,7 +96,10 @@ jobs:
       - name: Install dependencies
         run: |
           cd apps/${{ matrix.package }}
-          npm install
+          # npm ci enforces that package-lock.json is in sync with
+          # package.json so a developer who forgot to regenerate the
+          # lockfile fails the build instead of silently drifting.
+          npm ci
 
       - name: Run tests
         run: |
@@ -123,8 +126,11 @@ jobs:
       - name: Run airis-gateway smoke tests
         run: bash scripts/test-airis-gateway-smoke.sh
 
-  # Auto-merge next to main
-  merge-to-main:
+  # Open or update a pull request from stg to main so the branch protection
+  # ruleset on main (which requires PRs) is satisfied. A previous version of
+  # this job tried to push directly to main and was always rejected by the
+  # ruleset.
+  open-pr-to-main:
     needs: [test-python, build-typescript, test-shell]
     if: |
       always() &&
@@ -133,24 +139,54 @@ jobs:
       !contains(needs.*.result, 'failure')
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Configure git
+      - name: Report stg status for promotion to main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
+          set -euo pipefail
 
-      - name: Merge stg to main
-        run: |
-          git fetch origin main
-          git checkout main
-          git merge origin/stg --no-edit
-          git push origin main
+          # Skip if stg is already contained in main (nothing to ship).
+          if git merge-base --is-ancestor origin/stg origin/main; then
+            echo "stg is already merged into main; nothing to do."
+            exit 0
+          fi
 
-          echo "✅ Merged stg → main"
+          existing_pr=$(gh pr list \
+            --base main \
+            --head stg \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+
+          if [ -n "${existing_pr}" ]; then
+            echo "Existing PR #${existing_pr} is open for stg -> main. Commenting with the new commit."
+            gh pr comment "${existing_pr}" --body \
+              "New commit landed on \`stg\` (${GITHUB_SHA}). CI passed — ready for review."
+            exit 0
+          fi
+
+          # No PR exists and GitHub Actions is not permitted to open one (the
+          # repo policy "Allow GitHub Actions to create and approve pull
+          # requests" is disabled). Report a green status with instructions so
+          # the CI stays actionable without a failing job.
+          cat <<EOT
+          No open PR from stg to main. stg has commits that need to be promoted.
+          Create the promotion PR manually with:
+
+              gh pr create --base main --head stg \\
+                --title "stg -> main: promotion" \\
+                --body "Promoting stg to main."
+
+          (GitHub Actions cannot open the PR automatically because the repo
+          setting "Allow GitHub Actions to create and approve pull requests"
+          is disabled. Enable it under Settings -> Actions -> General if you
+          want this job to create the PR itself.)
+          EOT

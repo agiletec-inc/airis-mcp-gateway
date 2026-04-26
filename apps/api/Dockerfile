@@ -1,10 +1,19 @@
+# syntax=docker/dockerfile:1.7
 # FastAPI Hybrid MCP Gateway
 # Supports both Docker MCP Gateway proxy and direct uvx/npx process management
 # Includes browser automation support for Playwright and chrome-devtools MCP servers
-FROM python:3.12-slim
+#
+# Base image is pinned to a specific patch version (issue #77). Refresh this
+# tag via `docker pull python:3.12.13-slim-trixie` and verify `airis test`
+# before bumping.
+FROM python:3.12.13-slim-trixie
 
-# Install system dependencies including Chromium for browser automation
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Keep apt lists across layers in a BuildKit cache so repeated builds don't
+# re-download the same packages. rm -rf is NOT needed because the cache mount
+# is not written into the image layer.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
     # Chromium browser for Playwright/chrome-devtools MCP servers
@@ -41,16 +50,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
     libasound2 \
     fonts-liberation \
-    fonts-noto-color-emoji \
-    && rm -rf /var/lib/apt/lists/*
+    fonts-noto-color-emoji
 
 # Install Node.js (for npx MCP servers)
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y nodejs \
-    && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs
 
 # Install uv (for uvx MCP servers)
-RUN pip install --no-cache-dir uv
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install uv
 
 # Configure browser paths for MCP servers
 ENV PLAYWRIGHT_BROWSERS_PATH=/app/.cache/ms-playwright
@@ -71,32 +81,51 @@ RUN mkdir -p /app/.cache/ms-playwright
 RUN node --version && npm --version && npx --version && uvx --help || true
 RUN chromium --version || echo "Chromium installed at /usr/bin/chromium"
 
-# Pre-install Playwright Chromium (uses system chromium, installs dependencies)
-RUN npx playwright install chromium --with-deps || echo "Playwright will use system Chromium"
+# Pre-install Playwright Chromium (uses system chromium, installs dependencies).
+# Use /tmp/playwright-cache as a temporary BuildKit cache; the final browsers
+# live under PLAYWRIGHT_BROWSERS_PATH (/app/.cache/ms-playwright) and are not
+# cached because they must stay in the final image.
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    npx playwright install chromium --with-deps || echo "Playwright will use system Chromium"
 
 WORKDIR /app
 
-# Copy MCP server sources and build them (bundled with esbuild, no node_modules needed at runtime)
+# Copy MCP server sources and build them (bundled with esbuild, no node_modules needed at runtime).
+# package.json / tsconfig.json are copied BEFORE src/ so that source-only changes
+# reuse the cached npm install layer.
+#
 # Build gateway-control
+# Use `npm ci` so the lockfile must be in sync (issue #81).
 COPY apps/gateway-control/package*.json /tmp/gateway-control/
-COPY apps/gateway-control/src /tmp/gateway-control/src/
 COPY apps/gateway-control/tsconfig.json /tmp/gateway-control/
-RUN cd /tmp/gateway-control && npm install && npm run build \
-    && mkdir -p /app/gateway-control && cp dist/index.js /app/gateway-control/ \
+COPY apps/gateway-control/src /tmp/gateway-control/src/
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    cd /tmp/gateway-control \
+    && npm ci \
+    && npm run build \
+    && mkdir -p /app/gateway-control \
+    && cp dist/index.js /app/gateway-control/ \
     && rm -rf /tmp/gateway-control
 
 # Build airis-commands
 COPY apps/airis-commands/package*.json /tmp/airis-commands/
-COPY apps/airis-commands/src /tmp/airis-commands/src/
 COPY apps/airis-commands/tsconfig.json /tmp/airis-commands/
-RUN cd /tmp/airis-commands && npm install && npm run build \
-    && mkdir -p /app/airis-commands && cp dist/index.js /app/airis-commands/ \
+COPY apps/airis-commands/src /tmp/airis-commands/src/
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    cd /tmp/airis-commands \
+    && npm ci \
+    && npm run build \
+    && mkdir -p /app/airis-commands \
+    && cp dist/index.js /app/airis-commands/ \
     && rm -rf /tmp/airis-commands
 
-# Copy Python API source and install
+# Copy Python API source and install. `-e .` requires the source tree, so we
+# keep the single COPY; the uv cache mount still speeds up repeat builds by
+# reusing the downloaded wheels.
 COPY apps/api /app/api-src
 WORKDIR /app/api-src
-RUN uv pip install --system -e .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system -e .
 
 # Copy config files (can be overridden by volume mounts)
 COPY mcp-config.json.example /app/mcp-config.json
