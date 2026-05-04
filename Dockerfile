@@ -32,7 +32,7 @@ ENTRYPOINT ["./entrypoint.sh"]
 ###########################################
 FROM node:24.9.0-alpine3.20 AS settings-builder
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
 WORKDIR /monorepo
 
 COPY package.json pnpm-workspace.yaml ./
@@ -60,8 +60,8 @@ CMD ["sh", "-c", "envsubst '$$UI_PORT $$API_PROXY_URL' < /etc/nginx/templates/de
 # Gateway (docker/mcp-gateway base)
 ###########################################
 # NOTE: docker/mcp-gateway does not publish versioned tags on Docker Hub, so
-# we track :latest here. Pin by digest once upstream tags are available.
-FROM docker/mcp-gateway:latest AS gateway
+# we pin by digest (issue #77).
+FROM docker/mcp-gateway@sha256:f79574a3f86603ad65fd5c04f1251a2f2ecda56c1df76ed4418c1c11401c9432 AS gateway
 
 LABEL maintainer="AIRIS MCP Gateway Team"
 LABEL description="AIRIS MCP Gateway - Centralized MCP Server routing with docker/mcp-gateway"
@@ -75,7 +75,7 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=40s \
 ###########################################
 FROM node:24.9.0-alpine3.20 AS mindbase-builder
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
 WORKDIR /app
 CMD ["sh", "-c", "pnpm install && pnpm build && sleep infinity"]
 

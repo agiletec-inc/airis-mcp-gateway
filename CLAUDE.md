@@ -36,10 +36,14 @@ The API in `apps/api/src/app/api/endpoints/` is split into focused modules:
 
 ### HOT/COLD server split
 
-- **HOT**: ProcessManager process servers (uvx/npx) always listed in `tools/list` — start on first call, idle-kill after 120s.
+- **HOT**: ProcessManager process servers (uvx/npx/airis) always listed in `tools/list` — pre-warmed at API startup, never idle-killed. Default HOT set: `context7`, `airis-mcp-gateway-control`, `airis-workspace`.
 - **COLD**: Docker Gateway backend servers — not listed directly; accessed via `airis-exec <server>:<tool>`, auto-enabled on first call.
 
 In DYNAMIC_MCP mode, `tools/list` returns only meta-tools + currently active HOT server tools. Full tool discovery goes through `airis-find`.
+
+The `airis` CLI itself is baked into the gateway image (see `apps/api/Dockerfile`, fetched from the airis-workspace GitHub release pinned via `AIRIS_VERSION`), so `airis-workspace`'s 11 tools (`workspace_init`, `workspace_gen`, `workspace_doctor`, `workspace_status`, `manifest_validate`, `manifest_apply`, `migration_execute`, etc.) are available out of the box without host installation. The gateway container mounts `${HOST_WORKSPACE_DIR:-${HOME}/github}` at `/workspace` so those tools can operate on real projects.
+
+Note on JSON-RPC tolerance: airis-workspace emits `"error": null` alongside successful results. The gateway treats that as "no error" (see `process_runner._initialize` and the `tools/call` paths in `mcp_proxy.py` / `process_mcp.py`). New servers with the same quirk will work transparently.
 
 ### Schema partitioning
 

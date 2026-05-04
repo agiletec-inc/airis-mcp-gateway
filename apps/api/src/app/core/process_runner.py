@@ -344,7 +344,11 @@ class ProcessRunner:
             # Use configurable timeout for servers that download dependencies on startup
             response = await self._send_request(init_request, timeout=settings.TOOL_CALL_TIMEOUT)
 
-            if "error" in response:
+            # Some MCP servers (e.g. airis-workspace) emit `"error": null` alongside
+            # a successful `result`. JSON-RPC 2.0 §5 says responses MUST contain
+            # either `result` or `error`, but `null` is JSON-valid and we should
+            # treat it as "no error" rather than rejecting the handshake.
+            if response.get("error") is not None:
                 error_msg = str(response['error'])
                 logger.error(f"{self.config.name} initialize failed: {error_msg}")
                 self._last_error = error_msg

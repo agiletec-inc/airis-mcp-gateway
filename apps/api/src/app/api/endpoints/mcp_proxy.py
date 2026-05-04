@@ -1034,8 +1034,12 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
             logger.info(f"Trying ProcessManager for prompt: {prompt_name}")
             server_response = await process_manager.get_prompt(prompt_name, arguments)
 
-            # Fall back to Docker Gateway if prompt not found
-            if "error" in server_response and server_response["error"].get("code") == -32601:
+            # Fall back to Docker Gateway if prompt not found.
+            # Some MCP servers (e.g. airis-workspace) return `"error": null` alongside
+            # a successful result, so we must treat null/None as "no error" rather
+            # than checking key presence.
+            server_error = server_response.get("error") if isinstance(server_response, dict) else None
+            if server_error is not None and server_error.get("code") == -32601:
                 logger.info(f"Prompt {prompt_name} not found in ProcessManager, falling through to Gateway")
             else:
                 # Build JSON-RPC response using client's request ID
@@ -1044,8 +1048,8 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
                     "id": rpc_request.get("id"),
                 }
                 # Extract result or error from server response
-                if "error" in server_response:
-                    response_data["error"] = server_response["error"]
+                if server_error is not None:
+                    response_data["error"] = server_error
                 else:
                     response_data["result"] = server_response.get("result")
 
@@ -1083,9 +1087,12 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
                     "jsonrpc": "2.0",
                     "id": rpc_request.get("id"),
                 }
-                # Extract result or error from server response
-                if "error" in server_response:
-                    response_data["error"] = server_response["error"]
+                # Extract result or error from server response.
+                # Treat `"error": null` as "no error" — some servers (e.g.
+                # airis-workspace) emit it alongside a successful result.
+                server_error = server_response.get("error") if isinstance(server_response, dict) else None
+                if server_error is not None:
+                    response_data["error"] = server_error
                 else:
                     response_data["result"] = server_response.get("result")
 
@@ -1587,8 +1594,10 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
                 "jsonrpc": "2.0",
                 "id": rpc_request.get("id"),
             }
-            if "error" in result:
-                error_msg = result["error"].get("message", "")
+            # `"error": null` alongside a result is "no error" — see airis-workspace.
+            inner_error = result.get("error") if isinstance(result, dict) else None
+            if inner_error is not None:
+                error_msg = inner_error.get("message", "")
                 # Attach schema hint so LLM can retry with correct arguments
                 schema_hint = None
                 tool_info = dynamic_mcp._tools.get(tool_name)
@@ -1609,7 +1618,7 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
                         "isError": True
                     }
                 else:
-                    response_data["error"] = result["error"]
+                    response_data["error"] = inner_error
             else:
                 response_data["result"] = result.get("result")
 

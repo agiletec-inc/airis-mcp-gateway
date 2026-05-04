@@ -58,6 +58,8 @@ services:
       - ./mcp-config.json:/app/mcp-config.json:ro
       - ./profiles:/app/profiles:rw
       - uv-cache:/root/.cache/uv
+      # Host workspace for airis-workspace tools (workspace_init / workspace_status etc.)
+      - ${HOST_WORKSPACE_DIR:-${HOME}/github}:/workspace:rw
     depends_on:
       postgres:
         condition: service_healthy

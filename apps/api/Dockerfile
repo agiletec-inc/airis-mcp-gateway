@@ -58,6 +58,30 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs
 
+# Install airis CLI (airis-workspace's stdio MCP server, exposed as `airis mcp`).
+#
+# Uses cargo-binstall, which fetches prebuilt binaries from the upstream
+# GitHub release based on the `[package.metadata.binstall]` block in
+# airis-workspace's Cargo.toml. This makes airis-workspace the single
+# source of truth for release URL conventions — the gateway image does
+# not need to know target-triple mapping or release filename schemes.
+#
+# `--strategies crate-meta-data` disables source-build fallback so a
+# missing release artifact fails loudly instead of silently dragging in a
+# Rust toolchain at image-build time. cargo-binstall is removed after use
+# to keep the runtime image lean.
+ARG AIRIS_VERSION=3.6.7
+ARG BINSTALL_VERSION=1.18.1
+RUN set -eux; \
+    curl -fsSL "https://github.com/cargo-bins/cargo-binstall/releases/download/v${BINSTALL_VERSION}/cargo-binstall-$(uname -m)-unknown-linux-musl.tgz" \
+      | tar -xz -C /usr/local/bin cargo-binstall; \
+    cargo-binstall --no-confirm --no-symlinks \
+        --strategies crate-meta-data \
+        --root /usr/local \
+        airis-workspace --version "${AIRIS_VERSION}"; \
+    rm /usr/local/bin/cargo-binstall; \
+    airis --version
+
 # Install uv (for uvx MCP servers)
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install uv

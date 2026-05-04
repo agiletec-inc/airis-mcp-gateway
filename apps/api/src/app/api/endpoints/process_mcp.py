@@ -145,14 +145,17 @@ async def call_tool(request: ToolCallRequest):
     manager = get_process_manager()
     response = await manager.call_tool(request.name, request.arguments)
 
-    if "error" in response and response["error"].get("code") in (-32602, -32000):
+    # `"error": null` is "no error" — some servers (e.g. airis-workspace) emit
+    # it alongside a successful result.
+    error = response.get("error")
+    if error is not None and error.get("code") in (-32602, -32000):
         # Validation error: inject full schema so the caller can self-heal on retry.
         from ...core.dynamic_mcp import get_dynamic_mcp
         schema_info = get_dynamic_mcp().get_tool_schema(request.name)
         input_schema = schema_info.get("inputSchema") if schema_info else None
         if input_schema:
-            response["error"]["message"] += f"\n\nFull Schema: {input_schema}"
-            response["error"]["hint"] = "Retry with the full schema provided above."
+            error["message"] += f"\n\nFull Schema: {input_schema}"
+            error["hint"] = "Retry with the full schema provided above."
 
     return response
 
