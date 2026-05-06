@@ -8,7 +8,6 @@ Each repository has ONE responsibility and produces ONE OCI image.
 |------------|---------------|-------|
 | `airis-mcp-gateway` | MCP routing/proxy + intelligence layer | `ghcr.io/agiletec-inc/airis-mcp-gateway` |
 | `mindbase` | Long-term memory storage | `ghcr.io/agiletec-inc/mindbase` |
-| `airis-monorepo` | Monorepo operations, commands, hooks, skills, guards | separate repo responsibility |
 
 ## airis-mcp-gateway (This Repository)
 
@@ -49,20 +48,6 @@ MCP servers (return full schemas)
 - **NO Orchestration**: PDCA cycles, multi-step workflows
 - **NO Intent Detection**: 7-verb intent routing
 - **NO PDCA**: Plan-Do-Check-Act loops
-- **NO Monorepo Command Layer**: repo-local command packs, hooks, guards, workflow skills
-- **NO Host Workflow Ownership**: local developer workflows that belong in `airis-monorepo`
-
-## airis-monorepo (Companion Repository)
-
-`airis-monorepo` owns the host-side workflow layer:
-
-- repo commands
-- hooks and guards
-- skills and runbooks
-- local monorepo management conventions
-- developer workflow automation
-
-That repository may call AIRIS capabilities, but AIRIS should not absorb that responsibility.
 
 ## Cross-Repository Communication
 
@@ -81,12 +66,6 @@ airis-mcp-gateway (port 9400)
     +-- MCP proxy --> Docker MCP Gateway --> mindbase, time, etc.
     |
     +-- Process mgmt --> context7, memory, stripe, playwright, etc.
-
-airis-monorepo
-    |
-    +-- commands / hooks / skills / guards
-    |
-    +-- calls airis-mcp-gateway when shared MCP capabilities are needed
 ```
 
 ## Deployment
@@ -112,10 +91,6 @@ docker compose -f infra/compose.yaml --profile full up -d
 ### If the feature is routing/proxy/intelligence related:
 
 Add to `airis-mcp-gateway`.
-
-### If the feature is monorepo workflow, commands, hooks, skills, or guards:
-
-Add to `airis-monorepo`.
 
 ### If the feature involves persistent storage or memory:
 

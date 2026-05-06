@@ -54,6 +54,7 @@ from .tool_shaping import (
     DescriptionMode,
     apply_prompts_merging,
     apply_schema_partitioning,
+    _refresh_dynamic_mcp_cache,
     extract_server_name_from_tool as _extract_server_name_from_tool,
     summarize_description as _summarize_description,
 )
@@ -395,221 +396,6 @@ async def proxy_sse_stream(request: Request):
                 if captured_session_id:
                     await remove_response_queue(captured_session_id)
                 logger.info(f"SSE stream cleanup complete (session={captured_session_id})")
-
-
-async def apply_prompts_merging(data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    prompts/list レスポンスに Process MCP サーバーのプロンプトを追加
-
-    Args:
-        data: prompts/list JSON-RPC 2.0 レスポンス
-
-    Returns:
-        プロンプトがマージされたレスポンス
-    """
-    if "result" not in data or "prompts" not in data["result"]:
-        return data
-
-    prompts = list(data["result"]["prompts"])
-
-    # Fetch and merge prompts from Process MCP servers
-    try:
-        process_manager = get_process_manager()
-        process_prompts = await process_manager.list_prompts(mode="hot")
-        if process_prompts:
-            logger.info(f"Merging {len(process_prompts)} HOT prompts with {len(prompts)} docker prompts")
-            prompts.extend(process_prompts)
-    except Exception as e:
-        logger.error(f"Failed to get process prompts: {e}")
-
-    data["result"]["prompts"] = prompts
-    return data
-
-
-async def _refresh_dynamic_mcp_cache(process_manager, docker_tools: list):
-    """Background task to refresh Dynamic MCP cache without blocking response."""
-    try:
-        dynamic_mcp = get_dynamic_mcp()
-        await dynamic_mcp.refresh_cache_hot_only(process_manager, docker_tools)
-
-        # Store schemas for cached tools
-        for tool_name, tool_info in dynamic_mcp._tools.items():
-            schema_partitioner.store_full_schema(tool_name, tool_info.input_schema)
-            schema_partitioner.store_tool_description(tool_name, tool_info.description)
-
-        logger.info(f"Background cache refresh complete: {len(dynamic_mcp._tools)} tools")
-    except Exception as e:
-        logger.error(f"Background cache refresh failed: {e}")
-
-
-async def apply_schema_partitioning(data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    tools/list レスポンスにschema partitioning適用 + Process MCPツール統合
-
-    Args:
-        data: tools/list JSON-RPC 2.0 レスポンス
-
-    Returns:
-        Schema partitioningされたレスポンス（Docker + Process統合）
-        DYNAMIC_MCP=true の場合はメタツールのみ返す
-    """
-    if "result" not in data or "tools" not in data["result"]:
-        return data
-
-    docker_tools = list(data["result"]["tools"])
-    process_manager = get_process_manager()
-
-    # Dynamic MCP mode: meta-tools + HOT server tools with full schema
-    # COLD servers are accessed directly via airis-exec (tool names listed in description)
-    if settings.DYNAMIC_MCP:
-        dynamic_mcp = get_dynamic_mcp()
-        dynamic_mcp.refresh_toolsets(process_manager)
-        excluded_servers = {"airis-mcp-gateway-control", "airis-commands"}
-
-        # HOT servers: expose full schema directly (skip internal management servers)
-        # Uses asyncio.gather for parallel startup, with per-server timeout
-        hot_tool_names: set[str] = set()
-        hot_tools_list: list[dict] = []
-        try:
-            hot_servers = [
-                s for s in process_manager.get_hot_servers()
-                if s not in excluded_servers
-            ]
-
-            async def get_tools_for_server(name: str) -> list[dict]:
-                try:
-                    return await asyncio.wait_for(
-                        process_manager.list_tools(server_name=name),
-                        timeout=10.0,
-                    )
-                except asyncio.TimeoutError:
-                    logger.warning(f"Timeout listing tools for {name}, skipping")
-                    return []
-                except Exception as e:
-                    logger.error(f"Error listing tools for {name}: {e}")
-                    return []
-
-            results = await asyncio.gather(
-                *[get_tools_for_server(s) for s in hot_servers]
-            )
-            for server_tools in results:
-                for t in server_tools:
-                    hot_tool_names.add(t.get("name", ""))
-                hot_tools_list.extend(server_tools)
-        except Exception as e:
-            logger.error(f"Failed to list HOT tools: {e}")
-
-        tools = list(dynamic_mcp.get_meta_tools(mode=settings.META_TOOLS_MODE))
-        meta_count = len(tools)
-        tools.extend(hot_tools_list)
-        active_tools_list = dynamic_mcp.get_active_tool_definitions(
-            excluded_servers=excluded_servers,
-            excluded_tool_names=hot_tool_names,
-        )
-        tools.extend(active_tools_list)
-
-        data["result"]["tools"] = tools
-        hot_count = len(tools) - meta_count
-        logger.info(f"Returning {len(tools)} tools ({meta_count} meta + {hot_count} native)")
-
-        # Schedule background cache refresh (non-blocking)
-        asyncio.create_task(_refresh_dynamic_mcp_cache(process_manager, docker_tools))
-
-        return data
-
-    # Standard mode: merge HOT tools and apply schema partitioning
-    tools = docker_tools
-
-    # Fetch and merge tools from Process MCP servers (HOT only)
-    try:
-        # Only return HOT server tools (COLD loaded on demand)
-        process_tools = await process_manager.list_tools(mode="hot")
-        hot_servers = process_manager.get_hot_servers()
-        cold_servers = process_manager.get_cold_servers()
-        if process_tools:
-            logger.info(f"Merging {len(process_tools)} HOT tools with {len(tools)} docker tools")
-            logger.info(f"HOT servers: {hot_servers}, COLD servers (not included): {cold_servers}")
-            tools.extend(process_tools)
-    except Exception as e:
-        logger.error(f"Failed to get process tools: {e}")
-
-    partitioned_tools = []
-
-    for tool in tools:
-        tool_name = tool.get("name", "")
-        input_schema = tool.get("inputSchema", {})
-
-        # Store full schema for expandSchema
-        if input_schema:
-            schema_partitioner.store_full_schema(tool_name, input_schema)
-
-        full_description = tool.get("description")
-        schema_partitioner.store_tool_description(tool_name, full_description)
-        # Use configured description mode (default: brief for token optimization)
-        lightweight_description = _summarize_description(
-            full_description or "",
-            mode=settings.DESCRIPTION_MODE
-        )
-
-        # Partition schema
-        partitioned_schema = schema_partitioner.partition_schema(input_schema)
-
-        # Log token reduction stats
-        reduction = schema_partitioner.get_token_reduction_estimate(input_schema)
-        logger.debug(f" {tool_name}: {reduction['full']} → {reduction['partitioned']} tokens ({reduction['reduction']}% reduction)")
-
-        extensions = dict(tool.get("extensions", {}))
-        if full_description:
-            extensions["hasDocs"] = True
-            extensions["docHandle"] = tool_name
-            extensions["docHint"] = "Call expandSchema with mode='docs' for the full instructions."
-        else:
-            extensions["hasDocs"] = False
-
-        partitioned_tool = {
-            **tool,
-            "inputSchema": partitioned_schema,
-            "extensions": extensions
-        }
-
-        # Handle description based on mode
-        if settings.DESCRIPTION_MODE == DescriptionMode.NONE:
-            # Remove description entirely for maximum token savings
-            partitioned_tool.pop("description", None)
-        elif lightweight_description:
-            partitioned_tool["description"] = lightweight_description
-
-        partitioned_tools.append(partitioned_tool)
-
-    # Add expandSchema tool
-    expand_schema_tool = {
-        "name": "expandSchema",
-        "description": "Lazy-load schemas or documentation for a specific tool. Use mode='schema' (default) for JSON schema or mode='docs' for the full description.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "toolName": {
-                    "type": "string",
-                    "description": "Name of the tool whose schema or docs you want to expand"
-                },
-                "path": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Path to the property to expand (e.g., ['metadata', 'shipping']). Omit for full schema."
-                },
-                "mode": {
-                    "type": "string",
-                    "enum": ["schema", "docs"],
-                    "description": "schema → return JSON schema (default). docs → return stored description text."
-                }
-            },
-            "required": ["toolName"]
-        }
-    }
-    partitioned_tools.append(expand_schema_tool)
-
-    data["result"]["tools"] = partitioned_tools
-    return data
 
 
 def _build_gateway_jsonrpc_url(request: Request) -> str:
@@ -1034,8 +820,12 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
             logger.info(f"Trying ProcessManager for prompt: {prompt_name}")
             server_response = await process_manager.get_prompt(prompt_name, arguments)
 
-            # Fall back to Docker Gateway if prompt not found
-            if "error" in server_response and server_response["error"].get("code") == -32601:
+            # Fall back to Docker Gateway if prompt not found.
+            # Some MCP servers (e.g. airis-workspace) return `"error": null` alongside
+            # a successful result, so we must treat null/None as "no error" rather
+            # than checking key presence.
+            server_error = server_response.get("error") if isinstance(server_response, dict) else None
+            if server_error is not None and server_error.get("code") == -32601:
                 logger.info(f"Prompt {prompt_name} not found in ProcessManager, falling through to Gateway")
             else:
                 # Build JSON-RPC response using client's request ID
@@ -1044,8 +834,8 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
                     "id": rpc_request.get("id"),
                 }
                 # Extract result or error from server response
-                if "error" in server_response:
-                    response_data["error"] = server_response["error"]
+                if server_error is not None:
+                    response_data["error"] = server_error
                 else:
                     response_data["result"] = server_response.get("result")
 
@@ -1083,9 +873,12 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
                     "jsonrpc": "2.0",
                     "id": rpc_request.get("id"),
                 }
-                # Extract result or error from server response
-                if "error" in server_response:
-                    response_data["error"] = server_response["error"]
+                # Extract result or error from server response.
+                # Treat `"error": null` as "no error" — some servers (e.g.
+                # airis-workspace) emit it alongside a successful result.
+                server_error = server_response.get("error") if isinstance(server_response, dict) else None
+                if server_error is not None:
+                    response_data["error"] = server_error
                 else:
                     response_data["result"] = server_response.get("result")
 
@@ -1587,8 +1380,10 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
                 "jsonrpc": "2.0",
                 "id": rpc_request.get("id"),
             }
-            if "error" in result:
-                error_msg = result["error"].get("message", "")
+            # `"error": null` alongside a result is "no error" — see airis-workspace.
+            inner_error = result.get("error") if isinstance(result, dict) else None
+            if inner_error is not None:
+                error_msg = inner_error.get("message", "")
                 # Attach schema hint so LLM can retry with correct arguments
                 schema_hint = None
                 tool_info = dynamic_mcp._tools.get(tool_name)
@@ -1609,7 +1404,7 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
                         "isError": True
                     }
                 else:
-                    response_data["error"] = result["error"]
+                    response_data["error"] = inner_error
             else:
                 response_data["result"] = result.get("result")
 

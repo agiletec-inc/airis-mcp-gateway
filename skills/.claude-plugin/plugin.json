@@ -1,7 +1,7 @@
 {
   "name": "airis-mcp-gateway",
   "version": "0.2.0",
-  "description": "Centralized Claude Code configuration: Docker-first guards, permissions, MCP gateway, and workflow skills",
+  "description": "Centralized Claude Code configuration: permissions, MCP gateway, and workflow skills",
   "author": {
     "name": "agiletec-inc"
   },

@@ -117,6 +117,9 @@ services:
       - ./workflows:/app/workflows:ro
       - ./config/gateway-config.yaml:/app/config/gateway-config.yaml:ro
       - ./profiles:/app/profiles:rw
+      # Host workspace for airis-workspace tools (workspace_init / workspace_status etc.).
+      # Same convention as the mcp-core "gateway" service above.
+      - ${HOST_WORKSPACE_DIR:-${HOME}/github}:/workspace:rw
       # Persistent data volumes (appuser home directory)
       - cache-uv:/home/appuser/.cache/uv   # uvx package cache (faster restarts)
       - cache-npm:/home/appuser/.npm       # npm package cache (faster restarts)
