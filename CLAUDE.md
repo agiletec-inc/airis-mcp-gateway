@@ -8,7 +8,7 @@ FastAPI-based MCP multiplexer that exposes many MCP servers (process + Docker Ga
 - **Streamable HTTP** at `http://localhost:9400/mcp/` — for Codex and Claude Code (recommended)
 - **SSE** at `http://localhost:9400/sse` — for Gemini CLI, Cursor, Windsurf
 
-Dynamic MCP mode (default) exposes only 3–4 meta-tools (`airis-find`, `airis-exec`, `airis-schema`) instead of 60+ raw tools, and lazily starts cold servers on first use.
+Dynamic MCP mode (default) exposes only 2 meta-tools (`airis-find`, `airis-schema`) instead of 60+ raw tools. COLD servers auto-discover and auto-enable on first native tool call — no router wrapper needed.
 
 Source of truth for server config: `mcp-config.json` (runtime) and `workflows/*.yaml` (compiled into MCP `initialize` instructions by `apps/api/src/app/core/behavior_compiler.py`).
 
@@ -37,7 +37,7 @@ The API in `apps/api/src/app/api/endpoints/` is split into focused modules:
 ### HOT/COLD server split
 
 - **HOT**: ProcessManager process servers (uvx/npx/airis) always listed in `tools/list` — pre-warmed at API startup, never idle-killed. Default HOT set: `context7`, `airis-mcp-gateway-control`, `airis-workspace`.
-- **COLD**: Docker Gateway backend servers — not listed directly; accessed via `airis-exec <server>:<tool>`, auto-enabled on first call.
+- **COLD**: Docker Gateway backend servers — not listed directly; auto-discovered via tools index on first native tool call, enabled on-demand.
 
 In DYNAMIC_MCP mode, `tools/list` returns only meta-tools + currently active HOT server tools. Full tool discovery goes through `airis-find`.
 
@@ -55,7 +55,7 @@ Note on JSON-RPC tolerance: airis-workspace emits `"error": null` alongside succ
 
 ## Dynamic MCP
 
-`DYNAMIC_MCP=true` (default) exposes 3 meta-tools: `airis-find` (discover), `airis-exec` (execute + auto-enable), `airis-schema` (get input schema). `META_TOOLS_MODE=full` adds `airis-confidence`, `airis-repo-index`, `airis-suggest`, `airis-route`. Disabled servers auto-enable when `airis-exec` calls them.
+`DYNAMIC_MCP=true` (default) exposes 2 meta-tools: `airis-find` (discover tools), `airis-schema` (get input schema). `META_TOOLS_MODE=full` adds `airis-confidence`, `airis-repo-index`, `airis-suggest`, `airis-route`. COLD servers auto-discover and auto-enable on first native tool call — no router wrapper needed.
 
 Instructions returned on `initialize` are compiled from `workflows/*.yaml` — **edit the YAML, not the Python**. Each workflow needs `name`, `compile_to: mcp_instructions`, `priority`, and a `text:` block. Missing `text` makes it emit literal `compile_to` values (bug: 2026-04-14).
 
@@ -64,12 +64,12 @@ Instructions returned on `initialize` are compiled from `workflows/*.yaml` — *
 When working in a project that uses this gateway, pick tools by this decision flow:
 
 ```
-Need official library docs?    → airis-exec context7:resolve-library-id → context7:query-docs
-Need current/external info?    → airis-exec tavily:tavily-search
-Database query or schema?      → airis-exec supabase:query
-Payment/billing?               → airis-exec stripe:*
-DNS/workers/KV?                → airis-exec cloudflare:*
-Figma/design?                  → airis-exec figma:*
+Need official library docs?    → context7:resolve-library-id → context7:query-docs
+Need current/external info?    → tavily:tavily-search
+Database query or schema?      → supabase:query
+Payment/billing?               → stripe:*
+DNS/workers/KV?                → cloudflare:*
+Figma/design?                  → figma:*
 Browser testing/screenshots?   → playwright-cli skill (host Chrome — NOT MCP playwright)
 File generation (docx/xlsx/…)? → claude-api plugin (host filesystem)
 TDD/debugging/planning?        → superpowers plugin
