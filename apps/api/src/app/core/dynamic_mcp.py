@@ -558,6 +558,31 @@ class DynamicMCP:
                         return name
         return None
 
+    async def auto_discover_and_execute(
+        self, tool_name: str, arguments: dict, process_manager
+    ) -> dict | None:
+        """
+        Auto-discover a COLD tool via tools_index, enable its server, and execute.
+
+        Returns the result dict on success, or None if the tool can't be
+        auto-discovered (not in any tools_index, or not a process server).
+        """
+        from .mcp_config_loader import ServerMode
+
+        server_name = self.get_server_for_tool_from_index(tool_name, process_manager)
+        if not server_name or not process_manager.is_process_server(server_name):
+            return None
+
+        logger.info(f"Auto-discovered COLD tool '{tool_name}' on server '{server_name}'")
+
+        config = process_manager._server_configs.get(server_name)
+        if config and config.mode == ServerMode.COLD and not config.enabled:
+            logger.info(f"Auto-enabling COLD server: {server_name}")
+            await process_manager.enable_server(server_name)
+
+        await self.load_tools_for_server(server_name, process_manager, force_enable=True)
+        return await process_manager.call_tool_on_server(server_name, tool_name, arguments)
+
     def parse_tool_reference(self, tool_ref: str) -> tuple[Optional[str], str]:
         """
         Parse tool reference like "server:tool" or just "tool".

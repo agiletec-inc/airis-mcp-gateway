@@ -26,14 +26,16 @@ import asyncio
 import json
 from typing import Any, AsyncGenerator, Dict, Optional
 from .gateway_stream_bridge import (
-    STREAM_TIMEOUT,
+    cleanup_stale_stream_bridges,
     delete_stream_bridge_session as _delete_stream_bridge_session,
     send_via_stream_bridge as _send_via_stream_bridge,
 )
 # Responsibility-split modules. Imported with their public names so the rest
 # of this file reads as if the helpers were still local.
 from .session_queue import (
+    cleanup_stale_queues,
     get_response_queue,
+    get_session_queue_count,
     remove_response_queue,
 )
 from .sse_protocol import (
@@ -877,24 +879,13 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
             logger.error(f"ProcessManager routing check failed: {e}")
 
         # Auto-discovery for COLD/unloaded process tools (native tool call path).
-        # If the tool is not yet in _tool_to_server, look it up via tools_index,
-        # wake its server, and execute directly.
         process_manager = get_process_manager()
         dynamic_mcp = get_dynamic_mcp()
         if tool_name not in process_manager._tool_to_server:
-            server_name = dynamic_mcp.get_server_for_tool_from_index(tool_name, process_manager)
-            if server_name and process_manager.is_process_server(server_name):
-                logger.info(f"Auto-discovered COLD tool '{tool_name}' on server '{server_name}'")
-
-                config = process_manager._server_configs.get(server_name)
-                if config and config.mode == ServerMode.COLD and not config.enabled:
-                    logger.info(f"Auto-enabling COLD server: {server_name}")
-                    await process_manager.enable_server(server_name)
-
-                await dynamic_mcp.load_tools_for_server(server_name, process_manager, force_enable=True)
-
-                result = await process_manager.call_tool_on_server(server_name, tool_name, arguments)
-
+            result = await dynamic_mcp.auto_discover_and_execute(
+                tool_name, arguments, process_manager
+            )
+            if result is not None:
                 response_data = {
                     "jsonrpc": "2.0",
                     "id": rpc_request.get("id"),

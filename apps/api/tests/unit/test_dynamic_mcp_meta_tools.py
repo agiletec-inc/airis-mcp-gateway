@@ -5,8 +5,8 @@ Guards:
 - The meta-tools literal must remain syntactically valid (an earlier edit left
   dangling braces and an orphaned `"required": ["tool"]` after the airis-exec
   definition, making the file unparseable).
-- Core mode must yield exactly four tools (airis-activate, airis-find,
-  airis-exec, airis-schema); full mode must add the four optional meta-tools.
+- Core mode must yield exactly two tools (airis-find, airis-schema);
+  full mode must add the four optional meta-tools.
 - Lazy Schema: active tool definitions must expose stub `{"type": "object"}`
   inputSchemas so the client never ingests the backend's full JSON schema.
 """

@@ -64,7 +64,7 @@ Instructions returned on `initialize` are compiled from `workflows/*.yaml` — *
 When working in a project that uses this gateway, pick tools by this decision flow:
 
 ```
-Need official library docs?    → context7:resolve-library-id → context7:query-docs
+Need official library docs?    → context7:resolve-library-id → context7:get-library-docs
 Need current/external info?    → tavily:tavily-search
 Database query or schema?      → supabase:query
 Payment/billing?               → stripe:*

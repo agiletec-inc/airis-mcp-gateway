@@ -11,8 +11,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.endpoints import mcp_proxy
-from app.core.dynamic_mcp import DynamicMCP, ToolInfo, get_dynamic_mcp
-from app.core.process_manager import ProcessManager, get_process_manager
+from app.core.dynamic_mcp import DynamicMCP
+from app.core.process_manager import ProcessManager
 from app.core.mcp_config_loader import McpServerConfig, ServerMode
 
 
@@ -48,7 +48,7 @@ def _make_client(pm: ProcessManager, dmcp: DynamicMCP, monkeypatch) -> TestClien
         "app.api.endpoints.mcp_proxy.get_process_manager", lambda: pm
     )
     monkeypatch.setattr(
-        "app.core.dynamic_mcp.get_dynamic_mcp", lambda: dmcp
+        "app.api.endpoints.mcp_proxy.get_dynamic_mcp", lambda: dmcp
     )
 
     app = FastAPI()
@@ -236,9 +236,26 @@ def test_unknown_tool_falls_through_to_gateway(monkeypatch):
 
     tc = _make_client(pm, dmcp, monkeypatch)
 
-    # No session_id → stream bridge path. That fails without a real Gateway,
-    # so the response is an error. The key assertion: auto-discovery tried and
-    # found nothing, so the request fell through (didn't return early).
+    # Monkeypatch the stream bridge fallthrough to verify it was called.
+    fallthrough_called = []
+
+    async def fake_send_via_stream_bridge(*args, **kwargs):
+        fallthrough_called.append(True)
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=503,
+            content={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {"code": -32602, "message": "Gateway unavailable"},
+            },
+        )
+
+    monkeypatch.setattr(
+        "app.api.endpoints.mcp_proxy._send_via_stream_bridge",
+        fake_send_via_stream_bridge,
+    )
+
     resp = tc.post(
         "/mcp/",
         json={
@@ -248,8 +265,8 @@ def test_unknown_tool_falls_through_to_gateway(monkeypatch):
             "params": {"name": "nonexistent_tool", "arguments": {}},
         },
     )
-    # Fallthrough to stream bridge → 400/500 with Gateway unreachable
-    assert resp.status_code in (200, 400, 500)
+    assert resp.status_code == 503
+    assert len(fallthrough_called) == 1, "Expected fallthrough to stream bridge"
 
 
 def test_auto_discovery_error_handling(monkeypatch):
