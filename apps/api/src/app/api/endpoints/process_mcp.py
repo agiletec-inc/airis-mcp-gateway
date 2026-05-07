@@ -145,6 +145,19 @@ async def call_tool(request: ToolCallRequest):
     manager = get_process_manager()
     response = await manager.call_tool(request.name, request.arguments)
 
+    # Auto-discovery: if tool not found, try tools_index for COLD servers
+    if response.get("error", {}).get("code") == -32601:
+        from ...core.dynamic_mcp import get_dynamic_mcp
+        from ...core.mcp_config_loader import ServerMode
+        dmcp = get_dynamic_mcp()
+        server_name = dmcp.get_server_for_tool_from_index(request.name, manager)
+        if server_name and manager.is_process_server(server_name):
+            config = manager._server_configs.get(server_name)
+            if config and config.mode == ServerMode.COLD and not config.enabled:
+                await manager.enable_server(server_name)
+            await dmcp.load_tools_for_server(server_name, manager, force_enable=True)
+            response = await manager.call_tool_on_server(server_name, request.name, request.arguments)
+
     # `"error": null` is "no error" — some servers (e.g. airis-workspace) emit
     # it alongside a successful result.
     error = response.get("error")

@@ -29,7 +29,7 @@ def test_core_meta_tools_shape():
     mcp = DynamicMCP()
     tools = mcp.get_meta_tools(mode="core")
     names = [t["name"] for t in tools]
-    assert names == ["airis-activate", "airis-find", "airis-exec", "airis-schema"]
+    assert names == ["airis-find", "airis-schema"]
     for tool in tools:
         assert "inputSchema" in tool
         assert tool["inputSchema"].get("type") == "object"
@@ -42,13 +42,16 @@ def test_full_meta_tools_adds_optional_tools():
     assert {"airis-confidence", "airis-repo-index", "airis-suggest", "airis-route"} <= names
 
 
-def test_deprecated_meta_tools_carry_marker():
+def test_deprecated_meta_tools_removed():
+    """airis-exec and airis-activate are no longer exposed as meta-tools.
+
+    They were marked [DEPRECATED] and have been removed from the core toolset.
+    Their routing logic (auto-discovery, auto-enable) remains as internal handlers.
+    """
     mcp = DynamicMCP()
-    tools = {t["name"]: t for t in mcp.get_meta_tools(mode="core")}
-    for name in ("airis-exec", "airis-activate"):
-        assert "[DEPRECATED]" in tools[name]["description"], (
-            f"{name} must advertise deprecation so callers migrate away from it"
-        )
+    tools = {t["name"] for t in mcp.get_meta_tools(mode="core")}
+    assert "airis-exec" not in tools, "airis-exec removed from core meta-tools"
+    assert "airis-activate" not in tools, "airis-activate removed from core meta-tools"
 
 
 def test_active_tool_definitions_use_lazy_schema():

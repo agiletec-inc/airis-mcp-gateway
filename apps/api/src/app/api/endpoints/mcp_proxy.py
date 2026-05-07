@@ -18,31 +18,22 @@ The symbols that other modules and tests import from ``mcp_proxy`` (such as
 are re-exported at the bottom of this file so those call sites keep working.
 """
 
+import httpx
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse
-from typing import Any, AsyncGenerator, Dict, Optional
-import httpx
-import json
-import asyncio
-import time as _time_module
-from ...core.schema_partitioning import schema_partitioner
-from ...core.config import settings
-from ...core.protocol_logger import protocol_logger
-from ...core.process_manager import get_process_manager
-from ...core.dynamic_mcp import get_dynamic_mcp
-from ...core.behavior_compiler import compile_instructions
-from ...core.logging import get_logger
-from ...core.mcp_config_loader import ServerMode
 
+import asyncio
+import json
+from typing import Any, AsyncGenerator, Dict, Optional
+from .gateway_stream_bridge import (
+    STREAM_TIMEOUT,
+    delete_stream_bridge_session as _delete_stream_bridge_session,
+    send_via_stream_bridge as _send_via_stream_bridge,
+)
 # Responsibility-split modules. Imported with their public names so the rest
 # of this file reads as if the helpers were still local.
 from .session_queue import (
-    _SESSION_QUEUE_TTL_SECONDS,
-    _session_queues_lock,
-    _session_response_queues,
-    cleanup_stale_queues,
     get_response_queue,
-    get_session_queue_count,
     remove_response_queue,
 )
 from .sse_protocol import (
@@ -51,30 +42,17 @@ from .sse_protocol import (
     parse_sse_json as _parse_sse_json,
 )
 from .tool_shaping import (
-    DescriptionMode,
     apply_prompts_merging,
     apply_schema_partitioning,
-    _refresh_dynamic_mcp_cache,
-    extract_server_name_from_tool as _extract_server_name_from_tool,
-    summarize_description as _summarize_description,
 )
-from .gateway_stream_bridge import (
-    STREAM_BRIDGE_READY_DELAY,
-    STREAM_TIMEOUT,
-    StreamBridgeSession,
-    _stream_bridge_lock,
-    _stream_bridge_sessions,
-    cleanup_stale_stream_bridges,
-    close_stream_bridge_session as _close_stream_bridge_session,
-    delete_stream_bridge_session as _delete_stream_bridge_session,
-    extract_gateway_session_id as _extract_gateway_session_id,
-    get_or_create_stream_bridge_session as _get_or_create_stream_bridge_session,
-    get_response_message_id as _get_response_message_id,
-    get_stream_bridge_count,
-    get_stream_session_id as _get_stream_session_id,
-    send_via_stream_bridge as _send_via_stream_bridge,
-    stream_session_header_name as _stream_session_header_name,
-)
+from ...core.behavior_compiler import compile_instructions
+from ...core.config import settings
+from ...core.dynamic_mcp import get_dynamic_mcp
+from ...core.logging import get_logger
+from ...core.mcp_config_loader import ServerMode
+from ...core.process_manager import get_process_manager
+from ...core.protocol_logger import protocol_logger
+from ...core.schema_partitioning import schema_partitioner
 
 logger = get_logger(__name__)
 
@@ -897,6 +875,46 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
                 )
         except Exception as e:
             logger.error(f"ProcessManager routing check failed: {e}")
+
+        # Auto-discovery for COLD/unloaded process tools (native tool call path).
+        # If the tool is not yet in _tool_to_server, look it up via tools_index,
+        # wake its server, and execute directly.
+        process_manager = get_process_manager()
+        dynamic_mcp = get_dynamic_mcp()
+        if tool_name not in process_manager._tool_to_server:
+            server_name = dynamic_mcp.get_server_for_tool_from_index(tool_name, process_manager)
+            if server_name and process_manager.is_process_server(server_name):
+                logger.info(f"Auto-discovered COLD tool '{tool_name}' on server '{server_name}'")
+
+                config = process_manager._server_configs.get(server_name)
+                if config and config.mode == ServerMode.COLD and not config.enabled:
+                    logger.info(f"Auto-enabling COLD server: {server_name}")
+                    await process_manager.enable_server(server_name)
+
+                await dynamic_mcp.load_tools_for_server(server_name, process_manager, force_enable=True)
+
+                result = await process_manager.call_tool_on_server(server_name, tool_name, arguments)
+
+                response_data = {
+                    "jsonrpc": "2.0",
+                    "id": rpc_request.get("id"),
+                }
+                inner_error = result.get("error") if isinstance(result, dict) else None
+                if inner_error is not None:
+                    response_data["error"] = inner_error
+                else:
+                    response_data["result"] = result.get("result")
+
+                if session_id:
+                    queue = await get_response_queue(session_id)
+                    await queue.put(response_data)
+                    return Response(status_code=202)
+
+                return Response(
+                    content=json.dumps(response_data),
+                    status_code=200,
+                    media_type="application/json"
+                )
 
     # Proxy all other tool calls to Gateway
     if not session_id:

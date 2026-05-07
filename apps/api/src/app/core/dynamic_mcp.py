@@ -655,19 +655,6 @@ class DynamicMCP:
         # Core meta-tools (always included)
         tools = [
             {
-                "name": "airis-activate",
-                "description": "[DEPRECATED] Activate is no longer needed. Native MCP tools are now dynamically exposed. Call them directly.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "toolset": {
-                            "type": "string"
-                        }
-                    },
-                    "required": ["toolset"]
-                }
-            },
-            {
                 "name": "airis-find",
                 "description": "Optional fallback search for finding tools.",
                 "inputSchema": {
@@ -677,22 +664,6 @@ class DynamicMCP:
                             "type": "string"
                         }
                     }
-                }
-            },
-            {
-                "name": "airis-exec",
-                "description": "[DEPRECATED] Direct tool invocation is now supported natively. Please call tools directly by name.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "tool": {
-                            "type": "string"
-                        },
-                        "arguments": {
-                            "type": "object"
-                        }
-                    },
-                    "required": ["tool"]
                 }
             },
             {
