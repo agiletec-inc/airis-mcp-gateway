@@ -52,6 +52,7 @@ __pycache__/
 auto-imports.d.ts
 .modules.yaml
 .pnpm-workspace-state-v1.json
+compose.yaml
 
 # Auto-generated backups
 backups/
