@@ -45,7 +45,7 @@ const AddServerArgsSchema = z.object({
   name: z.string().min(1, "name must be a non-empty string"),
   command: z.string().min(1, "command must be a non-empty string"),
   args: z.array(z.string()).optional(),
-  env: z.record(z.string()).optional(),
+  env: z.record(z.string(), z.string()).optional(),
   enabled: z.boolean().optional(),
 });
 
@@ -211,7 +211,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         await addServer(CONFIG_PATH, serverName, {
           command,
           args: cmdArgs || [],
-          env: env || {},
+          env: env ?? {} as Record<string, string>,
           enabled: enabled !== false,
         });
 
