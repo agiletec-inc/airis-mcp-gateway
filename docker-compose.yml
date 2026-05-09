@@ -26,7 +26,7 @@ services:
   # Semantic code retrieval and editing capabilities
   serena:
     container_name: airis-serena
-    image: ghcr.io/oraios/serena:latest
+    image: ghcr.io/oraios/serena:v1.2.0
     command:
       - serena
       - start-mcp-server
@@ -52,7 +52,9 @@ services:
   # Manages MCP servers from Docker catalog (time, mindbase via stdio)
   gateway:
     container_name: airis-mcp-gateway-core
-    image: docker/mcp-gateway:latest
+    # Pinned by digest — docker/mcp-gateway does not publish versioned tags (issue #77).
+    # Refresh: docker pull docker/mcp-gateway:latest && docker inspect --format='{{index .RepoDigests 0}}' docker/mcp-gateway:latest
+    image: docker/mcp-gateway@sha256:f79574a3f86603ad65fd5c04f1251a2f2ecda56c1df76ed4418c1c11401c9432
     command:
       - --transport=sse
       - --port=9390
