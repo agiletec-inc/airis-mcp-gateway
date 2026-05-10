@@ -1,4 +1,4 @@
-name: Build and Push Docker Image
+name: Docker Publish
 
 on:
   # Wait for CI to pass on main/stg before pushing the image (issue #136).

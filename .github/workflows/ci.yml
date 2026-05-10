@@ -4,11 +4,9 @@ on:
   push:
     branches:
       - main
-      - stg
   pull_request:
     branches:
       - main
-      - stg
 
 jobs:
   # Detect which paths changed
@@ -126,67 +124,3 @@ jobs:
       - name: Run airis-gateway smoke tests
         run: bash scripts/test-airis-gateway-smoke.sh
 
-  # Open or update a pull request from stg to main so the branch protection
-  # ruleset on main (which requires PRs) is satisfied. A previous version of
-  # this job tried to push directly to main and was always rejected by the
-  # ruleset.
-  open-pr-to-main:
-    needs: [test-python, build-typescript, test-shell]
-    if: |
-      always() &&
-      github.ref == 'refs/heads/stg' &&
-      github.event_name == 'push' &&
-      !contains(needs.*.result, 'failure')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Report stg status for promotion to main
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          # Skip if stg is already contained in main (nothing to ship).
-          if git merge-base --is-ancestor origin/stg origin/main; then
-            echo "stg is already merged into main; nothing to do."
-            exit 0
-          fi
-
-          existing_pr=$(gh pr list \
-            --base main \
-            --head stg \
-            --state open \
-            --json number \
-            --jq '.[0].number // empty')
-
-          if [ -n "${existing_pr}" ]; then
-            echo "Existing PR #${existing_pr} is open for stg -> main. Commenting with the new commit."
-            gh pr comment "${existing_pr}" --body \
-              "New commit landed on \`stg\` (${GITHUB_SHA}). CI passed — ready for review."
-            exit 0
-          fi
-
-          # No PR exists and GitHub Actions is not permitted to open one (the
-          # repo policy "Allow GitHub Actions to create and approve pull
-          # requests" is disabled). Report a green status with instructions so
-          # the CI stays actionable without a failing job.
-          cat <<EOT
-          No open PR from stg to main. stg has commits that need to be promoted.
-          Create the promotion PR manually with:
-
-              gh pr create --base main --head stg \\
-                --title "stg -> main: promotion" \\
-                --body "Promoting stg to main."
-
-          (GitHub Actions cannot open the PR automatically because the repo
-          setting "Allow GitHub Actions to create and approve pull requests"
-          is disabled. Enable it under Settings -> Actions -> General if you
-          want this job to create the PR itself.)
-          EOT
