@@ -16,122 +16,60 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { z, ZodError, ZodSchema } from "zod";
+
+import {
+  MCP_MAPPINGS,
+  readConfig,
+  writeConfig,
+  addServer,
+  removeServer,
+  saveProfile,
+  loadProfile,
+  listProfiles,
+  detectFromPackageJson,
+  detectFromRequirementsTxt,
+  formatDetectionOutput,
+  type McpServerConfig,
+} from "./lib.js";
 
 const CONFIG_PATH = process.env.MCP_CONFIG_PATH || "/app/mcp-config.json";
 const PROFILES_DIR = process.env.PROFILES_DIR || "/app/profiles";
 const WORKSPACE_DIR = process.env.HOST_WORKSPACE_DIR || "/workspace/host";
 
-// MCP mapping database - maps tech stack to official MCPs
-const MCP_MAPPINGS: Record<string, {
-  packages: string[];
-  detect?: string[];
-  mcp: string;
-  command: string;
-  args: string[];
-  env: Record<string, string>;
-  envRequired: string[];
-  description: string;
-}> = {
-  stripe: {
-    packages: ["stripe", "@stripe/stripe-js"],
-    mcp: "@stripe/mcp",
-    command: "npx",
-    args: ["-y", "@stripe/mcp", "--tools=all", "--api-key", "${STRIPE_SECRET_KEY}"],
-    env: {},
-    envRequired: ["STRIPE_SECRET_KEY"],
-    description: "Stripe payments API",
-  },
-  twilio: {
-    packages: ["twilio"],
-    mcp: "@twilio-alpha/mcp",
-    command: "npx",
-    args: ["-y", "@twilio-alpha/mcp"],
-    env: {
-      TWILIO_ACCOUNT_SID: "${TWILIO_ACCOUNT_SID}",
-      TWILIO_API_KEY: "${TWILIO_API_KEY}",
-      TWILIO_API_SECRET: "${TWILIO_API_SECRET}",
-    },
-    envRequired: ["TWILIO_ACCOUNT_SID", "TWILIO_API_KEY", "TWILIO_API_SECRET"],
-    description: "Twilio voice/SMS API",
-  },
-  supabase: {
-    packages: ["@supabase/supabase-js", "@supabase/ssr"],
-    mcp: "@supabase/mcp-server-supabase",
-    command: "npx",
-    args: ["-y", "@supabase/mcp-server-supabase@latest", "--access-token", "${SUPABASE_ACCESS_TOKEN}"],
-    env: {},
-    envRequired: ["SUPABASE_ACCESS_TOKEN"],
-    description: "Supabase database management",
-  },
-  postgres: {
-    packages: ["pg", "postgres", "@prisma/client", "drizzle-orm"],
-    mcp: "@modelcontextprotocol/server-postgres",
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-postgres", "${DATABASE_URL}"],
-    env: {},
-    envRequired: ["DATABASE_URL"],
-    description: "Direct PostgreSQL access",
-  },
-  github: {
-    packages: ["@octokit/rest", "octokit"],
-    detect: [".git"],
-    mcp: "@modelcontextprotocol/server-github",
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-github"],
-    env: { GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}" },
-    envRequired: ["GITHUB_TOKEN"],
-    description: "GitHub API",
-  },
-  cloudflare: {
-    packages: ["@cloudflare/workers-types", "wrangler"],
-    mcp: "@cloudflare/mcp-server-cloudflare",
-    command: "npx",
-    args: ["-y", "@cloudflare/mcp-server-cloudflare@latest"],
-    env: {
-      CLOUDFLARE_ACCOUNT_ID: "${CLOUDFLARE_ACCOUNT_ID}",
-      CLOUDFLARE_API_TOKEN: "${CLOUDFLARE_API_TOKEN}",
-    },
-    envRequired: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"],
-    description: "Cloudflare Workers, KV, R2",
-  },
-  playwright: {
-    packages: ["playwright", "@playwright/test"],
-    mcp: "@playwright/mcp",
-    command: "npx",
-    args: ["-y", "@playwright/mcp@latest"],
-    env: {},
-    envRequired: [],
-    description: "Browser automation",
-  },
-};
+// ── Tool argument schemas (issue #106) ───────────────────────────────────
+// Using Zod instead of `as unknown as T` so that invalid inputs surface as a
+// clear validation error instead of undefined-access crashes at runtime.
 
-interface McpServerConfig {
-  command: string;
-  args: string[];
-  env: Record<string, string>;
-  enabled: boolean;
-}
+const AddServerArgsSchema = z.object({
+  name: z.string().min(1, "name must be a non-empty string"),
+  command: z.string().min(1, "command must be a non-empty string"),
+  args: z.array(z.string()).optional(),
+  env: z.record(z.string()).optional(),
+  enabled: z.boolean().optional(),
+});
 
-interface McpConfig {
-  mcpServers: Record<string, McpServerConfig>;
-  log?: { level: string };
-}
+const ServerNameArgsSchema = z.object({
+  server_name: z.string().min(1, "server_name must be a non-empty string"),
+});
 
-async function readConfig(): Promise<McpConfig> {
-  const content = await fs.readFile(CONFIG_PATH, "utf-8");
-  return JSON.parse(content);
-}
+const ProfileNameArgsSchema = z.object({
+  profile_name: z.string().min(1, "profile_name must be a non-empty string"),
+});
 
-async function writeConfig(config: McpConfig): Promise<void> {
-  await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
-}
+const DetectArgsSchema = z.object({
+  path: z.string().optional(),
+  autoAdd: z.boolean().optional(),
+});
 
-async function ensureProfilesDir(): Promise<void> {
-  try {
-    await fs.mkdir(PROFILES_DIR, { recursive: true });
-  } catch {
-    // Ignore if exists
+function parseArgs<T>(schema: ZodSchema<T>, raw: unknown, toolName: string): T {
+  const result = schema.safeParse(raw ?? {});
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    const path = issue.path.join(".") || "<root>";
+    throw new Error(`Invalid arguments for ${toolName}: ${path}: ${issue.message}`);
   }
+  return result.data;
 }
 
 const server = new Server(
@@ -184,7 +122,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "airis_config_remove_server",
-        description: "Remove an MCP server from the gateway configuration permanently. This deletes the server entry from mcp-config.json. Use airis_config_set_enabled with enabled=false to disable without removing.",
+        description: "Remove an MCP server from the gateway configuration permanently. This deletes the server entry from mcp-config.json. To disable without removing, edit mcp-config.json and set enabled=false.",
         inputSchema: {
           type: "object",
           properties: {
@@ -267,21 +205,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case "airis_config_add_server": {
-        const config = await readConfig();
-        const { name: serverName, command, args: cmdArgs, env, enabled } = args as any;
+        const { name: serverName, command, args: cmdArgs, env, enabled } =
+          parseArgs(AddServerArgsSchema, args, "airis_config_add_server");
 
-        if (config.mcpServers[serverName]) {
-          throw new Error(`Server already exists: ${serverName}`);
-        }
-
-        config.mcpServers[serverName] = {
+        await addServer(CONFIG_PATH, serverName, {
           command,
           args: cmdArgs || [],
           env: env || {},
           enabled: enabled !== false,
-        };
-
-        await writeConfig(config);
+        });
 
         return {
           content: [
@@ -294,15 +226,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "airis_config_remove_server": {
-        const config = await readConfig();
-        const serverName = (args as any).server_name;
-
-        if (!config.mcpServers[serverName]) {
-          throw new Error(`Server not found: ${serverName}`);
-        }
-
-        delete config.mcpServers[serverName];
-        await writeConfig(config);
+        const { server_name: serverName } = parseArgs(
+          ServerNameArgsSchema,
+          args,
+          "airis_config_remove_server",
+        );
+        await removeServer(CONFIG_PATH, serverName);
 
         return {
           content: [
@@ -315,12 +244,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "airis_profile_save": {
-        await ensureProfilesDir();
-        const config = await readConfig();
-        const profileName = (args as any).profile_name;
-        const profilePath = path.join(PROFILES_DIR, `${profileName}.json`);
-
-        await fs.writeFile(profilePath, JSON.stringify(config, null, 2));
+        const { profile_name: profileName } = parseArgs(
+          ProfileNameArgsSchema,
+          args,
+          "airis_profile_save",
+        );
+        await saveProfile(CONFIG_PATH, PROFILES_DIR, profileName);
 
         return {
           content: [
@@ -333,12 +262,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "airis_profile_load": {
-        const profileName = (args as any).profile_name;
-        const profilePath = path.join(PROFILES_DIR, `${profileName}.json`);
-
-        const content = await fs.readFile(profilePath, "utf-8");
-        const config = JSON.parse(content);
-        await writeConfig(config);
+        const { profile_name: profileName } = parseArgs(
+          ProfileNameArgsSchema,
+          args,
+          "airis_profile_load",
+        );
+        await loadProfile(CONFIG_PATH, PROFILES_DIR, profileName);
 
         return {
           content: [
@@ -351,20 +280,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "airis_profile_list": {
-        await ensureProfilesDir();
-        const files = await fs.readdir(PROFILES_DIR);
-        const profiles = files
-          .filter((f) => f.endsWith(".json"))
-          .map((f) => f.replace(".json", ""));
+        const profiles = await listProfiles(PROFILES_DIR);
 
         if (profiles.length === 0) {
           return {
-            content: [
-              {
-                type: "text",
-                text: "No profiles saved yet.",
-              },
-            ],
+            content: [{ type: "text", text: "No profiles saved yet." }],
           };
         }
 
@@ -379,9 +299,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "airis_mcp_detect": {
-        const repoPath = (args as any)?.path || WORKSPACE_DIR;
-        const autoAdd = (args as any)?.autoAdd === true;
-        const config = await readConfig();
+        const parsed = parseArgs(DetectArgsSchema, args, "airis_mcp_detect");
+        const repoPath = parsed.path ?? WORKSPACE_DIR;
+        const autoAdd = parsed.autoAdd ?? false;
+        const config = await readConfig(CONFIG_PATH);
 
         const detected: Array<{
           name: string;
@@ -392,33 +313,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           alreadyExists: boolean;
         }> = [];
 
-        // Scan package.json for Node.js dependencies
+        // Scan package.json
         try {
           const pkgPath = path.join(repoPath, "package.json");
           const pkgContent = await fs.readFile(pkgPath, "utf-8");
-          const pkg = JSON.parse(pkgContent);
-          const allDeps = {
-            ...pkg.dependencies,
-            ...pkg.devDependencies,
-          };
-
-          for (const [mcpName, mapping] of Object.entries(MCP_MAPPINGS)) {
-            for (const pkgName of mapping.packages) {
-              if (allDeps[pkgName]) {
-                detected.push({
-                  name: mcpName,
-                  reason: `Found "${pkgName}" in package.json`,
-                  mcp: mapping.mcp,
-                  description: mapping.description,
-                  envRequired: mapping.envRequired,
-                  alreadyExists: !!config.mcpServers[mcpName],
-                });
-                break;
-              }
-            }
-          }
+          detected.push(...detectFromPackageJson(pkgContent, config.mcpServers));
         } catch {
-          // No package.json or parse error
+          // No package.json
         }
 
         // Check for .git directory
@@ -439,31 +340,33 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           // No .git directory
         }
 
-        // Scan requirements.txt for Python dependencies
+        // Scan requirements.txt
         try {
           const reqPath = path.join(repoPath, "requirements.txt");
           const reqContent = await fs.readFile(reqPath, "utf-8");
-          const lines = reqContent.split("\n");
-
-          for (const [mcpName, mapping] of Object.entries(MCP_MAPPINGS)) {
-            for (const pkgName of mapping.packages) {
-              if (lines.some(line => line.toLowerCase().startsWith(pkgName.toLowerCase()))) {
-                if (!detected.find(d => d.name === mcpName)) {
-                  detected.push({
-                    name: mcpName,
-                    reason: `Found "${pkgName}" in requirements.txt`,
-                    mcp: mapping.mcp,
-                    description: mapping.description,
-                    envRequired: mapping.envRequired,
-                    alreadyExists: !!config.mcpServers[mcpName],
-                  });
-                }
-                break;
-              }
-            }
-          }
+          const alreadyDetected = detected.map(d => d.name);
+          detected.push(...detectFromRequirementsTxt(reqContent, config.mcpServers, alreadyDetected));
         } catch {
           // No requirements.txt
+        }
+
+        // Scan manifest.toml (Airis workspace)
+        try {
+          const manifestPath = path.join(repoPath, "manifest.toml");
+          await fs.access(manifestPath);
+          const airisMapping = MCP_MAPPINGS["airis-workspace"];
+          if (!detected.find(d => d.name === "airis-workspace")) {
+            detected.push({
+              name: "airis-workspace",
+              reason: "Found manifest.toml",
+              mcp: airisMapping.mcp,
+              description: airisMapping.description,
+              envRequired: airisMapping.envRequired,
+              alreadyExists: !!config.mcpServers["airis-workspace"],
+            });
+          }
+        } catch {
+          // No manifest.toml
         }
 
         if (detected.length === 0) {
@@ -475,51 +378,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        // Filter to only new MCPs
-        const newMcps = detected.filter(d => !d.alreadyExists);
-        const existingMcps = detected.filter(d => d.alreadyExists);
-
-        // Auto-add if requested
-        if (autoAdd && newMcps.length > 0) {
+        // Auto-add new MCPs if requested
+        if (autoAdd) {
+          const newMcps = detected.filter(d => !d.alreadyExists);
           for (const mcp of newMcps) {
             const mapping = MCP_MAPPINGS[mcp.name];
             config.mcpServers[mcp.name] = {
               command: mapping.command,
               args: mapping.args,
               env: mapping.env,
-              enabled: false, // Start disabled, user needs to set env vars
+              enabled: false,
             };
           }
-          await writeConfig(config);
-        }
-
-        // Format output
-        let output = `## Detected Tech Stack in ${repoPath}\n\n`;
-
-        if (newMcps.length > 0) {
-          output += `### ${autoAdd ? "Added" : "Suggested"} MCPs\n\n`;
-          for (const mcp of newMcps) {
-            output += `- **${mcp.name}**: ${mcp.description}\n`;
-            output += `  - Reason: ${mcp.reason}\n`;
-            output += `  - Package: \`${mcp.mcp}\`\n`;
-            if (mcp.envRequired.length > 0) {
-              output += `  - Required env: ${mcp.envRequired.map(e => `\`${e}\``).join(", ")}\n`;
-            }
-            output += "\n";
-          }
-          if (autoAdd) {
-            output += `\n> ${newMcps.length} MCPs added (disabled). Set required env vars and restart to use.\n`;
-          } else {
-            output += `\n> Run with \`autoAdd: true\` to add these MCPs to config.\n`;
+          if (newMcps.length > 0) {
+            await writeConfig(CONFIG_PATH, config);
           }
         }
 
-        if (existingMcps.length > 0) {
-          output += `### Already Configured\n\n`;
-          for (const mcp of existingMcps) {
-            output += `- **${mcp.name}**: ${mcp.reason}\n`;
-          }
-        }
+        const output = formatDetectionOutput(detected, repoPath, autoAdd);
 
         return {
           content: [{ type: "text", text: output }],

@@ -7,6 +7,8 @@ use Redis-backed rate limiting (see DEPLOYMENT.md).
 
 Key priority: API-Key header > client IP
 """
+import hashlib
+import ipaddress
 import os
 import time
 from collections import defaultdict
@@ -30,6 +32,16 @@ RATE_LIMIT_WINDOW = 60  # seconds (fixed at 1 minute)
 
 # Paths excluded from rate limiting (monitoring endpoints)
 EXCLUDED_PATHS = frozenset({"/health", "/ready", "/metrics"})
+
+# Trusted proxy CIDRs — only trust X-Forwarded-For from these sources.
+# Default: Docker bridge + loopback. Override via TRUSTED_PROXIES env var
+# (comma-separated CIDRs, e.g. "10.0.0.0/8,172.16.0.0/12").
+_DEFAULT_TRUSTED = "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+TRUSTED_PROXIES: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
+    ipaddress.ip_network(cidr.strip(), strict=False)
+    for cidr in os.getenv("TRUSTED_PROXIES", _DEFAULT_TRUSTED).split(",")
+    if cidr.strip()
+]
 
 
 @dataclass
@@ -90,6 +102,43 @@ class RateLimitStore:
         """Clear all entries. Useful for testing."""
         self._store.clear()
 
+    def cleanup_expired(self, window: int = RATE_LIMIT_WINDOW) -> int:
+        """Drop entries whose window has already expired.
+
+        The fixed-window algorithm never needs stale entries: if the window
+        has passed, the very next request for that key would reset it
+        anyway. Returning the stale entries to the garbage collector keeps
+        memory bounded for workloads with a long tail of one-shot clients
+        (short-lived CDN edges, CI runners, pentest scanners, …).
+
+        Args:
+            window: Rate limit window in seconds. Entries older than
+                ``window`` seconds are evicted.
+
+        Returns:
+            Number of entries removed.
+        """
+        now = time.time()
+        expired_keys = [
+            key
+            for key, entry in self._store.items()
+            if now - entry.window_start >= window
+        ]
+        for key in expired_keys:
+            self._store.pop(key, None)
+        return len(expired_keys)
+
+    def __len__(self) -> int:
+        return len(self._store)
+
+
+def _hash_key(key: str) -> str:
+    """Return a short, non-reversible identifier for a rate-limit key.
+
+    Used in log messages so the raw API key / IP never hits the log stream.
+    """
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+
 
 # Global store instance
 _rate_limit_store = RateLimitStore()
@@ -127,7 +176,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         if not allowed:
             logger.warning(
-                f"Rate limit exceeded for key={key[:20]}... limit={limit}/min"
+                "Rate limit exceeded for key=%s limit=%d/min",
+                _hash_key(key),
+                limit,
             )
             return JSONResponse(
                 status_code=429,
@@ -161,9 +212,24 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         client_ip = self._get_client_ip(request)
         return (f"ip:{client_ip}", RATE_LIMIT_PER_IP)
 
+    @staticmethod
+    def _is_trusted_proxy(ip_str: str) -> bool:
+        """Check if an IP address belongs to a trusted proxy network."""
+        try:
+            addr = ipaddress.ip_address(ip_str)
+            return any(addr in network for network in TRUSTED_PROXIES)
+        except ValueError:
+            return False
+
     def _get_client_ip(self, request: Request) -> str:
-        """Extract client IP, considering proxy headers."""
-        # Check X-Forwarded-For first (for reverse proxy setups)
+        """Extract client IP, considering proxy headers only from trusted proxies."""
+        direct_ip = request.client.host if request.client else "unknown"
+
+        # Only trust proxy headers when the direct connection is from a trusted proxy
+        if not self._is_trusted_proxy(direct_ip):
+            return direct_ip
+
+        # Check X-Forwarded-For (for reverse proxy setups)
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
             # Take the first IP (original client)
@@ -174,8 +240,4 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if real_ip:
             return real_ip.strip()
 
-        # Fall back to direct connection
-        if request.client:
-            return request.client.host
-
-        return "unknown"
+        return direct_ip

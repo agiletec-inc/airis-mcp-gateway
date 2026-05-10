@@ -1,5 +1,30 @@
 {
   "mcpServers": {
+    "airis-workspace": {
+      "command": "airis",
+      "args": ["mcp"],
+      "env": {},
+      "enabled": true,
+      "mode": "hot",
+      "tools_index": [
+        {"name": "workspace_init", "description": "Scan the repo and propose a manifest.toml covering apps/libs/compose/catalog"},
+        {"name": "workspace_discover", "description": "Raw discovery facts as JSON (inputs used by workspace_init)"},
+        {"name": "workspace_cleanup", "description": "List legacy compose files and orphan backups that should be removed"},
+        {"name": "workspace_gen", "description": "Regenerate workspace files (package.json, pnpm-workspace.yaml, CI, compose.yaml) from manifest.toml"},
+        {"name": "workspace_validate_all", "description": "Run manifest / ports / networks / env / dependency-architecture validation"},
+        {"name": "workspace_doctor", "description": "Diagnose environment drift and suggest fixes (read-only)"},
+        {"name": "workspace_verify", "description": "Execute manifest [rule.verify] commands inside the Docker workspace"},
+        {"name": "workspace_status", "description": "Show running Docker services (docker compose ps)"},
+        {"name": "manifest_validate", "description": "Validate a proposed manifest.toml string without writing"},
+        {"name": "manifest_apply", "description": "Persist a manifest.toml string and optionally run airis gen"},
+        {"name": "migration_execute", "description": "Run a batch of file migration steps proposed by workspace_init"}
+      ],
+      "behavior": {
+        "triggers": ["manifest.toml", "airis workspace", "workspace_init", "/airis:init", "scaffold monorepo", "bootstrap workspace"],
+        "instruction": "Use airis-workspace to bootstrap or maintain manifest.toml-driven monorepos. Call workspace_init to propose a manifest.toml from the current repo, then manifest_apply and workspace_gen to materialize the environment.",
+        "priority": "high"
+      }
+    },
     "context7": {
       "command": "npx",
       "args": [

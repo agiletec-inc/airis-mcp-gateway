@@ -1,12 +1,5 @@
 """
-Dynamic MCP - Token-efficient tool discovery and execution.
-
-Instead of exposing all tools in tools/list (which bloats context),
-Dynamic MCP exposes only two meta-tools:
-- airis-find: Search for tools/servers
-- airis-exec: Execute any tool by name
-
-This reduces context usage from O(n*tools) to O(1).
+Dynamic MCP - Token-efficient tool discovery and activation.
 """
 
 import json
@@ -15,6 +8,7 @@ from typing import Any, Optional
 from dataclasses import dataclass, field
 
 from .logging import get_logger
+from .toolset_catalog import ToolsetInfo, build_toolset_index
 
 logger = get_logger(__name__)
 
@@ -58,6 +52,10 @@ class DynamicMCP:
         self._tools: dict[str, ToolInfo] = {}  # tool_name -> ToolInfo
         self._servers: dict[str, ServerInfo] = {}  # server_name -> ServerInfo
         self._tool_to_server: dict[str, str] = {}  # tool_name -> server_name
+        self._toolsets: dict[str, ToolsetInfo] = {}  # toolset_ref -> ToolsetInfo
+        self._tool_to_toolsets: dict[str, set[str]] = {}  # tool_name -> toolset refs
+        self._active_toolsets: set[str] = set()
+        self._active_tools: set[str] = set()
 
     async def refresh_cache(
         self,
@@ -143,6 +141,7 @@ class DynamicMCP:
         self._tools = new_tools
         self._servers = new_servers
         self._tool_to_server = new_tool_to_server
+        self.refresh_toolsets(process_manager)
 
         logger.info(f"Cached {len(self._tools)} tools from {len(self._servers)} servers")
 
@@ -248,8 +247,73 @@ class DynamicMCP:
         self._tools = new_tools
         self._servers = new_servers
         self._tool_to_server = new_tool_to_server
+        self.refresh_toolsets(process_manager)
 
         logger.info(f"Cached {len(self._tools)} tools ({index_count} from index) from {len(self._servers)} servers (COLD tools on-demand)")
+
+    def refresh_toolsets(self, process_manager) -> None:
+        """Refresh logical toolset catalog from server configs."""
+        self._toolsets = build_toolset_index(process_manager._server_configs)
+        self._tool_to_toolsets = {}
+        for ref, info in self._toolsets.items():
+            for tool_name in info.tools:
+                self._tool_to_toolsets.setdefault(tool_name, set()).add(ref)
+
+    def build_tool_listing(
+        self,
+        excluded_servers: set[str] | None = None,
+        hot_exposed_tools: set[str] | None = None,
+        process_manager=None,
+        compact: bool = False,
+        compact_limit: int = 3,
+    ) -> str:
+        """Build compact tool listing grouped by server for airis-exec description.
+
+        Args:
+            compact: If True, show only top N tools per server with "+M" suffix.
+            compact_limit: Number of tools to show per server in compact mode.
+
+        Returns format like:
+            Full:    [memory] create_entities, search_nodes, add_observations, delete_entities, ...
+            Compact: [memory] create_entities, search_nodes, add_observations +4
+        """
+        excluded = excluded_servers or set()
+        hot_tools = hot_exposed_tools or set()
+
+        # Group tools by server from cache
+        server_tools: dict[str, list[str]] = {}
+        for tool_name, tool_info in self._tools.items():
+            if tool_info.server in excluded:
+                continue
+            if tool_name in hot_tools:
+                continue
+            server_tools.setdefault(tool_info.server, []).append(tool_name)
+
+        # Fallback: if cache is empty, read tools_index from process_manager configs
+        if not server_tools and process_manager:
+            for name in process_manager.get_server_names():
+                if name in excluded:
+                    continue
+                config = process_manager._server_configs.get(name)
+                if config and config.tools_index:
+                    tools = [
+                        t.get("name") for t in config.tools_index
+                        if t.get("name") and t.get("name") not in hot_tools
+                    ]
+                    if tools:
+                        server_tools[name] = tools
+
+        lines = []
+        for server_name in sorted(server_tools.keys()):
+            tools = sorted(server_tools[server_name])
+            if compact and len(tools) > compact_limit:
+                shown = ', '.join(tools[:compact_limit])
+                remaining = len(tools) - compact_limit
+                lines.append(f"[{server_name}] {shown} +{remaining}")
+            else:
+                lines.append(f"[{server_name}] {', '.join(tools)}")
+
+        return "\n".join(lines)
 
     async def load_tools_for_server(
         self,
@@ -355,6 +419,7 @@ class DynamicMCP:
         """
         matched_tools = []
         matched_servers = []
+        matched_toolsets = []
 
         query_lower = query.lower() if query else None
 
@@ -384,6 +449,21 @@ class DynamicMCP:
                 "enabled": info.enabled,
                 "mode": info.mode,
                 "tools_count": info.tools_count,
+            })
+
+        # Search toolsets
+        for ref, info in self._toolsets.items():
+            if server and info.server != server:
+                continue
+            if query_variants:
+                haystacks = (ref.lower(), info.summary.lower(), info.server.lower(), info.name.lower())
+                if not any(any(v in hay for hay in haystacks) for v in query_variants):
+                    continue
+            matched_toolsets.append({
+                "ref": ref,
+                "server": info.server,
+                "summary": info.summary,
+                "tools_count": len(info.tools),
             })
 
         # Search tools
@@ -434,6 +514,7 @@ class DynamicMCP:
 
         return {
             "servers": matched_servers[:limit],
+            "toolsets": matched_toolsets[:limit],
             "tools": matched_tools,
             "total_servers": len(self._servers),
             "total_tools": len(self._tools),
@@ -507,7 +588,6 @@ class DynamicMCP:
             fetch: fetch_url, fetch_html
             tavily: search, extract
         """
-        # Group tools by server
         server_tools: dict[str, list[str]] = {}
         for tool_name, info in self._tools.items():
             server = info.server
@@ -515,14 +595,12 @@ class DynamicMCP:
                 server_tools[server] = []
             server_tools[server].append(tool_name)
 
-        # Also include tools from TOOL_CATALOG for disabled/unloaded servers
         try:
             from .tool_suggester import TOOL_CATALOG
             for server_name, tools in TOOL_CATALOG.items():
                 if server_name not in server_tools:
                     server_tools[server_name] = list(tools.keys())
                 else:
-                    # Add catalog tools not already in cache
                     existing = set(server_tools[server_name])
                     for tool_name in tools:
                         if tool_name not in existing:
@@ -530,7 +608,6 @@ class DynamicMCP:
         except ImportError:
             pass
 
-        # Sort servers alphabetically, tools alphabetically within each server
         lines = []
         for server in sorted(server_tools.keys()):
             tools = sorted(server_tools[server])
@@ -538,45 +615,117 @@ class DynamicMCP:
 
         return "\n".join(lines)
 
-    def get_meta_tools(self) -> list[dict]:
+    async def activate_toolset(self, toolset_ref: str, process_manager) -> dict[str, Any]:
+        """Activate a toolset and load its live tool definitions when possible."""
+        if not self._toolsets:
+            self.refresh_toolsets(process_manager)
+
+        selected: list[ToolsetInfo] = []
+        if toolset_ref in self._toolsets:
+            selected = [self._toolsets[toolset_ref]]
+        else:
+            by_server = [info for info in self._toolsets.values() if info.server == toolset_ref]
+            if by_server:
+                selected = by_server
+
+        if not selected:
+            return {"ok": False, "message": f"Unknown toolset: {toolset_ref}"}
+
+        activated_tools: list[str] = []
+        activated_toolsets: list[str] = []
+        activated_servers: list[str] = []
+
+        for toolset in selected:
+            config = process_manager._server_configs.get(toolset.server)
+            if config and not config.enabled:
+                await process_manager.enable_server(toolset.server)
+                activated_servers.append(toolset.server)
+
+            if process_manager.is_process_server(toolset.server):
+                await self.load_tools_for_server(toolset.server, process_manager, force_enable=True)
+
+            self._active_toolsets.add(toolset.ref)
+            activated_toolsets.append(toolset.ref)
+            for tool_name in toolset.tools:
+                self._active_tools.add(tool_name)
+                activated_tools.append(tool_name)
+
+        return {
+            "ok": True,
+            "toolsets": activated_toolsets,
+            "tools": sorted(set(activated_tools)),
+            "servers": sorted(set(activated_servers)),
+        }
+
+    def get_active_tool_definitions(
+        self,
+        excluded_servers: set[str] | None = None,
+        excluded_tool_names: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return tool definitions with lazy schemas for all activated tools."""
+        excluded_servers = excluded_servers or set()
+        excluded_tool_names = excluded_tool_names or set()
+        definitions: list[dict[str, Any]] = []
+
+        for tool_name in sorted(self._active_tools):
+            if tool_name in excluded_tool_names:
+                continue
+            info = self._tools.get(tool_name)
+            if not info or info.server in excluded_servers:
+                continue
+            # Lazy Schema Implementation: stub inputSchema to minimize context window impact
+            definitions.append({
+                "name": info.name,
+                "description": info.description or f"{info.server}:{info.name}",
+                "inputSchema": {"type": "object"},
+            })
+        return definitions
+
+    def get_meta_tools(self, mode: str = "core") -> list[dict]:
         """
         Get the meta-tools for Dynamic MCP mode.
 
         Returns:
-            List of tool definitions for airis-find, airis-exec, airis-schema,
-            airis-confidence, airis-repo-index, and airis-suggest
+            List of tool definitions.
         """
-        return [
+        # Core meta-tools (always included)
+        tools = [
+            {
+                "name": "airis-activate",
+                "description": "[DEPRECATED] Activate is no longer needed. Native MCP tools are now dynamically exposed. Call them directly.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "toolset": {
+                            "type": "string"
+                        }
+                    },
+                    "required": ["toolset"]
+                }
+            },
             {
                 "name": "airis-find",
-                "description": "Search for available MCP tools and servers. Use this to discover what tools are available before calling airis-exec.",
+                "description": "Optional fallback search for finding tools.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "query": {
-                            "type": "string",
-                            "description": "Search query to match against tool names, descriptions, or server names. Examples: 'memory', 'file', 'browser'"
-                        },
-                        "server": {
-                            "type": "string",
-                            "description": "Filter results to a specific server name"
+                            "type": "string"
                         }
                     }
                 }
             },
             {
                 "name": "airis-exec",
-                "description": "Execute any MCP tool by name. First use airis-find to discover available tools, then use this to execute them.",
+                "description": "[DEPRECATED] Direct tool invocation is now supported natively. Please call tools directly by name.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "tool": {
-                            "type": "string",
-                            "description": "Tool name to execute. Can be 'tool_name' or 'server:tool_name' format. Use airis-find first to discover tool names."
+                            "type": "string"
                         },
                         "arguments": {
-                            "type": "object",
-                            "description": "Arguments to pass to the tool. Use airis-find with the tool name to see required arguments."
+                            "type": "object"
                         }
                     },
                     "required": ["tool"]
@@ -584,7 +733,7 @@ class DynamicMCP:
             },
             {
                 "name": "airis-schema",
-                "description": "Get the full input schema for a specific tool. Use this before airis-exec to see required arguments.",
+                "description": "Get the full input schema for a specific native MCP tool. Use when you need to check required arguments before calling it directly.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -596,119 +745,126 @@ class DynamicMCP:
                     "required": ["tool"]
                 }
             },
-            {
-                "name": "airis-confidence",
-                "description": "Pre-implementation confidence check. Assess confidence level before starting implementation to prevent wrong-direction execution. Returns score (0-1), verdict (proceed/present_alternatives/ask_user/stop), and clarifying questions if needed.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "task": {
-                            "type": "string",
-                            "description": "Description of the implementation task"
-                        },
-                        "has_official_docs": {
-                            "type": "boolean",
-                            "description": "Official documentation has been reviewed (+0.2)"
-                        },
-                        "has_existing_patterns": {
-                            "type": "boolean",
-                            "description": "Existing codebase patterns identified (+0.2)"
-                        },
-                        "has_clear_path": {
-                            "type": "boolean",
-                            "description": "Clear implementation path exists (+0.2)"
-                        },
-                        "multiple_approaches": {
-                            "type": "boolean",
-                            "description": "Multiple viable approaches exist (-0.1)"
-                        },
-                        "has_trade_offs": {
-                            "type": "boolean",
-                            "description": "Trade-offs require consideration (-0.1)"
-                        },
-                        "unclear_requirements": {
-                            "type": "boolean",
-                            "description": "Requirements are vague or incomplete (-0.2)"
-                        },
-                        "no_precedent": {
-                            "type": "boolean",
-                            "description": "No similar implementations to reference (-0.2)"
-                        },
-                        "missing_domain_knowledge": {
-                            "type": "boolean",
-                            "description": "Domain expertise is lacking (-0.2)"
+        ]
+
+        # Extended meta-tools (only in "full" mode)
+        if mode == "full":
+            tools.extend([
+                {
+                    "name": "airis-confidence",
+                    "description": "Pre-implementation confidence check. Assess confidence level before starting implementation to prevent wrong-direction execution. Returns score (0-1), verdict (proceed/present_alternatives/ask_user/stop), and clarifying questions if needed.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "task": {
+                                "type": "string",
+                                "description": "Description of the implementation task"
+                            },
+                            "has_official_docs": {
+                                "type": "boolean",
+                                "description": "Official documentation has been reviewed (+0.2)"
+                            },
+                            "has_existing_patterns": {
+                                "type": "boolean",
+                                "description": "Existing codebase patterns identified (+0.2)"
+                            },
+                            "has_clear_path": {
+                                "type": "boolean",
+                                "description": "Clear implementation path exists (+0.2)"
+                            },
+                            "multiple_approaches": {
+                                "type": "boolean",
+                                "description": "Multiple viable approaches exist (-0.1)"
+                            },
+                            "has_trade_offs": {
+                                "type": "boolean",
+                                "description": "Trade-offs require consideration (-0.1)"
+                            },
+                            "unclear_requirements": {
+                                "type": "boolean",
+                                "description": "Requirements are vague or incomplete (-0.2)"
+                            },
+                            "no_precedent": {
+                                "type": "boolean",
+                                "description": "No similar implementations to reference (-0.2)"
+                            },
+                            "missing_domain_knowledge": {
+                                "type": "boolean",
+                                "description": "Domain expertise is lacking (-0.2)"
+                            }
                         }
                     }
+                },
+                {
+                    "name": "airis-repo-index",
+                    "description": "Generate a repository index with structure overview, entry points, documentation, and configuration files. Useful for understanding unfamiliar codebases.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "repo_path": {
+                                "type": "string",
+                                "description": "Path to the repository to index (absolute or relative)"
+                            },
+                            "mode": {
+                                "type": "string",
+                                "enum": ["full", "update", "quick"],
+                                "description": "Indexing mode: 'full' (deep, 6 levels), 'update' (medium, 4 levels), 'quick' (shallow, 2 levels)"
+                            },
+                            "include_docs": {
+                                "type": "boolean",
+                                "description": "Include documentation files (default: true)"
+                            },
+                            "include_tests": {
+                                "type": "boolean",
+                                "description": "Include test directories (default: true)"
+                            },
+                            "max_entries": {
+                                "type": "integer",
+                                "description": "Maximum top-level entries to include (default: 10)"
+                            }
+                        },
+                        "required": ["repo_path"]
+                    }
+                },
+                {
+                    "name": "airis-suggest",
+                    "description": "Suggest appropriate MCP tools based on natural language intent. Analyzes your intent and returns ranked tool suggestions with match scores.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "intent": {
+                                "type": "string",
+                                "description": "Natural language description of what you want to do. Examples: 'create invoice with stripe', 'search for files containing error', 'navigate to a webpage'"
+                            },
+                            "max_results": {
+                                "type": "integer",
+                                "description": "Maximum number of suggestions to return (default: 5)"
+                            }
+                        },
+                        "required": ["intent"]
+                    }
+                },
+                {
+                    "name": "airis-route",
+                    "description": "Route a task to the optimal tool chain. Matches task against known patterns and returns the recommended tool execution order. Faster than airis-find for common workflows.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "task": {
+                                "type": "string",
+                                "description": "Natural language task description. Examples: 'research best practices for React hooks', 'query user table in database', 'create a Stripe invoice'"
+                            },
+                            "max_results": {
+                                "type": "integer",
+                                "description": "Maximum number of additional suggestions to return (default: 5)"
+                            }
+                        },
+                        "required": ["task"]
+                    }
                 }
-            },
-            {
-                "name": "airis-repo-index",
-                "description": "Generate a repository index with structure overview, entry points, documentation, and configuration files. Useful for understanding unfamiliar codebases.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "repo_path": {
-                            "type": "string",
-                            "description": "Path to the repository to index (absolute or relative)"
-                        },
-                        "mode": {
-                            "type": "string",
-                            "enum": ["full", "update", "quick"],
-                            "description": "Indexing mode: 'full' (deep, 6 levels), 'update' (medium, 4 levels), 'quick' (shallow, 2 levels)"
-                        },
-                        "include_docs": {
-                            "type": "boolean",
-                            "description": "Include documentation files (default: true)"
-                        },
-                        "include_tests": {
-                            "type": "boolean",
-                            "description": "Include test directories (default: true)"
-                        },
-                        "max_entries": {
-                            "type": "integer",
-                            "description": "Maximum top-level entries to include (default: 10)"
-                        }
-                    },
-                    "required": ["repo_path"]
-                }
-            },
-            {
-                "name": "airis-suggest",
-                "description": "Suggest appropriate MCP tools based on natural language intent. Analyzes your intent and returns ranked tool suggestions with match scores.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "intent": {
-                            "type": "string",
-                            "description": "Natural language description of what you want to do. Examples: 'create invoice with stripe', 'search for files containing error', 'navigate to a webpage'"
-                        },
-                        "max_results": {
-                            "type": "integer",
-                            "description": "Maximum number of suggestions to return (default: 5)"
-                        }
-                    },
-                    "required": ["intent"]
-                }
-            },
-            {
-                "name": "airis-route",
-                "description": "Route a task to the optimal tool chain. Matches task against known patterns and returns the recommended tool execution order. Faster than airis-find for common workflows.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "task": {
-                            "type": "string",
-                            "description": "Natural language task description. Examples: 'research best practices for React hooks', 'query user table in database', 'create a Stripe invoice'"
-                        },
-                        "max_results": {
-                            "type": "integer",
-                            "description": "Maximum number of additional suggestions to return (default: 5)"
-                        }
-                    },
-                    "required": ["task"]
-                }
-            }
-        ]
+            ])
+
+        return tools
 
     def get_meta_tools_llm_selection(self) -> list[dict]:
         """

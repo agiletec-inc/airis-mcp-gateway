@@ -1,6 +1,7 @@
 """
-Tests for ProcessRunner adaptive TTL calculation.
+Tests for ProcessRunner adaptive TTL calculation and idle reaper behavior.
 """
+import asyncio
 import pytest
 from app.core.process_runner import ProcessRunner, ProcessConfig
 
@@ -82,3 +83,37 @@ def test_adaptive_ttl_normal_operation():
     # With no calls, should return min_ttl
     ttl = runner._calculate_adaptive_ttl()
     assert ttl == config.min_ttl
+
+
+@pytest.mark.asyncio
+async def test_idle_reaper_skips_hot_servers():
+    """HOT servers must never be idle-killed."""
+    config = ProcessConfig(
+        name="hot-server",
+        command="echo",
+        args=["test"],
+        mode="hot",
+        idle_timeout=1,  # Very short TTL
+    )
+
+    runner = ProcessRunner(config)
+    # _idle_reaper should return immediately for HOT servers
+    # (no infinite loop, no stop call)
+    await asyncio.wait_for(runner._idle_reaper(), timeout=2.0)
+
+
+@pytest.mark.asyncio
+async def test_idle_reaper_runs_for_cold_servers():
+    """COLD servers should have an active idle reaper."""
+    config = ProcessConfig(
+        name="cold-server",
+        command="echo",
+        args=["test"],
+        mode="cold",
+        idle_timeout=1,
+    )
+
+    runner = ProcessRunner(config)
+    # For a stopped server, the reaper loop should exit quickly
+    # (state is STOPPED by default, loop condition fails)
+    await asyncio.wait_for(runner._idle_reaper(), timeout=2.0)

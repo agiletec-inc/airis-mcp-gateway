@@ -1,0 +1,125 @@
+{
+  "context7": {
+    "toolsets": {
+      "docs": {
+        "summary": "Library and framework documentation lookup",
+        "tools": ["resolve-library-id", "query-docs"]
+      }
+    }
+  },
+  "fetch": {
+    "toolsets": {
+      "web": {
+        "summary": "Fetch web content as markdown",
+        "tools": ["fetch"]
+      }
+    }
+  },
+  "memory": {
+    "toolsets": {
+      "graph": {
+        "summary": "Knowledge graph read and write operations",
+        "tools": [
+          "create_entities",
+          "search_nodes",
+          "add_observations",
+          "delete_entities",
+          "open_nodes",
+          "create_relations",
+          "read_graph"
+        ]
+      }
+    }
+  },
+  "serena": {
+    "toolsets": {
+      "code-intel": {
+        "summary": "Codebase symbol and file intelligence",
+        "tools": [
+          "get_project_summary",
+          "find_symbol",
+          "get_file_summary",
+          "get_symbol_details"
+        ]
+      }
+    }
+  },
+  "tavily": {
+    "toolsets": {
+      "search": {
+        "summary": "Web search and extraction",
+        "tools": [
+          "tavily-search",
+          "tavily-extract",
+          "tavily-crawl",
+          "tavily-map",
+          "tavily-research"
+        ]
+      }
+    }
+  },
+  "supabase": {
+    "toolsets": {
+      "sql": {
+        "summary": "Database query and schema inspection",
+        "tools": ["query", "list_tables", "describe_table"]
+      }
+    }
+  },
+  "stripe": {
+    "toolsets": {
+      "customers": {
+        "summary": "Customer management operations",
+        "tools": ["create_customer", "list_customers"]
+      },
+      "billing": {
+        "summary": "Invoice creation and listing",
+        "tools": ["create_invoice", "list_invoices"]
+      },
+      "payments": {
+        "summary": "Payment intent operations",
+        "tools": ["create_payment_intent"]
+      }
+    }
+  },
+  "cloudflare": {
+    "toolsets": {
+      "kv": {
+        "summary": "Cloudflare KV operations",
+        "tools": ["cloudflare_kv_get", "cloudflare_kv_put"]
+      },
+      "workers": {
+        "summary": "Cloudflare Workers inspection",
+        "tools": ["cloudflare_workers_list"]
+      },
+      "dns": {
+        "summary": "Cloudflare DNS inspection",
+        "tools": ["cloudflare_dns_records_list"]
+      }
+    }
+  },
+  "github": {
+    "toolsets": {
+      "issues": {
+        "summary": "GitHub issue operations",
+        "tools": ["create_issue", "list_issues"]
+      },
+      "prs": {
+        "summary": "GitHub pull request operations",
+        "tools": ["create_pull_request"]
+      },
+      "repos": {
+        "summary": "GitHub repository search and file access",
+        "tools": ["search_repositories", "get_file_contents"]
+      }
+    }
+  },
+  "chrome-devtools": {
+    "toolsets": {
+      "browser": {
+        "summary": "Browser evaluation, screenshots, and network inspection",
+        "tools": ["devtools_evaluate", "devtools_screenshot", "devtools_network"]
+      }
+    }
+  }
+}

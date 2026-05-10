@@ -1,0 +1,13 @@
+name: tool-routing
+compile_to: mcp_instructions
+priority: high
+
+text: |
+  ## Tool Routing Guide
+  Use Gateway (airis-exec) for API/service calls. Use host tools for everything else.
+
+  Gateway (airis-exec): library docs → context7 | web search → tavily | database → supabase | payments → stripe | DNS/workers → cloudflare | design files → figma
+
+  Host tools (NOT Gateway): browser automation → playwright-cli skill (needs host Chrome) | file generation (docx/xlsx/pdf) → claude-api plugin | TDD/debugging/planning → superpowers plugin | git operations → gh CLI or native git | simple code read/edit → native Read/Edit/Grep tools
+
+  Rules: docs before code | API/service → Gateway | browser testing → Playwright CLI first | host-dependent → plugin/skill/CLI | simple file ops → native tools.

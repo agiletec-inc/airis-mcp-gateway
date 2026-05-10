@@ -22,6 +22,9 @@ services:
       - cache-npm:/root/.npm
       - memory-data:/app/data
 
+      # Workflows (same as prod)
+      - ./workflows:/app/workflows:ro
+
       # DEV: Mount Python source for hot reload
       - ./apps/api/src/app:/app/api-src/src/app:ro
 

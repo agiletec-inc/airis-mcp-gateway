@@ -1,8 +1,9 @@
-"""Behavior Compiler — compiles mcp-config.json behavior specs into compact instructions.
+"""Behavior Compiler — compiles workflows and behaviors into MCP instructions.
 
-Reads behavior definitions from server configs and produces a ~800 token
-instructions string for the MCP initialize response. This enables proactive
-tool usage by LLMs without per-tool definition files.
+Reads workflow YAML recipes and server behavior configs, then produces
+a ~1500 token instructions string for the MCP initialize response.
+Workflows are directives (not suggestions) that force LLMs to use
+the right MCP tools at the right time.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from .logging import get_logger
 from .routing_engine import format_routing_table_as_instructions
+from .workflow_loader import PRIORITY_ORDER, WorkflowConfig, load_workflows
 
 if TYPE_CHECKING:
     from .mcp_config_loader import McpServerConfig
@@ -24,10 +26,10 @@ _PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 _BASE_INSTRUCTIONS = (
     "This is AIRIS MCP Gateway with Dynamic MCP. "
     "IMPORTANT: Do NOT call tools directly. Instead:\n"
-    "1. Use 'airis-find' to search for tools by name/description\n"
-    "2. Use 'airis-schema' to get the input schema for a tool\n"
-    "3. Use 'airis-exec' to execute the tool\n"
-    "All 60+ tools are accessed through these 3 meta-tools. "
+    "1. Use 'airis-exec' to execute any tool — all available tool names are listed in its description\n"
+    "2. If arguments are wrong, the schema will be returned automatically\n"
+    "3. Before implementation, inspect the repo and check docs for unfamiliar libraries or APIs\n"
+    "All 60+ tools are accessed through airis-exec. "
     "This provides 98% token reduction while maintaining full functionality."
 )
 
@@ -46,8 +48,8 @@ _META_TOOLS_SECTION = (
     "- 'airis-confidence': Pre-implementation confidence check. Use before starting complex tasks.\n"
     "- 'airis-repo-index': Generate repository structure overview for unfamiliar codebases.\n"
     "- 'airis-suggest': Get tool recommendations from natural language intent.\n\n"
-    "When you need a capability (web search, memory, code analysis, etc.), "
-    "ALWAYS start with airis-find or airis-suggest to discover available tools."
+    "When you need a capability, check airis-exec's description for available tools, "
+    "or use airis-find to search by keyword."
 )
 
 _META_TOOLS_SECTION_LLM_SELECTION = (
@@ -66,12 +68,15 @@ _TOOL_ROUTING_GUIDE = (
     "TDD/debugging/planning → superpowers plugin | "
     "git operations → gh CLI or native git | "
     "simple code read/edit → native Read/Edit/Grep tools\n\n"
-    "Rule: API/service → Gateway. Host-dependent → plugin/skill/CLI. Simple file ops → native tools."
+    "Rules: docs before code | API/service → Gateway | browser testing → Playwright CLI first | "
+    "host-dependent → plugin/skill/CLI | simple file ops → native tools."
 )
 
-
 def compile_instructions(server_configs: dict[str, McpServerConfig]) -> str:
-    """Compile behavior specs from server configs into instructions string.
+    """Compile workflows and behavior specs into instructions string.
+
+    Workflows take priority over behavior configs. Servers covered by
+    workflows are excluded from the behavior lines section.
 
     Args:
         server_configs: Dict mapping server name to McpServerConfig
@@ -83,11 +88,20 @@ def compile_instructions(server_configs: dict[str, McpServerConfig]) -> str:
 
     if settings.LLM_TOOL_SELECTION:
         sections = [_BASE_INSTRUCTIONS_LLM_SELECTION, _META_TOOLS_SECTION_LLM_SELECTION, _TOOL_ROUTING_GUIDE]
+        workflows = []
     else:
-        sections = [_BASE_INSTRUCTIONS, _META_TOOLS_SECTION, _TOOL_ROUTING_GUIDE]
+        workflows = load_workflows()
 
-    # Collect behaviors from all servers (including disabled — they can be auto-enabled)
-    behavior_lines = _compile_behavior_lines(server_configs)
+    # Use workflow texts if available, otherwise fall back to hardcoded constant
+    workflow_text = _compile_workflow_texts(workflows)
+    sections = [_BASE_INSTRUCTIONS, _META_TOOLS_SECTION, workflow_text or _TOOL_ROUTING_GUIDE]
+
+    # Servers covered by workflows are excluded from behavior lines
+    workflow_servers = set()
+    for wf in workflows:
+        workflow_servers.update(wf.servers)
+
+    behavior_lines = _compile_behavior_lines(server_configs, exclude=workflow_servers)
     if behavior_lines:
         sections.append("## Proactive Tool Usage\n" + "\n".join(behavior_lines))
 
@@ -99,10 +113,32 @@ def compile_instructions(server_configs: dict[str, McpServerConfig]) -> str:
     return "\n\n".join(sections)
 
 
+def _compile_workflow_texts(workflows: list[WorkflowConfig]) -> str:
+    """Compile workflow confirmed texts into a single string.
+
+    Filters for compile_to: mcp_instructions, joins in priority order.
+    Text is emitted verbatim — no template engine or variable expansion.
+
+    Returns:
+        Compiled text, or empty string if no matching workflows.
+    """
+    texts = []
+    for wf in workflows:
+        if wf.compile_to == "mcp_instructions" and wf.text.strip():
+            texts.append(wf.text.strip())
+
+    return "\n\n".join(texts)
+
+
 def _compile_behavior_lines(
     server_configs: dict[str, McpServerConfig],
+    exclude: set[str] | None = None,
 ) -> list[str]:
     """Extract and sort behavior lines from server configs.
+
+    Args:
+        server_configs: Server configurations with behavior definitions.
+        exclude: Server names to skip (covered by workflow directives).
 
     Returns:
         List of "WHEN <trigger> -> <instruction> [server]" lines,
@@ -110,9 +146,15 @@ def _compile_behavior_lines(
     """
     from .mcp_config_loader import ServerMode
 
+    if exclude is None:
+        exclude = set()
+
     entries: list[tuple[int, str]] = []  # (priority_order, line)
 
     for name, config in server_configs.items():
+        if name in exclude:
+            continue
+
         if config.behavior is None:
             continue
 
@@ -120,7 +162,7 @@ def _compile_behavior_lines(
         if not behavior.triggers or not behavior.instruction:
             continue
 
-        priority_order = _PRIORITY_ORDER.get(behavior.priority, 1)
+        priority_order = PRIORITY_ORDER.get(behavior.priority, 1)
 
         # Determine tool reference format based on mode
         if config.enabled and config.mode == ServerMode.HOT:
@@ -129,7 +171,7 @@ def _compile_behavior_lines(
             tool_ref = f"airis-exec {name}:* [{name}]"
 
         trigger_str = " / ".join(behavior.triggers)
-        line = f"WHEN {trigger_str} \u2192 {behavior.instruction} {tool_ref}"
+        line = f"WHEN {trigger_str} → {behavior.instruction} {tool_ref}"
         entries.append((priority_order, line))
 
     # Sort by priority

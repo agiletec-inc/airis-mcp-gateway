@@ -1,0 +1,12 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.agiletec-inc/airis-mcp-gateway",
+  "title": "AIRIS MCP Gateway",
+  "description": "Docker-based MCP multiplexer that aggregates 60+ tools behind 7 meta-tools (airis-find, airis-exec, airis-schema, etc.), reducing context tokens by 97% via progressive disclosure. Supports lazy loading, idle-kill, circuit breaker, and auto-enable of MCP servers.",
+  "repository": {
+    "url": "https://github.com/agiletec-inc/airis-mcp-gateway",
+    "source": "github",
+    "id": "1068944624"
+  },
+  "version": "1.0.0"
+}

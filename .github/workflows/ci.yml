@@ -4,11 +4,9 @@ on:
   push:
     branches:
       - main
-      - stg
   pull_request:
     branches:
       - main
-      - stg
 
 jobs:
   # Detect which paths changed
@@ -17,18 +15,27 @@ jobs:
     outputs:
       python: ${{ steps.filter.outputs.python }}
       typescript: ${{ steps.filter.outputs.typescript }}
+      shell: ${{ steps.filter.outputs.shell }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
             python:
               - 'apps/api/**'
               - 'pyproject.toml'
+              - 'workflows/**'
             typescript:
               - 'apps/gateway-control/**'
               - 'apps/airis-commands/**'
+            shell:
+              - 'scripts/airis-gateway'
+              - 'scripts/quick-install.sh'
+              - 'scripts/test-airis-gateway-smoke.sh'
+              - 'install.sh'
+              - '.tasks.d/test.yml'
+              - '.github/workflows/ci.yml'
 
   # Python tests (only when Python files change)
   test-python:
@@ -36,15 +43,15 @@ jobs:
     if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
 
       - name: Install dependencies
         run: |
@@ -57,7 +64,7 @@ jobs:
           python -m pytest tests/unit -v --tb=short --cov=src --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         with:
           files: apps/api/coverage.xml
           flags: python
@@ -66,7 +73,7 @@ jobs:
       - name: Security scan (bandit)
         run: |
           pip install bandit
-          bandit -r apps/api/src -ll -ii || true
+          bandit -r apps/api/src -ll -ii
 
   # TypeScript build and test (only when TS files change)
   build-typescript:
@@ -77,17 +84,20 @@ jobs:
       matrix:
         package: [gateway-control, airis-commands]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
 
       - name: Install dependencies
         run: |
           cd apps/${{ matrix.package }}
-          npm install
+          # npm ci enforces that package-lock.json is in sync with
+          # package.json so a developer who forgot to regenerate the
+          # lockfile fails the build instead of silently drifting.
+          npm ci
 
       - name: Run tests
         run: |
@@ -104,34 +114,13 @@ jobs:
           cd apps/${{ matrix.package }}
           npm run build
 
-  # Auto-merge next to main
-  merge-to-main:
-    needs: [test-python, build-typescript]
-    if: |
-      always() &&
-      github.ref == 'refs/heads/stg' &&
-      github.event_name == 'push' &&
-      !contains(needs.*.result, 'failure')
+  test-shell:
+    needs: changes
+    if: needs.changes.outputs.shell == 'true'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v6
 
-      - name: Configure git
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
+      - name: Run airis-gateway smoke tests
+        run: bash scripts/test-airis-gateway-smoke.sh
 
-      - name: Merge stg to main
-        run: |
-          git fetch origin main
-          git checkout main
-          git merge origin/stg --no-edit
-          git push origin main
-
-          echo "✅ Merged stg → main"

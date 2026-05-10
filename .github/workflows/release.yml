@@ -13,7 +13,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -67,6 +67,36 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
             echo "✅ Will create release v${{steps.version.outputs.version}}"
           fi
+
+      - name: Sync versions and commit back
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          NEW_VERSION=${{steps.version.outputs.version}}
+          echo "$NEW_VERSION" > VERSION
+
+          # Run the sync task to update package.json/pyproject.toml
+          # Need to install go-task for this, but simpler to use the script logic directly:
+          # Node.js (package.json)
+          for f in apps/*/package.json; do
+            if [ -f "$f" ]; then
+              sed -i "s/\"version\": \".*\"/\"version\": \"$NEW_VERSION\"/" "$f"
+              echo "✅ Updated $f"
+            fi
+          done
+          # Python (pyproject.toml)
+          for f in apps/*/pyproject.toml; do
+            if [ -f "$f" ]; then
+              sed -i "s/version = \".*\"/version = \"$NEW_VERSION\"/" "$f"
+              echo "✅ Updated $f"
+            fi
+          done
+
+          # Configure git and commit back
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add VERSION apps/*/package.json apps/*/pyproject.toml
+          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
+          git push origin main
 
       - name: Create GitHub Release
         if: steps.check_tag.outputs.exists == 'false'

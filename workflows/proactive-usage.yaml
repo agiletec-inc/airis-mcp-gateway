@@ -1,0 +1,10 @@
+name: proactive-tool-usage
+compile_to: mcp_instructions
+priority: medium
+
+text: |
+  ## Proactive Tool Usage
+  WHEN implementing with any library/framework → Lookup docs BEFORE writing code [context7]
+  WHEN need current/external information → Search web for up-to-date info [tavily]
+  WHEN database query needed → Query database for data operations [supabase]
+  WHEN payment/billing operations → Use Stripe for payment operations [stripe]

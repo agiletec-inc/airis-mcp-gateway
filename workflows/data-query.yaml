@@ -1,0 +1,10 @@
+name: data-query
+compile_to: mcp_instructions
+priority: high
+servers:
+  - supabase
+
+text: |
+  ### Database Operations
+  WHEN querying, modifying, or analyzing database data:
+  1. Call supabase:query with the appropriate SQL statement

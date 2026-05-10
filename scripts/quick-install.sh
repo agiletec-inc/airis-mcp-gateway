@@ -169,17 +169,18 @@ install() {
         fi
     fi
 
-    # Step 6: Register with Claude Code globally (if available)
+    # Step 6: Initialize AIRIS registry and managed client config
+    local registry_initialized=false
+    if [ -x "$DIR/scripts/airis-gateway" ]; then
+        if "$DIR/scripts/airis-gateway" init "$DIR" --apply >/dev/null 2>&1; then
+            registry_initialized=true
+        fi
+    fi
+
+    # Step 7: Register with Claude Code globally (if available)
     local claude_registered=false
     if command -v claude >/dev/null 2>&1; then
-        log_step "6/6 Registering with Claude Code (global)..."
-
-        # Clean up ALL project-level MCP configs (gateway should be global only)
-        if [ -f "$HOME/.claude.json" ] && command -v jq >/dev/null 2>&1; then
-            log_info "Cleaning project-level MCP configs..."
-            jq '.projects |= with_entries(.value.mcpServers = {})' "$HOME/.claude.json" > /tmp/claude.json.tmp && \
-                mv /tmp/claude.json.tmp "$HOME/.claude.json"
-        fi
+        log_step "7/7 Registering with Claude Code (global)..."
 
         # Remove old registrations
         claude mcp remove airis 2>/dev/null || true
@@ -216,12 +217,21 @@ install() {
     echo "  Config:    $CONFIG_DIR/mcp-config.json"
     echo "  Repo:      $DIR"
     echo ""
+    if $registry_initialized; then
+        echo -e "  AIRIS Registry: ${GREEN}Initialized${NC}"
+        echo "    Path: ~/.airis/mcp/registry.json"
+    else
+        echo "  Initialize AIRIS registry:"
+        echo "    $DIR/scripts/airis-gateway init"
+    fi
+    echo ""
     if $claude_registered; then
         echo -e "  Claude Code: ${GREEN}Registered (global)${NC}"
     else
         echo "  Register with Claude Code (global):"
         echo "    claude mcp add --scope user --transport sse airis-mcp-gateway http://localhost:9400/sse"
     fi
+    echo "  Claude Desktop: unmanaged (AIRIS does not modify its MCP config automatically)"
     echo ""
     if $workspace_installed; then
         echo -e "  airis-workspace: ${GREEN}Installed${NC}"
@@ -233,6 +243,10 @@ install() {
     fi
     echo ""
     echo "  Commands:"
+    echo "    $DIR/scripts/airis-gateway init ~/github         # Initialize global registry"
+    echo "    $DIR/scripts/airis-gateway import ~/github --apply"
+    echo "    $DIR/scripts/airis-gateway clean ~/github"
+    echo "    $DIR/scripts/airis-gateway doctor ~/github"
     echo "    cd $DIR && docker compose logs -f    # View logs"
     echo "    cd $DIR && docker compose down       # Stop"
     echo "    cd $DIR && docker compose up -d      # Start"

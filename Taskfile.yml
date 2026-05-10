@@ -22,6 +22,34 @@ includes:
     optional: false
 
 tasks:
+  version:sync:
+    desc: Sync all package versions from root VERSION file (Airis Monorepo pattern)
+    cmds:
+      - |
+        # Use manifest.toml to drive the sync process
+        VERSION=$(cat VERSION | tr -d '[:space:]')
+        echo "🔄 Airis Monorepo Sync: $VERSION"
+
+        # Node.js packages (from manifest.toml)
+        # We look for all entries with type="node"
+        grep -B 2 'type = "node"' manifest.toml | grep 'path = ' | sed 's/path = "//;s/"//' | while read -r p; do
+          f="$p/package.json"
+          if [ -f "$f" ]; then
+            sed -i.bak "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" "$f" && rm "$f.bak"
+            echo "✅ Updated Node: $f"
+          fi
+        done
+
+        # Python packages (from manifest.toml)
+        # We look for all entries with type="python"
+        grep -B 2 'type = "python"' manifest.toml | grep 'path = ' | sed 's/path = "//;s/"//' | while read -r p; do
+          f="$p/pyproject.toml"
+          if [ -f "$f" ]; then
+            sed -i.bak "s/version = \".*\"/version = \"$VERSION\"/" "$f" && rm "$f.bak"
+            echo "✅ Updated Python: $f"
+          fi
+        done
+
   default:
     desc: Show available tasks
     cmds:

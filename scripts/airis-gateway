@@ -4,9 +4,17 @@ set -euo pipefail
 # AIRIS MCP Gateway - Thin CLI Wrapper
 # Just pulls latest and runs docker compose
 
-REPO="${AIRIS_MCP_REPO:-https://github.com/agiletec-inc/airis-mcp-gateway}"
 DIR="${AIRIS_MCP_DIR:-$HOME/.local/share/airis-mcp-gateway}"
-CONFIG_DIR="${AIRIS_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/airis-mcp-gateway}"
+REGISTRY_DIR="${AIRIS_REGISTRY_DIR:-$HOME/.airis/mcp}"
+REGISTRY_PATH="$REGISTRY_DIR/registry.json"
+BACKUP_DIR="$REGISTRY_DIR/backups"
+CODEX_CONFIG_PATH="${CODEX_CONFIG_PATH:-$HOME/.codex/config.toml}"
+CLAUDE_CODE_DIR="${CLAUDE_CODE_DIR:-$HOME/.claude}"
+GEMINI_CONFIG_DIR="${GEMINI_CONFIG_DIR:-$HOME/.gemini}"
+CLAUDE_DESKTOP_CONFIG_PATH="${CLAUDE_DESKTOP_CONFIG_PATH:-$HOME/Library/Application Support/Claude/claude_desktop_config.json}"
+BASE_URL="https://raw.githubusercontent.com/agiletec-inc/airis-mcp-gateway/${AIRIS_VERSION:-latest}"
+GATEWAY_HTTP_URL="${AIRIS_GATEWAY_HTTP_URL:-http://localhost:9400/mcp}"
+GATEWAY_SSE_URL="${AIRIS_GATEWAY_SSE_URL:-http://localhost:9400/sse}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -17,41 +25,122 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-ensure_repo() {
-    mkdir -p "$DIR"
-    if [ -d "$DIR/.git" ]; then
-        log_info "Updating repository..."
-        git -C "$DIR" fetch --tags -q 2>/dev/null || true
-        local latest_tag=$(git -C "$DIR" describe --tags --abbrev=0 2>/dev/null || echo "main")
-        git -C "$DIR" checkout -q "$latest_tag" 2>/dev/null || true
-        git -C "$DIR" pull -q 2>/dev/null || true
-    else
-        log_info "Cloning repository..."
-        git clone -q "$REPO" "$DIR"
-        local latest_tag=$(git -C "$DIR" describe --tags --abbrev=0 2>/dev/null || echo "main")
-        git -C "$DIR" checkout -q "$latest_tag" 2>/dev/null || true
+ensure_registry() {
+    mkdir -p "$REGISTRY_DIR" "$BACKUP_DIR"
+    if [ ! -f "$REGISTRY_PATH" ]; then
+        python3 - "$REGISTRY_PATH" "$GATEWAY_HTTP_URL" "$GATEWAY_SSE_URL" "$CODEX_CONFIG_PATH" "$CLAUDE_DESKTOP_CONFIG_PATH" <<'PY'
+import json
+import os
+import sys
+
+registry_path, gateway_http, gateway_sse, codex_path, claude_path = sys.argv[1:]
+registry = {
+    "version": 1,
+    "gateway": {
+        "streamableHttpEndpoint": gateway_http,
+        "sseEndpoint": gateway_sse,
+        "managed": True,
+    },
+    "clients": {
+        "codex": {
+            "managed": True,
+            "configPath": codex_path,
+            "installed": os.path.exists(codex_path),
+            "lastSyncedAt": None,
+        },
+        "claude_desktop": {
+            "managed": False,
+            "configPath": claude_path,
+            "installed": os.path.exists(os.path.expanduser(claude_path)),
+            "lastSyncedAt": None,
+        },
+    },
+    "policy": {
+        "repoLocalMcpJson": "forbidden",
+        "backupBeforeDelete": True,
+    },
+    "servers": {},
+    "imports": {},
+}
+with open(registry_path, "w", encoding="utf-8") as f:
+    json.dump(registry, f, indent=2)
+PY
     fi
 }
 
-ensure_config() {
-    mkdir -p "$CONFIG_DIR"
-    if [ ! -f "$CONFIG_DIR/mcp-config.json" ]; then
-        if [ -f "$DIR/mcp-config.json" ]; then
-            log_info "Copying default config to $CONFIG_DIR/"
-            cp "$DIR/mcp-config.json" "$CONFIG_DIR/"
-        else
-            log_error "No mcp-config.json found!"
-            exit 1
-        fi
+scan_repo_mcp_json() {
+    local scan_root="${1:-$PWD}"
+    python3 - "$scan_root" "$REGISTRY_DIR" <<'PY'
+import os
+import sys
+
+scan_root = os.path.abspath(os.path.expanduser(sys.argv[1]))
+registry_dir = os.path.abspath(os.path.expanduser(sys.argv[2]))
+skip_dirs = {
+    ".git", ".hg", ".svn", "node_modules", ".venv", "venv",
+    "dist", "build", ".next", "target", "__pycache__",
+}
+
+for root, dirs, files in os.walk(scan_root):
+    dirs[:] = [
+        d for d in dirs
+        if d not in skip_dirs and not os.path.abspath(os.path.join(root, d)).startswith(registry_dir)
+    ]
+    if "mcp.json" in files:
+        print(os.path.join(root, "mcp.json"))
+PY
+}
+
+sync_codex_registration() {
+    if ! command -v codex >/dev/null 2>&1; then
+        return 1
+    fi
+
+    codex mcp remove airis-mcp-gateway >/dev/null 2>&1 || true
+    codex mcp add airis-mcp-gateway --url "$GATEWAY_HTTP_URL" >/dev/null 2>&1
+}
+
+ensure_files() {
+    mkdir -p "$DIR"
+    if [ ! -f "$DIR/docker-compose.yml" ]; then
+        log_info "Downloading docker-compose.yml..."
+        curl -fsSL "$BASE_URL/docker-compose.dist.yml" -o "$DIR/docker-compose.yml"
+    fi
+    if [ ! -f "$DIR/mcp-config.json" ]; then
+        log_info "Downloading default config..."
+        curl -fsSL "$BASE_URL/mcp-config.json.example" -o "$DIR/mcp-config.json"
+    fi
+    ensure_bootstrap_support
+}
+
+ensure_bootstrap_support() {
+    mkdir -p \
+        "$DIR/scripts" \
+        "$DIR/config/bootstrap/assets/common" \
+        "$DIR/config/bootstrap/assets/claude/commands"
+
+    if [ ! -f "$DIR/scripts/airis_bootstrap.py" ]; then
+        curl -fsSL "$BASE_URL/scripts/airis_bootstrap.py" -o "$DIR/scripts/airis_bootstrap.py"
+    fi
+    if [ ! -f "$DIR/config/bootstrap/assets-manifest.json" ]; then
+        curl -fsSL "$BASE_URL/config/bootstrap/assets-manifest.json" -o "$DIR/config/bootstrap/assets-manifest.json"
+    fi
+    if [ ! -f "$DIR/config/bootstrap/assets/common/AIRIS-PLAYBOOK.md" ]; then
+        curl -fsSL "$BASE_URL/config/bootstrap/assets/common/AIRIS-PLAYBOOK.md" -o "$DIR/config/bootstrap/assets/common/AIRIS-PLAYBOOK.md"
+    fi
+    if [ ! -f "$DIR/config/bootstrap/assets/claude/commands/airis-research-first.md" ]; then
+        curl -fsSL "$BASE_URL/config/bootstrap/assets/claude/commands/airis-research-first.md" -o "$DIR/config/bootstrap/assets/claude/commands/airis-research-first.md"
+    fi
+    if [ ! -f "$DIR/config/bootstrap/assets/claude/commands/airis-capability-router.md" ]; then
+        curl -fsSL "$BASE_URL/config/bootstrap/assets/claude/commands/airis-capability-router.md" -o "$DIR/config/bootstrap/assets/claude/commands/airis-capability-router.md"
     fi
 }
 
 cmd_up() {
-    ensure_repo
-    ensure_config
+    ensure_files
     log_info "Starting AIRIS MCP Gateway..."
     cd "$DIR"
-    export AIRIS_CONFIG_DIR="$CONFIG_DIR"
+    docker compose pull -q 2>/dev/null || true
     docker compose up -d "$@"
     log_info "Gateway started!"
     echo ""
@@ -59,7 +148,7 @@ cmd_up() {
     echo "  Gateway: http://localhost:9390"
     echo ""
     echo "Register with Claude Code:"
-    echo "  claude mcp add --transport http airis-mcp-gateway http://localhost:9400/api/v1/mcp/sse"
+    echo "  claude mcp add --scope user --transport sse airis-mcp-gateway http://localhost:9400/sse"
 }
 
 cmd_down() {
@@ -90,7 +179,7 @@ cmd_status() {
         log_warn "Gateway not installed."
     fi
     echo ""
-    echo "Config: $CONFIG_DIR/mcp-config.json"
+    echo "Config: $DIR/mcp-config.json"
     echo "Repo:   $DIR"
 }
 
@@ -100,9 +189,9 @@ cmd_restart() {
 }
 
 cmd_config() {
-    echo "$CONFIG_DIR/mcp-config.json"
-    if [ -f "$CONFIG_DIR/mcp-config.json" ]; then
-        ${EDITOR:-vim} "$CONFIG_DIR/mcp-config.json"
+    echo "$DIR/mcp-config.json"
+    if [ -f "$DIR/mcp-config.json" ]; then
+        ${EDITOR:-vim} "$DIR/mcp-config.json"
     else
         log_error "Config not found. Run 'airis-gateway up' first."
         exit 1
@@ -110,12 +199,12 @@ cmd_config() {
 }
 
 cmd_servers() {
-    if [ ! -f "$CONFIG_DIR/mcp-config.json" ]; then
+    if [ ! -f "$DIR/mcp-config.json" ]; then
         log_error "Config not found. Run 'airis-gateway up' first."
         exit 1
     fi
 
-    echo "MCP Servers ($CONFIG_DIR/mcp-config.json):"
+    echo "MCP Servers ($DIR/mcp-config.json):"
     echo ""
 
     # Parse JSON and list servers with status
@@ -124,7 +213,7 @@ import json
 import sys
 
 try:
-    with open('$CONFIG_DIR/mcp-config.json') as f:
+    with open('$DIR/mcp-config.json') as f:
         config = json.load(f)
 
     servers = config.get('mcpServers', {})
@@ -161,7 +250,7 @@ cmd_enable() {
         exit 1
     fi
 
-    if [ ! -f "$CONFIG_DIR/mcp-config.json" ]; then
+    if [ ! -f "$DIR/mcp-config.json" ]; then
         log_error "Config not found. Run 'airis-gateway up' first."
         exit 1
     fi
@@ -171,7 +260,7 @@ import json
 import sys
 
 server = '$server'
-config_path = '$CONFIG_DIR/mcp-config.json'
+config_path = '$DIR/mcp-config.json'
 
 with open(config_path) as f:
     config = json.load(f)
@@ -209,7 +298,7 @@ cmd_disable() {
         exit 1
     fi
 
-    if [ ! -f "$CONFIG_DIR/mcp-config.json" ]; then
+    if [ ! -f "$DIR/mcp-config.json" ]; then
         log_error "Config not found. Run 'airis-gateway up' first."
         exit 1
     fi
@@ -219,7 +308,7 @@ import json
 import sys
 
 server = '$server'
-config_path = '$CONFIG_DIR/mcp-config.json'
+config_path = '$DIR/mcp-config.json'
 
 with open(config_path) as f:
     config = json.load(f)
@@ -238,6 +327,284 @@ else:
     log_info "Restart gateway to apply: airis-gateway restart"
 }
 
+cmd_init() {
+    ensure_bootstrap_support
+    local scan_root="$PWD"
+    local apply=false
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --apply) apply=true ;;
+            *) scan_root="$1" ;;
+        esac
+        shift
+    done
+
+    local args=(
+        init
+        --scan-root "$scan_root"
+        --registry-path "$REGISTRY_PATH"
+        --registry-dir "$REGISTRY_DIR"
+        --backup-dir "$BACKUP_DIR"
+        --codex-config-path "$CODEX_CONFIG_PATH"
+        --claude-desktop-config-path "$CLAUDE_DESKTOP_CONFIG_PATH"
+        --claude-code-dir "$CLAUDE_CODE_DIR"
+        --gemini-dir "$GEMINI_CONFIG_DIR"
+        --gateway-http-url "$GATEWAY_HTTP_URL"
+        --gateway-sse-url "$GATEWAY_SSE_URL"
+    )
+    if $apply; then
+        args+=(--apply)
+    fi
+    python3 "$DIR/scripts/airis_bootstrap.py" "${args[@]}"
+}
+
+cmd_import() {
+    ensure_registry
+
+    local scan_root="$PWD"
+    local apply=false
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --apply) apply=true ;;
+            *) scan_root="$1" ;;
+        esac
+        shift
+    done
+
+    python3 - "$REGISTRY_PATH" "$scan_root" "$apply" <<'PY'
+import json
+import os
+import sys
+from datetime import datetime, timezone
+
+registry_path, scan_root, apply = sys.argv[1:]
+apply = apply.lower() == "true"
+scan_root = os.path.abspath(os.path.expanduser(scan_root))
+skip_dirs = {
+    ".git", ".hg", ".svn", "node_modules", ".venv", "venv",
+    "dist", "build", ".next", "target", "__pycache__",
+}
+
+with open(registry_path, encoding="utf-8") as f:
+    registry = json.load(f)
+
+def canonical(server):
+    return {
+        "command": server.get("command", ""),
+        "args": server.get("args", []),
+        "env": server.get("env", {}),
+        "enabled": server.get("enabled", True),
+    }
+
+def is_gateway_entry(name, server):
+    if name == "airis-mcp-gateway":
+        return True
+    joined = " ".join([server.get("command", "")] + server.get("args", []))
+    return "localhost:9400" in joined or "airis-mcp-gateway" in joined
+
+results = []
+scan_files = []
+for root, dirs, files in os.walk(scan_root):
+    dirs[:] = [d for d in dirs if d not in skip_dirs]
+    if "mcp.json" in files:
+        scan_files.append(os.path.join(root, "mcp.json"))
+
+for source_path in sorted(scan_files):
+    repo_path = os.path.dirname(source_path)
+    entry = {
+        "repo": repo_path,
+        "sourcePath": source_path,
+        "results": [],
+        "status": "imported",
+        "lastImportedAt": datetime.now(timezone.utc).isoformat(),
+        "backupPath": registry.get("imports", {}).get(repo_path, {}).get("backupPath"),
+        "cleanedAt": registry.get("imports", {}).get(repo_path, {}).get("cleanedAt"),
+    }
+    try:
+        with open(source_path, encoding="utf-8") as f:
+            payload = json.load(f)
+        mcp_servers = payload.get("mcpServers")
+        if not isinstance(mcp_servers, dict):
+            entry["status"] = "invalid"
+            entry["results"].append(("invalid", "mcpServers"))
+            results.append(entry)
+            continue
+
+        for name, server in mcp_servers.items():
+            if not isinstance(server, dict):
+                entry["status"] = "invalid"
+                entry["results"].append(("invalid", name))
+                continue
+            if is_gateway_entry(name, server):
+                entry["results"].append(("ignored-gateway-entry", name))
+                continue
+
+            existing = registry["servers"].get(name)
+            normalized = canonical(server)
+            if existing is None:
+                entry["results"].append(("imported", name))
+                if apply:
+                    registry["servers"][name] = {
+                        **normalized,
+                        "source": "imported",
+                        "origins": [source_path],
+                    }
+            else:
+                existing_normalized = canonical(existing)
+                if existing_normalized == normalized:
+                    entry["results"].append(("duplicate", name))
+                    if apply:
+                        origins = existing.setdefault("origins", [])
+                        if source_path not in origins:
+                            origins.append(source_path)
+                else:
+                    entry["status"] = "conflicted"
+                    entry["results"].append(("conflicted", name))
+
+        if not entry["results"]:
+            entry["status"] = "empty"
+    except Exception:
+        entry["status"] = "invalid"
+        entry["results"].append(("invalid", os.path.basename(source_path)))
+
+    results.append(entry)
+    if apply:
+        registry["imports"][repo_path] = {
+            "sourcePath": source_path,
+            "status": entry["status"],
+            "servers": {name: status for status, name in entry["results"]},
+            "backupPath": entry["backupPath"],
+            "lastImportedAt": entry["lastImportedAt"],
+            "cleanedAt": entry["cleanedAt"],
+        }
+
+if apply:
+    with open(registry_path, "w", encoding="utf-8") as f:
+        json.dump(registry, f, indent=2)
+
+print(f"Scanned: {scan_root}")
+print(f"Found {len(results)} mcp.json file(s)")
+print("")
+
+for entry in results:
+    rel = os.path.relpath(entry["sourcePath"], scan_root)
+    print(rel)
+    if not entry["results"]:
+        print("  empty: no MCP servers found")
+    else:
+        for status, name in entry["results"]:
+            print(f"  {status}: {name}")
+    print("")
+
+if not apply:
+    print("Dry run only. No files changed.")
+    print("Run again with --apply to write registry.")
+PY
+}
+
+cmd_clean() {
+    ensure_registry
+
+    local scan_root="$PWD"
+    local dry_run=false
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --dry-run) dry_run=true ;;
+            *) scan_root="$1" ;;
+        esac
+        shift
+    done
+
+    python3 - "$REGISTRY_PATH" "$BACKUP_DIR" "$scan_root" "$dry_run" <<'PY'
+import json
+import os
+import shutil
+import sys
+from datetime import datetime, timezone
+
+registry_path, backup_dir, scan_root, dry_run = sys.argv[1:]
+dry_run = dry_run.lower() == "true"
+scan_root = os.path.abspath(os.path.expanduser(scan_root))
+
+with open(registry_path, encoding="utf-8") as f:
+    registry = json.load(f)
+
+backed_up = []
+removed = []
+skipped = []
+timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+for repo_path, entry in sorted(registry.get("imports", {}).items()):
+    source_path = entry.get("sourcePath")
+    if not source_path:
+        continue
+    if not os.path.abspath(source_path).startswith(scan_root):
+        continue
+    if not os.path.exists(source_path):
+        continue
+    if entry.get("status") != "imported":
+        skipped.append((source_path, f"status={entry.get('status')}"))
+        continue
+    if entry.get("cleanedAt"):
+        continue
+
+    repo_name = os.path.basename(repo_path.rstrip(os.sep)) or "repo"
+    backup_path = os.path.join(backup_dir, f"{repo_name}-{timestamp}-mcp.json")
+    if not dry_run:
+        shutil.copy2(source_path, backup_path)
+        os.remove(source_path)
+        entry["backupPath"] = backup_path
+        entry["cleanedAt"] = datetime.now(timezone.utc).isoformat()
+    backed_up.append(backup_path)
+    removed.append(source_path)
+
+if not dry_run:
+    with open(registry_path, "w", encoding="utf-8") as f:
+        json.dump(registry, f, indent=2)
+
+print("Backed up:")
+if backed_up:
+    for path in backed_up:
+        print(f"  {path}")
+else:
+    print("  (none)")
+
+print("Removed:")
+if removed:
+    for path in removed:
+        print(f"  {path}")
+else:
+    print("  (none)")
+
+print("Skipped:")
+if skipped:
+    for path, reason in skipped:
+        print(f"  {path} ({reason})")
+else:
+    print("  (none)")
+
+if dry_run:
+    print("")
+    print("Dry run only. No files changed.")
+PY
+}
+
+cmd_doctor() {
+    ensure_bootstrap_support
+    local scan_root="${1:-$PWD}"
+    python3 "$DIR/scripts/airis_bootstrap.py" doctor \
+        --scan-root "$scan_root" \
+        --registry-path "$REGISTRY_PATH" \
+        --registry-dir "$REGISTRY_DIR" \
+        --backup-dir "$BACKUP_DIR" \
+        --codex-config-path "$CODEX_CONFIG_PATH" \
+        --claude-desktop-config-path "$CLAUDE_DESKTOP_CONFIG_PATH" \
+        --claude-code-dir "$CLAUDE_CODE_DIR" \
+        --gemini-dir "$GEMINI_CONFIG_DIR" \
+        --gateway-http-url "$GATEWAY_HTTP_URL" \
+        --gateway-sse-url "$GATEWAY_SSE_URL"
+}
+
 cmd_help() {
     cat <<EOF
 AIRIS MCP Gateway - Unified MCP server management
@@ -251,6 +618,10 @@ Commands:
   logs [-f]           View logs
   status              Show docker compose status
   config              Edit mcp-config.json
+  init [path]         Plan global bootstrap; use --apply to sync clients and deploy assets
+  import [path]       Import repo-local mcp.json into global registry
+  clean [path]        Backup and remove imported repo-local mcp.json
+  doctor [path]       Detect forbidden repo-local mcp.json, client drift, and missing AIRIS assets
 
 Server Management:
   servers             List MCP servers and their status
@@ -258,13 +629,16 @@ Server Management:
   disable <server>    Disable an MCP server
 
 Configuration:
-  Config dir: $CONFIG_DIR
-  Repo dir:   $DIR
+  Install dir: $DIR
+  Registry:    $REGISTRY_PATH
+
+Client policy:
+  Codex is managed by AIRIS when available.
+  Claude Desktop is detected but never modified automatically.
 
 Environment variables:
-  AIRIS_CONFIG_DIR    Config directory (default: ~/.config/airis-mcp-gateway)
-  AIRIS_MCP_DIR       Repository directory (default: ~/.local/share/airis-mcp-gateway)
-  AIRIS_MCP_REPO      Git repository URL
+  AIRIS_MCP_DIR       Install directory (default: ~/.local/share/airis-mcp-gateway)
+  AIRIS_VERSION       Version (default: latest)
 
 Ports:
   9400  API (REST + MCP SSE)
@@ -278,6 +652,9 @@ Examples:
   airis-gateway enable puppeteer      # Enable puppeteer server
   airis-gateway disable serena        # Disable serena server
   airis-gateway restart               # Apply changes
+  airis-gateway init ~/github         # Show bootstrap plan
+  airis-gateway init ~/github --apply # Import, clean, and deploy AIRIS assets
+  airis-gateway doctor ~/github
 EOF
 }
 
@@ -288,9 +665,25 @@ case "${1:-help}" in
     logs)    shift; cmd_logs "$@" ;;
     status)  cmd_status ;;
     config)  cmd_config ;;
+    init)    shift; cmd_init "$@" ;;
+    import)  shift; cmd_import "$@" ;;
+    clean)   shift; cmd_clean "$@" ;;
+    doctor)  shift; cmd_doctor "$@" ;;
     servers) cmd_servers ;;
     enable)  shift; cmd_enable "${1:-}" ;;
     disable) shift; cmd_disable "${1:-}" ;;
+    --uninstall|-u|uninstall)
+        log_warn "Uninstalling AIRIS MCP Gateway..."
+        if command -v claude >/dev/null 2>&1; then
+            claude mcp remove airis-mcp-gateway --scope user 2>/dev/null || true
+        fi
+        if [ -f "$DIR/docker-compose.yml" ]; then
+            cd "$DIR" && docker compose down -v 2>/dev/null || true
+        fi
+        [ -d "$DIR" ] && rm -rf "$DIR" && log_info "Removed $DIR"
+        [ -f "$HOME/.local/bin/airis-gateway" ] && rm -f "$HOME/.local/bin/airis-gateway" && log_info "Removed CLI"
+        log_info "Uninstall complete."
+        ;;
     help|--help|-h) cmd_help ;;
     *)
         log_error "Unknown command: $1"

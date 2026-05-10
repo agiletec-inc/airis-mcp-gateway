@@ -47,3 +47,8 @@ tasks:
     desc: Run Python API tests
     cmds:
       - docker compose exec api pytest tests/ -v
+
+  airis-gateway:
+    desc: Run airis-gateway smoke tests
+    cmds:
+      - bash scripts/test-airis-gateway-smoke.sh

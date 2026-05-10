@@ -8,7 +8,6 @@ Each repository has ONE responsibility and produces ONE OCI image.
 |------------|---------------|-------|
 | `airis-mcp-gateway` | MCP routing/proxy + intelligence layer | `ghcr.io/agiletec-inc/airis-mcp-gateway` |
 | `mindbase` | Long-term memory storage | `ghcr.io/agiletec-inc/mindbase` |
-| `airis-workspace` | Toolchain (monorepo management) | `ghcr.io/agiletec-inc/airis-workspace` |
 
 ## airis-mcp-gateway (This Repository)
 
@@ -18,6 +17,8 @@ Each repository has ONE responsibility and produces ONE OCI image.
 - SSE/JSON-RPC transport proxy
 - Process server management (lazy loading, idle kill)
 - Schema partitioning for token optimization
+- Capability exposure policy for MCP providers
+- Toolset activation and tool discovery for MCP-backed capabilities
 - Server enable/disable at runtime
 - Pre-implementation confidence assessment (`airis-confidence`)
 - Repository structure indexing (`airis-repo-index`)
@@ -58,7 +59,7 @@ Claude Code
     v
 airis-mcp-gateway (port 9400)
     |
-    +-- Dynamic MCP Layer (airis-find, airis-exec, airis-schema)
+    +-- Dynamic MCP Layer (airis-activate, airis-find, airis-schema)
     |
     +-- Native Tools (airis-confidence, airis-repo-index, airis-suggest, airis-route)
     |

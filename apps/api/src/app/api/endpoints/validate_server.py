@@ -67,14 +67,16 @@ async def validate_supabase_selfhost(config: Dict[str, str]) -> Dict[str, Any]:
     if parsed_dsn.scheme not in {"postgres", "postgresql"} or not parsed_dsn.hostname:
         return {"valid": False, "message": "Invalid PG_DSN format. Expected postgres://user:pass@host:port/db"}
 
-    if postgrest_url is None:
-        raise ValueError("postgrest_url cannot be None after validation")
+    # Type narrowing: these are guaranteed non-None by the missing_fields check above
+    if postgrest_url is None or postgrest_jwt is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="POSTGREST_URL and POSTGREST_JWT are required",
+        )
     normalized_postgrest_url = postgrest_url.rstrip("/")
 
     try:
         async with httpx.AsyncClient() as client:
-            if postgrest_jwt is None:
-                raise ValueError("postgrest_jwt cannot be None after validation")
             response = await client.get(
                 f"{normalized_postgrest_url}/",
                 headers={

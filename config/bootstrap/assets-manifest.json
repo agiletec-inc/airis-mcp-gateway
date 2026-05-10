@@ -1,0 +1,40 @@
+{
+  "version": "2026-04-02",
+  "clients": {
+    "codex": {
+      "assetRoot": "airis",
+      "assets": [
+        {
+          "source": "assets/common/AIRIS-PLAYBOOK.md",
+          "target": "airis/AIRIS.md"
+        }
+      ]
+    },
+    "claude_code": {
+      "assetRoot": "airis",
+      "assets": [
+        {
+          "source": "assets/common/AIRIS-PLAYBOOK.md",
+          "target": "airis/AIRIS.md"
+        },
+        {
+          "source": "assets/claude/commands/airis-research-first.md",
+          "target": "commands/airis-research-first.md"
+        },
+        {
+          "source": "assets/claude/commands/airis-capability-router.md",
+          "target": "commands/airis-capability-router.md"
+        }
+      ]
+    },
+    "gemini_cli": {
+      "assetRoot": "airis",
+      "assets": [
+        {
+          "source": "assets/common/AIRIS-PLAYBOOK.md",
+          "target": "airis/AIRIS.md"
+        }
+      ]
+    }
+  }
+}

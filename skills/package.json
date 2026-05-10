@@ -1,0 +1,5 @@
+{
+  "name": "airis",
+  "version": "0.2.0",
+  "description": "Centralized Claude Code configuration: Docker-first guards, permissions, MCP gateway, and workflow skills"
+}

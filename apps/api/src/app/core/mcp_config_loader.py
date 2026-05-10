@@ -39,6 +39,7 @@ PROCESS_COMMANDS = {
     "deno",
     "bun",
     "sh",  # sh -c "docker run..." still uses StdIO JSON-RPC
+    "airis",  # airis-workspace ships its own stdio MCP server (`airis mcp`)
 }
 
 
@@ -85,6 +86,7 @@ class McpServerConfig:
             env=self.env,
             cwd=self.cwd,
             idle_timeout=self.idle_timeout if self.idle_timeout is not None else idle_timeout,
+            mode=self.mode.value,
         )
         # Override TTL settings if specified
         if self.min_ttl is not None:

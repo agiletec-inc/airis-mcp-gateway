@@ -8,9 +8,8 @@ Run with:
     docker compose up -d
     pytest apps/api/tests/e2e/test_mcp_servers_e2e.py -v
 
-Environment variables:
-    API_BASE_URL: Base URL for API (default: http://localhost:9400)
-    RUN_SLOW_TESTS: Set to "1" to run COLD server tests (default: skip)
+To skip slow (COLD server) tests:
+    pytest -m "not slow"
 """
 import os
 import pytest
@@ -21,7 +20,6 @@ from typing import Any, Optional
 
 # API base URL for E2E tests
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:9400")
-RUN_SLOW_TESTS = os.getenv("RUN_SLOW_TESTS", "0") == "1"
 
 
 @pytest.fixture
@@ -146,7 +144,7 @@ class TestAirisCommandsServer:
         assert "result" in data
 
 
-@pytest.mark.skipif(not RUN_SLOW_TESTS, reason="COLD server tests disabled (set RUN_SLOW_TESTS=1)")
+@pytest.mark.slow
 class TestMemoryServer:
     """Test memory COLD server - knowledge graph operations."""
 
@@ -176,7 +174,7 @@ class TestMemoryServer:
         assert result["status_code"] == 200
 
 
-@pytest.mark.skipif(not RUN_SLOW_TESTS, reason="COLD server tests disabled (set RUN_SLOW_TESTS=1)")
+@pytest.mark.slow
 class TestFetchServer:
     """Test fetch COLD server - web fetching."""
 
@@ -191,7 +189,7 @@ class TestFetchServer:
         assert "result" in data
 
 
-@pytest.mark.skipif(not RUN_SLOW_TESTS, reason="COLD server tests disabled (set RUN_SLOW_TESTS=1)")
+@pytest.mark.slow
 class TestSequentialThinkingServer:
     """Test sequential-thinking COLD server."""
 
@@ -204,30 +202,6 @@ class TestSequentialThinkingServer:
             "nextThoughtNeeded": False
         })
         assert result["status_code"] == 200
-
-
-class TestDynamicMCPMetaTools:
-    """Test Dynamic MCP meta-tools (via REST - only available when DYNAMIC_MCP=true)."""
-
-    @pytest.mark.skip(reason="Meta-tools are SSE-only, not exposed via REST /process/tools/call")
-    def test_mcp_find_by_query(self, api_client):
-        """Meta-tools are only exposed via SSE protocol, not REST."""
-        pass
-
-    @pytest.mark.skip(reason="Meta-tools are SSE-only, not exposed via REST /process/tools/call")
-    def test_mcp_find_all_servers(self, api_client):
-        """Meta-tools are only exposed via SSE protocol, not REST."""
-        pass
-
-    @pytest.mark.skip(reason="Meta-tools are SSE-only, not exposed via REST /process/tools/call")
-    def test_mcp_schema(self, api_client):
-        """Meta-tools are only exposed via SSE protocol, not REST."""
-        pass
-
-    @pytest.mark.skip(reason="Meta-tools are SSE-only, not exposed via REST /process/tools/call")
-    def test_mcp_exec_hot_tool(self, api_client):
-        """Meta-tools are only exposed via SSE protocol, not REST."""
-        pass
 
 
 class TestServerLifecycle:

@@ -52,6 +52,7 @@ __pycache__/
 auto-imports.d.ts
 .modules.yaml
 .pnpm-workspace-state-v1.json
+compose.yaml
 
 # Auto-generated backups
 backups/
@@ -68,3 +69,19 @@ secrets.json
 
 # Casks (local macOS app builds)
 Casks/
+
+# Git worktrees
+.worktrees/
+.claude/worktrees/
+
+# Gemini CLI
+.gemini/
+
+# Binary artifacts
+mcp-publisher
+
+# Lock files — the TypeScript apps are standardised on npm (issue #81),
+# so we track package-lock.json and reject any stray pnpm-lock.yaml that
+# shows up from a developer running pnpm by accident.
+apps/*/pnpm-lock.yaml
+pnpm-lock.yaml

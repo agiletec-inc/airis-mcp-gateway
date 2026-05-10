@@ -5,6 +5,7 @@ If AIRIS_API_KEY is not set, authentication is disabled (open access).
 If set, all requests must include: Authorization: Bearer <key>
 """
 import os
+import secrets
 from fastapi import Request, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -29,7 +30,7 @@ class OptionalBearerAuth(BaseHTTPMiddleware):
         auth_header = request.headers.get("authorization", "")
         if auth_header.lower().startswith("bearer "):
             token = auth_header.split(" ", 1)[1].strip()
-            if token == self.api_key:
+            if secrets.compare_digest(token, self.api_key):
                 return await call_next(request)
 
         raise HTTPException(status_code=401, detail="unauthorized")

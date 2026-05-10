@@ -41,7 +41,7 @@ services:
     volumes:
       - ${HOST_WORKSPACE_DIR:-${HOME}/github}:/workspaces/projects:rw
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/health 2>/dev/null || exit 0"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -93,17 +93,33 @@ services:
       - MCP_GATEWAY_URL=http://gateway:9390
       - MCP_CONFIG_PATH=/app/mcp-config.json
       - GATEWAY_CONFIG_PATH=/app/config/gateway-config.yaml
-      # Dynamic MCP: exposes only meta-tools (airis-find, airis-exec, airis-schema)
-      # instead of all tools - reduces context token usage by ~98%
-      # Set to "false" to disable and expose all tools directly
+      # Dynamic MCP: exposes only meta-tools instead of all tools
+      # reduces context token usage by ~98%. Set to "false" to expose all tools directly
       - DYNAMIC_MCP=${DYNAMIC_MCP:-true}
+      # Meta-tools mode: "core" (3 tools, ~600 tokens) or "full" (7 tools, ~1400 tokens)
+      - META_TOOLS_MODE=${META_TOOLS_MODE:-core}
+      # Tool listing: "compact" (top 3 per server) or "full" (all tool names)
+      - TOOL_LISTING_MODE=${TOOL_LISTING_MODE:-compact}
       # External API keys (optional)
       - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
+      - TWILIO_API_KEY=${TWILIO_API_KEY:-}
+      - TWILIO_API_SECRET=${TWILIO_API_SECRET:-}
+      - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-}
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
+      - FIGMA_API_KEY=${FIGMA_API_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - SUPABASE_ACCESS_TOKEN=${SUPABASE_ACCESS_TOKEN:-}
     volumes:
       - ./mcp-config.json:/app/mcp-config.json:ro
       - ./routing-table.json:/app/routing-table.json:ro
+      - ./workflows:/app/workflows:ro
       - ./config/gateway-config.yaml:/app/config/gateway-config.yaml:ro
       - ./profiles:/app/profiles:rw
+      # Host workspace for airis-workspace tools (workspace_init / workspace_status etc.).
+      # Same convention as the mcp-core "gateway" service above.
+      - ${HOST_WORKSPACE_DIR:-${HOME}/github}:/workspace:rw
       # Persistent data volumes (appuser home directory)
       - cache-uv:/home/appuser/.cache/uv   # uvx package cache (faster restarts)
       - cache-npm:/home/appuser/.npm       # npm package cache (faster restarts)
@@ -118,7 +134,7 @@ services:
     healthcheck:
       # Use /ready instead of /health to ensure HOT servers are initialized
       # before accepting connections (fixes Claude Code slash command visibility)
-      test: ["CMD-SHELL", "curl -sf http://localhost:8000/ready | grep -q '\"ready\": true' || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/ready | grep -q '\"ready\":true' || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 10

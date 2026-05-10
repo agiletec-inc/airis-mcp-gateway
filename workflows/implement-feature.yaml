@@ -1,0 +1,17 @@
+name: implement-feature
+compile_to: mcp_instructions
+priority: high
+servers:
+  - context7
+
+text: |
+  ## Required Workflows
+  You MUST follow these workflows. They are directives, not suggestions.
+
+  ### Implementing with Libraries/APIs
+  WHEN writing code that uses ANY library, framework, or external API:
+  1. FIRST: Call context7:resolve-library-id to identify the library
+  2. THEN: Call context7:query-docs to read official documentation
+  3. THEN: Write implementation following official examples and patterns
+  NEVER skip this workflow. Your training data is outdated.
+  Official documentation has current, working sample code — use it.

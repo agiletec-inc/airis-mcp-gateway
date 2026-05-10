@@ -14,7 +14,7 @@ import os
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional
 from enum import Enum
 
 from .config import settings
@@ -52,6 +52,7 @@ class ProcessConfig:
     env: dict[str, str] = field(default_factory=dict)
     cwd: Optional[str] = None
     idle_timeout: int = 120  # seconds (base, can be overridden by adaptive TTL)
+    mode: str = "cold"  # "hot" or "cold" — HOT servers skip idle-kill
     # Adaptive TTL settings
     adaptive_ttl_enabled: bool = True
     min_ttl: int = 30  # minimum TTL in seconds
@@ -75,9 +76,14 @@ class ProcessRunner:
         self,
         config: ProcessConfig,
         on_stderr: Optional[Callable[[str, str], None]] = None,
+        on_idle_kill: Optional[Callable[[str], Awaitable[None]]] = None,
     ):
         self.config = config
         self.on_stderr = on_stderr or self._default_stderr_handler
+        # Fires after the idle reaper has killed this process. Used by the
+        # proxy layer to emit `notifications/tools/list_changed` so clients
+        # see the tool set shrink without polling.
+        self._on_idle_kill = on_idle_kill
 
         self._proc: Optional[asyncio.subprocess.Process] = None
         self._state = ProcessState.STOPPED
@@ -88,6 +94,10 @@ class ProcessRunner:
         self._reaper_task: Optional[asyncio.Task] = None
         self._stderr_task: Optional[asyncio.Task] = None
         self._lock = asyncio.Lock()
+
+        # Condition used to broadcast state transitions. ensure_ready() waits
+        # on this instead of polling self._state every 50ms.
+        self._state_cond = asyncio.Condition()
 
         # Server capabilities (populated after initialize)
         self._server_info: dict[str, Any] = {}
@@ -114,6 +124,17 @@ class ProcessRunner:
     @property
     def is_ready(self) -> bool:
         return self._state == ProcessState.READY
+
+    async def _set_state(self, new_state: ProcessState) -> None:
+        """Update state and wake anyone awaiting a transition.
+
+        Use this instead of assigning to `self._state` directly so that
+        `ensure_ready_with_error` can wait on an asyncio.Condition rather
+        than polling every 50 milliseconds.
+        """
+        async with self._state_cond:
+            self._state = new_state
+            self._state_cond.notify_all()
 
     @property
     def tools(self) -> list[dict[str, Any]]:
@@ -220,16 +241,28 @@ class ProcessRunner:
             if self._state == ProcessState.RUNNING:
                 await self._initialize()
 
-        # Wait for READY state
-        start = time.time()
-        while time.time() - start < timeout:
-            if self._state == ProcessState.READY:
-                return (True, None)
-            if self._state == ProcessState.STOPPED:
-                return (False, self._last_error)
-            await asyncio.sleep(0.05)
+        # Wait for READY (or STOPPED) via Condition instead of 50ms polling.
+        deadline = time.monotonic() + timeout
+        async with self._state_cond:
+            while True:
+                if self._state == ProcessState.READY:
+                    return (True, None)
+                if self._state == ProcessState.STOPPED:
+                    return (False, self._last_error)
 
-        return (False, f"Timeout waiting for server to be ready after {timeout}s")
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return (
+                        False,
+                        f"Timeout waiting for server to be ready after {timeout}s",
+                    )
+                try:
+                    await asyncio.wait_for(self._state_cond.wait(), timeout=remaining)
+                except asyncio.TimeoutError:
+                    return (
+                        False,
+                        f"Timeout waiting for server to be ready after {timeout}s",
+                    )
 
     async def ensure_ready(self, timeout: float = 30.0) -> bool:
         """
@@ -243,18 +276,17 @@ class ProcessRunner:
 
     async def _start_process(self):
         """Start the subprocess."""
-        self._state = ProcessState.STARTING
+        await self._set_state(ProcessState.STARTING)
         self._spawn_count += 1
 
         # Build environment
         env = {**os.environ, **self.config.env}
 
-        # Expand environment variables in args
-        expanded_args = [
-            os.path.expandvars(arg) for arg in self.config.args
-        ]
-
-        cmd = [self.config.command] + expanded_args
+        # Args are already expanded by mcp_config_loader._expand_env_vars()
+        # Do NOT use os.path.expandvars() here — it blindly expands all
+        # environment variables (including secrets) into command-line args
+        # visible in `ps` output and logs.
+        cmd = [self.config.command] + list(self.config.args)
         logger.info(f"Starting {self.config.name}: {' '.join(cmd)}")
 
         try:
@@ -268,7 +300,7 @@ class ProcessRunner:
                 limit=STDOUT_BUFFER_LIMIT,
             )
 
-            self._state = ProcessState.RUNNING
+            await self._set_state(ProcessState.RUNNING)
             self._last_used = time.time()
             self._started_at = time.time()
 
@@ -281,13 +313,13 @@ class ProcessRunner:
 
         except Exception as e:
             logger.error(f"Failed to start {self.config.name}: {e}")
-            self._state = ProcessState.STOPPED
             self._last_error = str(e)
+            await self._set_state(ProcessState.STOPPED)
             raise
 
     async def _initialize(self):
         """Send initialize request and wait for response."""
-        self._state = ProcessState.INITIALIZING
+        await self._set_state(ProcessState.INITIALIZING)
         cold_start_begin = time.time()
 
         # MCP initialize request
@@ -312,11 +344,15 @@ class ProcessRunner:
             # Use configurable timeout for servers that download dependencies on startup
             response = await self._send_request(init_request, timeout=settings.TOOL_CALL_TIMEOUT)
 
-            if "error" in response:
+            # Some MCP servers (e.g. airis-workspace) emit `"error": null` alongside
+            # a successful `result`. JSON-RPC 2.0 §5 says responses MUST contain
+            # either `result` or `error`, but `null` is JSON-valid and we should
+            # treat it as "no error" rather than rejecting the handshake.
+            if response.get("error") is not None:
                 error_msg = str(response['error'])
                 logger.error(f"{self.config.name} initialize failed: {error_msg}")
-                self._state = ProcessState.STOPPED
                 self._last_error = error_msg
+                await self._set_state(ProcessState.STOPPED)
                 return
 
             self._server_info = response.get("result", {})
@@ -338,13 +374,13 @@ class ProcessRunner:
             self._cold_start_time = time.time() - cold_start_begin
             self._update_ttl()
 
-            self._state = ProcessState.READY
+            await self._set_state(ProcessState.READY)
             logger.info(f"{self.config.name} is READY with {len(self._tools)} tools, {len(self._prompts)} prompts (cold start: {self._cold_start_time:.1f}s, TTL: {self._current_ttl:.0f}s)")
 
         except Exception as e:
             logger.error(f"{self.config.name} initialize error: {e}")
-            self._state = ProcessState.STOPPED
             self._last_error = str(e)
+            await self._set_state(ProcessState.STOPPED)
 
     async def _fetch_tools(self):
         """Fetch available tools from the server."""
@@ -355,7 +391,11 @@ class ProcessRunner:
             "params": {}
         }
 
-        response = await self._send_request(request, timeout=10.0)
+        try:
+            response = await self._send_request(request, timeout=10.0)
+        except Exception as e:
+            logger.error(f"{self.config.name} tools/list failed: {e}")
+            raise
 
         if "result" in response:
             self._tools = response["result"].get("tools", [])
@@ -408,7 +448,17 @@ class ProcessRunner:
             }
         }
 
-        return await self._send_request(request, timeout=30.0)
+        try:
+            return await self._send_request(request, timeout=30.0)
+        except Exception as e:
+            return {
+                "jsonrpc": "2.0",
+                "id": request.get("id"),
+                "error": {
+                    "code": -32603,
+                    "message": f"prompts/get failed: {e}"
+                }
+            }
 
     async def call_tool(self, tool_name: str, arguments: dict[str, Any], max_retries: int = 2) -> dict[str, Any]:
         """
@@ -459,16 +509,10 @@ class ProcessRunner:
                 self._total_calls += 1
                 self._record_call()  # For adaptive TTL
 
-                # Check for process crash during call
-                if "error" in result:
-                    error_code = result.get("error", {}).get("code", 0)
-                    # Internal error or timeout - might be process crash
-                    if error_code in [-32603, -32000] and attempt < max_retries:
-                        last_error = result.get("error", {}).get("message", "Unknown error")
-                        logger.warning(f"{self.config.name} retry {attempt + 1}/{max_retries}: {last_error}")
-                        await self._restart_process()
-                        continue
-
+                # If _send_request returned (didn't raise), the subprocess responded
+                # via STDIO. Even if the response contains an error, the process is
+                # healthy — the error came from the remote server (e.g. mcp-remote
+                # forwarding a business error). Do NOT restart the process.
                 return result
 
             except asyncio.TimeoutError:
@@ -531,14 +575,33 @@ class ProcessRunner:
         if "id" not in request:
             request = {**request, "id": self._next_id()}
 
-        return await self._send_request(request, timeout=settings.TOOL_CALL_TIMEOUT)
+        try:
+            return await self._send_request(request, timeout=settings.TOOL_CALL_TIMEOUT)
+        except Exception as e:
+            return {
+                "jsonrpc": "2.0",
+                "id": request.get("id"),
+                "error": {
+                    "code": -32603,
+                    "message": str(e)
+                }
+            }
 
     def _next_id(self) -> int:
         self._request_id += 1
         return self._request_id
 
     async def _send_request(self, request: dict[str, Any], timeout: float = 30.0) -> dict[str, Any]:
-        """Send a request and wait for response."""
+        """
+        Send a request and wait for response.
+
+        Returns the subprocess response dict on success.
+        Raises asyncio.TimeoutError if no response within timeout.
+        Raises RuntimeError/Exception on connection/process errors.
+
+        Callers use exceptions to distinguish local failures (process crash,
+        timeout) from remote errors forwarded by the subprocess.
+        """
         if not self._proc or not self._proc.stdin:
             raise RuntimeError("Process not running")
 
@@ -547,7 +610,7 @@ class ProcessRunner:
             raise ValueError("Request must have an id")
 
         # Create future for response
-        future: asyncio.Future = asyncio.get_event_loop().create_future()
+        future: asyncio.Future = asyncio.get_running_loop().create_future()
         self._pending_requests[request_id] = future
 
         try:
@@ -560,26 +623,10 @@ class ProcessRunner:
             # Wait for response
             return await asyncio.wait_for(future, timeout=timeout)
 
-        except asyncio.TimeoutError:
+        except BaseException:
+            # Clean up pending request on any failure (including CancelledError)
             self._pending_requests.pop(request_id, None)
-            return {
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "error": {
-                    "code": -32603,
-                    "message": f"Request timeout after {timeout}s"
-                }
-            }
-        except Exception as e:
-            self._pending_requests.pop(request_id, None)
-            return {
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "error": {
-                    "code": -32603,
-                    "message": str(e)
-                }
-            }
+            raise
 
     async def _send_notification(self, notification: dict[str, Any]):
         """Send a notification (no response expected)."""
@@ -688,7 +735,9 @@ class ProcessRunner:
                 logger.error(f"{self.config.name} stderr reader error: {e}")
 
     async def _idle_reaper(self):
-        """Kill process after idle timeout (uses adaptive TTL)."""
+        """Kill process after idle timeout (uses adaptive TTL). HOT servers are exempt."""
+        if self.config.mode == "hot":
+            return
         while self._state not in (ProcessState.STOPPING, ProcessState.STOPPED):
             await asyncio.sleep(5)
 
@@ -704,6 +753,13 @@ class ProcessRunner:
                     logger.info(f"{self.config.name} idle for {idle_time:.0f}s (TTL: {effective_ttl:.0f}s), stopping")
                     self._idle_kill_count += 1
                     await self.stop()
+                    if self._on_idle_kill is not None:
+                        try:
+                            await self._on_idle_kill(self.config.name)
+                        except Exception as exc:  # noqa: BLE001 — never block the reaper
+                            logger.warning(
+                                f"{self.config.name} on_idle_kill callback failed: {exc}"
+                            )
                     return
 
     async def stop(self):
@@ -711,7 +767,7 @@ class ProcessRunner:
         if self._state in (ProcessState.STOPPING, ProcessState.STOPPED):
             return
 
-        self._state = ProcessState.STOPPING
+        await self._set_state(ProcessState.STOPPING)
 
         # Cancel pending requests
         for future in self._pending_requests.values():
@@ -743,11 +799,11 @@ class ProcessRunner:
             logger.info(f"{self.config.name} stopped")
 
         self._proc = None
-        self._state = ProcessState.STOPPED
         self._tools = []
         self._prompts = []
         self._server_info = {}
         self._started_at = None
+        await self._set_state(ProcessState.STOPPED)
 
     def get_metrics(self) -> dict[str, Any]:
         """
