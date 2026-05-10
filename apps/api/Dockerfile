@@ -3,9 +3,11 @@
 # Supports both Docker MCP Gateway proxy and direct uvx/npx process management
 # Includes browser automation support for Playwright and chrome-devtools MCP servers
 #
-# Base image is pinned to a specific patch version (issue #77). Refresh this
-# tag via `docker pull python:3.12.13-slim-trixie` and verify `airis test`
-# before bumping.
+# Both base images are pinned to specific patch versions (issue #77).
+# node:22-slim ships node/npm/npx; they are copied into the Python image
+# at build time so we never run a remote shell script as root (issue #137).
+FROM node:22.15.0-slim AS node-runtime
+
 FROM python:3.12.13-slim-trixie
 
 # Keep apt lists across layers in a BuildKit cache so repeated builds don't
@@ -52,11 +54,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fonts-liberation \
     fonts-noto-color-emoji
 
-# Install Node.js (for npx MCP servers)
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y nodejs
+# Copy Node.js binaries from the official image (issue #137: avoids curl | bash).
+# npm/npx are symlinks into node_modules; copying node_modules preserves them.
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/bin/npm /usr/local/bin/npm
+COPY --from=node-runtime /usr/local/bin/npx /usr/local/bin/npx
+COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
 
 # Install airis CLI (airis-workspace's stdio MCP server, exposed as `airis mcp`).
 #

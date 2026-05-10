@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -68,22 +69,28 @@ jobs:
             echo "✅ Will create release v${{steps.version.outputs.version}}"
           fi
 
-      - name: Sync versions and commit back
+      - name: Create version bump PR
+        # Branch protection forbids direct push to main (issue #134).
+        # Open a PR instead; the existing auto-merge workflow merges it.
+        # When that PR lands, release.yml triggers again but check_tag skips
+        # all steps because the tag already exists at that point.
         if: steps.check_tag.outputs.exists == 'false'
+        env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
         run: |
           NEW_VERSION=${{steps.version.outputs.version}}
-          echo "$NEW_VERSION" > VERSION
+          BRANCH="chore/bump-version-${NEW_VERSION}"
 
-          # Run the sync task to update package.json/pyproject.toml
-          # Need to install go-task for this, but simpler to use the script logic directly:
-          # Node.js (package.json)
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          echo "$NEW_VERSION" > VERSION
           for f in apps/*/package.json; do
             if [ -f "$f" ]; then
               sed -i "s/\"version\": \".*\"/\"version\": \"$NEW_VERSION\"/" "$f"
               echo "✅ Updated $f"
             fi
           done
-          # Python (pyproject.toml)
           for f in apps/*/pyproject.toml; do
             if [ -f "$f" ]; then
               sed -i "s/version = \".*\"/version = \"$NEW_VERSION\"/" "$f"
@@ -91,12 +98,16 @@ jobs:
             fi
           done
 
-          # Configure git and commit back
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
           git add VERSION apps/*/package.json apps/*/pyproject.toml
           git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
-          git push origin main
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore: bump version to $NEW_VERSION" \
+            --body "Automated version bump to ${NEW_VERSION}."
 
       - name: Create GitHub Release
         if: steps.check_tag.outputs.exists == 'false'
