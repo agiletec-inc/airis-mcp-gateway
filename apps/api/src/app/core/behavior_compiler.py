@@ -21,13 +21,9 @@ logger = get_logger(__name__)
 
 # Base instructions (always included)
 _BASE_INSTRUCTIONS = (
-    "This is AIRIS MCP Gateway with Dynamic MCP. "
-    "IMPORTANT: Do NOT call tools directly. Instead:\n"
-    "1. Use 'airis-exec' to execute any tool — all available tool names are listed in its description\n"
-    "2. If arguments are wrong, the schema will be returned automatically\n"
-    "3. Before implementation, inspect the repo and check docs for unfamiliar libraries or APIs\n"
-    "All 60+ tools are accessed through airis-exec. "
-    "This provides 98% token reduction while maintaining full functionality."
+    "AIRIS MCP Gateway. Call MCP tools directly by name. "
+    "Use airis-find to search for tools. "
+    "Use airis-schema to inspect a tool's input schema before calling it when unsure."
 )
 
 _META_TOOLS_SECTION = (
@@ -35,21 +31,21 @@ _META_TOOLS_SECTION = (
     "- 'airis-confidence': Pre-implementation confidence check. Use before starting complex tasks.\n"
     "- 'airis-repo-index': Generate repository structure overview for unfamiliar codebases.\n"
     "- 'airis-suggest': Get tool recommendations from natural language intent.\n\n"
-    "When you need a capability, check airis-exec's description for available tools, "
-    "or use airis-find to search by keyword."
+    "Use airis-find to discover tools by keyword or server name. "
+    "Use airis-schema to inspect a tool's required arguments."
 )
 
 _TOOL_ROUTING_GUIDE = (
     "## Tool Routing Guide\n"
-    "Use Gateway (airis-exec) for API/service calls. Use host tools for everything else.\n\n"
-    "Gateway (airis-exec): library docs → context7 | web search → tavily | "
+    "Call MCP tools directly by name. Use host tools for everything else.\n\n"
+    "Gateway tools: library docs → context7 | web search → tavily | "
     "database → supabase | payments → stripe | DNS/workers → cloudflare | design files → figma\n\n"
     "Host tools (NOT Gateway): browser automation → playwright-cli skill (needs host Chrome) | "
     "file generation (docx/xlsx/pdf) → claude-api plugin | "
     "TDD/debugging/planning → superpowers plugin | "
     "git operations → gh CLI or native git | "
     "simple code read/edit → native Read/Edit/Grep tools\n\n"
-    "Rules: docs before code | API/service → Gateway | browser testing → Playwright CLI first | "
+    "Rules: docs before code | API/service → Gateway tools | browser testing → Playwright CLI first | "
     "host-dependent → plugin/skill/CLI | simple file ops → native tools."
 )
 
@@ -139,11 +135,9 @@ def _compile_behavior_lines(
 
         priority_order = PRIORITY_ORDER.get(behavior.priority, 1)
 
-        # Determine tool reference format based on mode
-        if config.enabled and config.mode == ServerMode.HOT:
-            tool_ref = f"[{name}]"
-        else:
-            tool_ref = f"airis-exec {name}:* [{name}]"
+        # COLD servers are now auto-started on first native tool call.
+        # No need to instruct the LLM to use a router — call tools by name.
+        tool_ref = f"[{name}]"
 
         trigger_str = " / ".join(behavior.triggers)
         line = f"WHEN {trigger_str} → {behavior.instruction} {tool_ref}"

@@ -145,6 +145,14 @@ async def call_tool(request: ToolCallRequest):
     manager = get_process_manager()
     response = await manager.call_tool(request.name, request.arguments)
 
+    # Auto-discovery: if tool not found, try tools_index for COLD servers
+    if response.get("error", {}).get("code") == -32601:
+        from ...core.dynamic_mcp import get_dynamic_mcp
+        dmcp = get_dynamic_mcp()
+        result = await dmcp.auto_discover_and_execute(request.name, request.arguments, manager)
+        if result is not None:
+            response = result
+
     # `"error": null` is "no error" — some servers (e.g. airis-workspace) emit
     # it alongside a successful result.
     error = response.get("error")

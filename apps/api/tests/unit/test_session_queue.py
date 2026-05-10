@@ -9,7 +9,7 @@ import pytest
 async def test_session_queue_concurrent_access():
     """Test that concurrent access to session queues is thread-safe."""
     # Import here to get fresh module state
-    from app.api.endpoints.mcp_proxy import (
+    from app.api.endpoints.session_queue import (
         get_response_queue,
         remove_response_queue,
         _session_response_queues,
@@ -41,7 +41,7 @@ async def test_session_queue_concurrent_access():
 @pytest.mark.asyncio
 async def test_session_queue_concurrent_remove():
     """Test that concurrent removal of session queues is thread-safe."""
-    from app.api.endpoints.mcp_proxy import (
+    from app.api.endpoints.session_queue import (
         get_response_queue,
         remove_response_queue,
         _session_response_queues,
@@ -67,7 +67,7 @@ async def test_session_queue_concurrent_remove():
 @pytest.mark.asyncio
 async def test_session_queue_get_creates_if_not_exists():
     """Test that get_response_queue creates queue if it doesn't exist."""
-    from app.api.endpoints.mcp_proxy import (
+    from app.api.endpoints.session_queue import (
         get_response_queue,
         _session_response_queues,
     )
@@ -87,7 +87,7 @@ async def test_session_queue_get_creates_if_not_exists():
 @pytest.mark.asyncio
 async def test_session_queue_remove_nonexistent():
     """Test that removing a nonexistent queue doesn't raise an error."""
-    from app.api.endpoints.mcp_proxy import (
+    from app.api.endpoints.session_queue import (
         remove_response_queue,
         _session_response_queues,
     )
