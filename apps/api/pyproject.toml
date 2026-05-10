@@ -5,24 +5,24 @@ description = "AIRIS MCP Gateway API - Fixes Docker MCP Gateway initialized noti
 requires-python = ">=3.12"
 
 dependencies = [
-    "fastapi>=0.115.0,<1.0.0",
-    "uvicorn[standard]>=0.32.0,<1.0.0",
-    "httpx>=0.27.0,<1.0.0",
-    "pydantic>=2.10.0,<3.0.0",
-    "pydantic-settings>=2.6.0,<3.0.0",
-    "psutil>=5.9.0,<7.0.0",
-    "cryptography>=46.0.6,<48.0.0",
-    "pyyaml>=6.0,<7.0",
+    "fastapi>=0.136.1,<1.0.0",
+    "uvicorn[standard]>=0.46.0,<1.0.0",
+    "httpx>=0.28.1,<1.0.0",
+    "pydantic>=2.13.4,<3.0.0",
+    "pydantic-settings>=2.14.1,<3.0.0",
+    "psutil>=7.2.2,<8.0.0",
+    "cryptography>=48.0.0,<49.0.0",
+    "pyyaml>=6.0.3,<7.0",
 ]
 
 [project.optional-dependencies]
 test = [
-    "pytest>=8.0.0,<9.0.0",
-    "pytest-asyncio>=0.24.0,<1.0.0",
-    "pytest-cov>=4.0.0,<7.0.0",
-    "sqlalchemy>=2.0.0,<3.0.0",
-    "aiosqlite>=0.20.0,<1.0.0",
-    "greenlet>=3.0.0,<4.0.0",
+    "pytest>=9.0.3,<10.0.0",
+    "pytest-asyncio>=1.3.0,<2.0.0",
+    "pytest-cov>=7.1.0,<8.0.0",
+    "sqlalchemy>=2.0.49,<3.0.0",
+    "aiosqlite>=0.22.1,<1.0.0",
+    "greenlet>=3.5.0,<4.0.0",
 ]
 
 [build-system]
