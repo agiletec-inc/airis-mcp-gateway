@@ -1,15 +1,9 @@
 name: Bump AIRIS_VERSION
 
 on:
-  # Triggered by airis-workspace release workflow via repository_dispatch.
-  repository_dispatch:
-    types: [airis-workspace-released]
-  # Manual trigger for testing or emergency bumps.
+  schedule:
+    - cron: '0 * * * *'
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'airis-workspace version to pin (e.g. 3.18.0)'
-        required: true
 
 permissions:
   contents: write
@@ -21,34 +15,43 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Resolve version
+      - name: Check latest airis-workspace version
         id: ver
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ github.event.client_payload.version || inputs.version }}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          LATEST=$(gh api repos/agiletec-inc/airis-workspace/releases/latest --jq '.tag_name | ltrimstr("v")')
+          CURRENT=$(grep '^ARG AIRIS_VERSION=' apps/api/Dockerfile | cut -d= -f2)
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          if [ "$LATEST" != "$CURRENT" ]; then
+            echo "needs_bump=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_bump=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Update AIRIS_VERSION in Dockerfile
+      - name: Bump AIRIS_VERSION in Dockerfile
+        if: steps.ver.outputs.needs_bump == 'true'
         run: |
-          sed -i 's/^ARG AIRIS_VERSION=.*/ARG AIRIS_VERSION=${{ steps.ver.outputs.version }}/' apps/api/Dockerfile
+          sed -i 's/^ARG AIRIS_VERSION=.*/ARG AIRIS_VERSION=${{ steps.ver.outputs.latest }}/' apps/api/Dockerfile
 
       - name: Create pull request
+        if: steps.ver.outputs.needs_bump == 'true'
         id: pr
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: chore/bump-airis-${{ steps.ver.outputs.version }}
-          commit-message: "chore: bump AIRIS_VERSION to ${{ steps.ver.outputs.version }}"
-          title: "chore: bump AIRIS_VERSION to ${{ steps.ver.outputs.version }}"
+          branch: chore/bump-airis-${{ steps.ver.outputs.latest }}
+          commit-message: "chore: bump AIRIS_VERSION to ${{ steps.ver.outputs.latest }}"
+          title: "chore: bump AIRIS_VERSION to ${{ steps.ver.outputs.latest }}"
           body: |
-            Automated bump triggered by `airis-workspace` release `${{ steps.ver.outputs.version }}`.
+            Automated bump: `${{ steps.ver.outputs.current }}` → `${{ steps.ver.outputs.latest }}`
 
             The gateway Docker image will be rebuilt automatically after this merges.
-
-            🤖 Generated with [Claude Code](https://claude.com/claude-code)
           delete-branch: true
 
       - name: Auto-merge pull request
         if: steps.pr.outputs.pull-request-number
-        run: gh pr merge ${{ steps.pr.outputs.pull-request-number }} --merge --auto
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge ${{ steps.pr.outputs.pull-request-number }} --merge --auto
