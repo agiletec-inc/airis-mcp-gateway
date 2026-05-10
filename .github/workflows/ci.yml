@@ -75,6 +75,12 @@ jobs:
           pip install bandit
           bandit -r apps/api/src -ll -ii
 
+      - name: Audit Python dependencies (pip-audit)
+        run: |
+          pip install pip-audit
+          cd apps/api
+          pip-audit --strict
+
   # TypeScript build and test (only when TS files change)
   build-typescript:
     needs: changes
@@ -113,6 +119,11 @@ jobs:
         run: |
           cd apps/${{ matrix.package }}
           npm run build
+
+      - name: Audit npm dependencies
+        run: |
+          cd apps/${{ matrix.package }}
+          npm audit --audit-level=high
 
   test-shell:
     needs: changes
