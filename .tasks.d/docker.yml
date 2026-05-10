@@ -1,66 +1,65 @@
 version: '3'
 
 vars:
-  COMPOSE_FILE: "{{.REPO_ROOT}}/docker-compose.yml"
   COMPOSE_DEV_FILE: "{{.REPO_ROOT}}/docker-compose.dev.yml"
 
 tasks:
   up:
     desc: Start the stack
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} up -d
+      - docker compose up -d
 
   down:
     desc: Stop the stack
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} down
+      - docker compose down
 
   restart:
     desc: Restart the API container
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} restart api
+      - docker compose restart api
 
   ps:
     desc: Show container status
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} ps
+      - docker compose ps
 
   logs:
     desc: Follow API logs
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} logs -f api
+      - docker compose logs -f api
 
   logs:all:
     desc: Follow all container logs
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} logs -f
+      - docker compose logs -f
 
   logs:tail:
     desc: Show last 50 log lines
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} logs --tail 50 api
+      - docker compose logs --tail 50 api
 
   build:
     desc: Build Docker images
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} build
+      - docker compose build
 
   build:nocache:
     desc: Build Docker images without cache
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} build --no-cache
+      - docker compose build --no-cache
 
   pull:
     desc: Pull latest images
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} pull
+      - docker compose pull
 
   clean:
     desc: Stop and remove all containers, volumes
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} down -v
+      - docker compose down -v
 
   shell:
     desc: Shell into API container
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} exec api /bin/bash
+      - docker compose exec api /bin/bash
