@@ -19,7 +19,7 @@ env:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    runs-on: agiletec-self-hosted-runner
     # Skip if triggered by workflow_run but CI did not succeed.
     if: |
       github.event_name != 'workflow_run' ||
