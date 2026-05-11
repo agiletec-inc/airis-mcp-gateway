@@ -55,11 +55,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fonts-noto-color-emoji
 
 # Copy Node.js binaries from the official image (issue #137: avoids curl | bash).
-# npm/npx are symlinks into node_modules; copying node_modules preserves them.
+# node_modules is copied first; npm/npx are created as symlinks because Docker
+# COPY dereferences symlinks, breaking relative require() paths inside npm-cli.js.
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
-COPY --from=node-runtime /usr/local/bin/npm /usr/local/bin/npm
-COPY --from=node-runtime /usr/local/bin/npx /usr/local/bin/npx
 COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
 # Install airis CLI (airis-workspace's stdio MCP server, exposed as `airis mcp`).
 #
