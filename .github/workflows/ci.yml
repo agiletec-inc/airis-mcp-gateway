@@ -77,7 +77,7 @@ jobs:
 
       - name: Audit Python dependencies (pip-audit)
         run: |
-          pip install pip-audit
+          pip install --upgrade pip pip-audit
           cd apps/api
           pip-audit --skip-editable
 
