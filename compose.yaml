@@ -26,7 +26,7 @@ services:
   # Semantic code retrieval and editing capabilities
   serena:
     container_name: airis-serena
-    image: ghcr.io/oraios/serena:v1.2.0
+    image: ghcr.io/oraios/serena:latest
     command:
       - serena
       - start-mcp-server
@@ -41,7 +41,7 @@ services:
     volumes:
       - ${HOST_WORKSPACE_DIR:-${HOME}/github}:/workspaces/projects:rw
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/health"]
+      test: ["CMD-SHELL", "curl -sf --max-time 3 http://localhost:8000/sse -o /dev/null -w '%{http_code}' | grep -q 200"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -68,7 +68,7 @@ services:
       - ${HOST_WORKSPACE_DIR:-${HOME}/github}:/workspace:rw
       - ./catalogs:/catalogs:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -qS --spider http://localhost:9390/health 2>&1 | grep -q '200'"]
+      test: ["CMD-SHELL", "wget -qO /dev/null http://$(hostname -i):9390/health"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -113,6 +113,16 @@ services:
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
       - SUPABASE_ACCESS_TOKEN=${SUPABASE_ACCESS_TOKEN:-}
+      # Clear OrbStack-injected proxy vars: NO_PROXY contains IPv6 CIDRs that
+      # httpx cannot parse as URL patterns, causing /ready to 500.
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      - ALL_PROXY=
+      - NO_PROXY=
+      - http_proxy=
+      - https_proxy=
+      - all_proxy=
+      - no_proxy=
     volumes:
       - ./mcp-config.json:/app/mcp-config.json:ro
       - ./routing-table.json:/app/routing-table.json:ro
