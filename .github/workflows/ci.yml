@@ -11,7 +11,7 @@ on:
 jobs:
   # Detect which paths changed
   changes:
-    runs-on: agiletec-self-hosted-runner
+    runs-on: ubuntu-latest
     outputs:
       python: ${{ steps.filter.outputs.python }}
       typescript: ${{ steps.filter.outputs.typescript }}
@@ -41,7 +41,7 @@ jobs:
   test-python:
     needs: changes
     if: needs.changes.outputs.python == 'true'
-    runs-on: agiletec-self-hosted-runner
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
@@ -85,7 +85,7 @@ jobs:
   build-typescript:
     needs: changes
     if: needs.changes.outputs.typescript == 'true'
-    runs-on: agiletec-self-hosted-runner
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         package: [gateway-control, airis-commands]
@@ -128,7 +128,7 @@ jobs:
   test-shell:
     needs: changes
     if: needs.changes.outputs.shell == 'true'
-    runs-on: agiletec-self-hosted-runner
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 

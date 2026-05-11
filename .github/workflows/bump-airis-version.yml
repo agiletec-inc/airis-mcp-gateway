@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   bump:
-    runs-on: agiletec-self-hosted-runner
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
