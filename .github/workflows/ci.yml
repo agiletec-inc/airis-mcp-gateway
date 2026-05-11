@@ -79,7 +79,7 @@ jobs:
         run: |
           pip install pip-audit
           cd apps/api
-          pip-audit --strict
+          pip-audit --strict --skip-editable
 
   # TypeScript build and test (only when TS files change)
   build-typescript:
