@@ -104,7 +104,7 @@ AIRIS is not only a central MCP registry. It also distributes operating guidance
 
 ## How It Works
 
-Airis aggregates 20+ MCP servers behind a single SSE endpoint. Your AI agent connects once and gets access to everything.
+Airis aggregates 20+ MCP servers behind a single endpoint — Streamable HTTP at `/mcp/` for Codex / Claude Code, and SSE at `/sse` for Gemini CLI, Cursor, and Windsurf. Your AI agent connects once and gets access to everything.
 
 ```
 Without Gateway:                          With Gateway:
@@ -142,35 +142,46 @@ Claude / Gemini / Cursor / Windsurf
 <details>
 <summary><h2>Available Servers</h2></summary>
 
-### Enabled (start on-demand)
+### HOT — pre-warmed at startup, always listed
 
 | Server | Description |
 |--------|-------------|
 | **context7** | Library documentation lookup |
-| **memory** | Knowledge graph (entities, relations) |
-| **tavily** | Web search via Tavily API |
-| **supabase** | Supabase database management |
-| **stripe** | Stripe payments API |
-| **fetch** | Web page fetching as markdown |
-| **sequential-thinking** | Step-by-step reasoning |
-| **serena** | Semantic code retrieval and editing |
-| **magic** | UI component generation |
-| **morphllm** | Code editing with warpgrep |
-| **chrome-devtools** | Chrome debugging |
+| **airis-workspace** | Docker-first workspace lifecycle (`manifest.toml` → `airis gen` → `airis up/test/...`) |
+| **airis-mcp-gateway-control** | Manage this gateway (servers, config, health) from inside the agent |
 
-### Disabled (auto-enable when called)
+### Enabled COLD — start on first tool call, auto-terminate when idle
 
 | Server | Description |
 |--------|-------------|
+| **airis-commands** | Slash-command toolkit shipped with the gateway |
+| **airis-legal** | Japanese court document automation (証拠説明書 / 準備書面) |
+| **fetch** | Fetch a URL and return it as markdown |
+| **tavily** | Web search via Tavily API |
+| **supabase** | Supabase database management |
+| **stripe** | Stripe payments API |
 | **twilio** | Twilio voice/SMS API |
-| **cloudflare** | Cloudflare management |
+| **cloudflare** | Cloudflare DNS / Workers / KV |
+| **figma** | Figma design files |
+| **magic** | UI component generation |
+| **chrome-devtools** | Chrome debugging |
+
+### Disabled — auto-enable on first tool call
+
+| Server | Description |
+|--------|-------------|
 | **github** | GitHub API |
 | **postgres** | Direct PostgreSQL access |
+| **memory** | Knowledge graph (entities, relations) |
+| **mindbase** | Local memory substrate (pgvector + Ollama) |
+| **serena** | Semantic code retrieval and editing |
+| **morphllm** | Code editing with warpgrep |
+| **sequential-thinking** | Step-by-step reasoning |
 | **filesystem** | File system operations |
 | **git** | Git operations |
 | **time** | Time utilities |
 
-All servers start on first tool call and auto-terminate when idle. Disabled servers are automatically enabled when you call their tools — no manual setup needed.
+Source of truth: [`mcp-config.json`](./mcp-config.json). HOT servers are always listed in `tools/list`; COLD servers are surfaced via `airis-find` and auto-enable on first native tool call — no manual setup needed.
 
 </details>
 

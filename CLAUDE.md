@@ -12,13 +12,36 @@ Dynamic MCP mode (default) exposes only 2 meta-tools (`airis-find`, `airis-schem
 
 Source of truth for server config: `mcp-config.json` (runtime) and `workflows/*.yaml` (compiled into MCP `initialize` instructions by `apps/api/src/app/core/behavior_compiler.py`).
 
+## Repo layout
+
+- `apps/api/` — Python 3.12 + FastAPI gateway (uv-managed). The actual MCP multiplexer.
+- `apps/gateway-control/` — TypeScript MCP server exposing gateway control tools to agents.
+- `apps/airis-commands/` (`@airis/commands`) — TypeScript MCP server bundling slash-command tooling.
+- `mcp-config.json` — runtime server registry (HOT/COLD, tools index, behavior).
+- `workflows/*.yaml` — compiled into MCP `initialize` instructions.
+- `manifest.toml` + `airis gen` produce `compose.yaml`, `package.json`, etc. Do not hand-edit generated files.
+
 ## Commands
 
 All commands use go-task inside `devbox shell`. Run `task --list-all` for the full list.
 
 Most used: `task docker:up` / `task docker:down` / `task docker:logs` / `task docker:restart` / `task test:e2e` / `task test:api`.
 
-Python tests locally without Docker: `cd apps/api && uv pip install -e ".[test]" && uv run python -m pytest tests/unit -v`.
+Test layout under `apps/api/tests/`:
+- `unit/` — pure logic, no network. Default target for `task test:api`.
+- `integration/` — exercises FastAPI app + ProcessManager with stubbed subprocesses.
+- `e2e/` — boots the full Docker stack and hits `localhost:9400`. Driven by `task test:e2e`.
+
+Python tests locally without Docker: `cd apps/api && uv pip install -e ".[test]" && uv run python -m pytest tests/unit -v`. Run a single test with `uv run python -m pytest tests/unit/test_foo.py::test_bar -v`.
+
+## Updating bundled `airis` CLI
+
+The gateway image bakes a specific `airis-workspace` release. To bump it:
+
+1. Edit `AIRIS_VERSION` in `apps/api/Dockerfile` (single source of truth — the version is pulled at build time from the airis-workspace GitHub release).
+2. `task docker:build` (or `docker compose build api`) — verify the Dockerfile download step succeeds.
+3. `task docker:up` and confirm `airis-workspace` tools resolve via `airis-find`.
+4. Commit `Dockerfile` only — there is no `package.json` pin to keep in sync.
 
 ## Architecture
 
