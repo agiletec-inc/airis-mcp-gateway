@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-# NOTE: This file is NOT used by docker-compose.yml. The active build is
+# NOTE: This file is NOT used by compose.yaml. The active build is
 # apps/api/Dockerfile. This multi-stage definition is retained for external
 # tooling (e.g. `docker build --target measurement`). Base image tags are
 # pinned (issue #77) so that whatever still consumes it is reproducible.

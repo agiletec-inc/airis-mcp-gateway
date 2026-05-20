@@ -102,9 +102,11 @@ sync_codex_registration() {
 
 ensure_files() {
     mkdir -p "$DIR"
-    if [ ! -f "$DIR/docker-compose.yml" ]; then
-        log_info "Downloading docker-compose.yml..."
-        curl -fsSL "$BASE_URL/docker-compose.dist.yml" -o "$DIR/docker-compose.yml"
+    # Drop the legacy filename so Docker Compose does not auto-discover two files
+    [ -f "$DIR/docker-compose.yml" ] && rm -f "$DIR/docker-compose.yml"
+    if [ ! -f "$DIR/compose.yaml" ]; then
+        log_info "Downloading compose.yaml..."
+        curl -fsSL "$BASE_URL/docker-compose.dist.yml" -o "$DIR/compose.yaml"
     fi
     if [ ! -f "$DIR/mcp-config.json" ]; then
         log_info "Downloading default config..."
@@ -677,7 +679,7 @@ case "${1:-help}" in
         if command -v claude >/dev/null 2>&1; then
             claude mcp remove airis-mcp-gateway --scope user 2>/dev/null || true
         fi
-        if [ -f "$DIR/docker-compose.yml" ]; then
+        if [ -f "$DIR/compose.yaml" ] || [ -f "$DIR/docker-compose.yml" ]; then
             cd "$DIR" && docker compose down -v 2>/dev/null || true
         fi
         [ -d "$DIR" ] && rm -rf "$DIR" && log_info "Removed $DIR"

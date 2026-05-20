@@ -40,10 +40,10 @@ Review @mcp-config.json for:
 
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
-| "Name or service not known" | DNS resolution | Check `dns:` in docker-compose.yml |
+| "Name or service not known" | DNS resolution | Check `dns:` in compose.yaml |
 | Tools timeout on first call | Cold start | Run `task test:prewarm` to check |
 | "Cannot find module" | Missing build | Run `task docker:build:nocache` |
-| Data lost on restart | No persistence | Check volume mounts in docker-compose.yml |
+| Data lost on restart | No persistence | Check volume mounts in compose.yaml |
 | Task not found | Not in devbox | Run `devbox shell` first |
 
 ## Output

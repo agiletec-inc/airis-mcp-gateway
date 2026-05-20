@@ -1,5 +1,5 @@
 # Development overrides - hot reload and source mounts
-# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# Usage: docker compose -f compose.yaml -f docker-compose.dev.yml up
 #
 # Prerequisites:
 #   - Build MCP servers locally first:

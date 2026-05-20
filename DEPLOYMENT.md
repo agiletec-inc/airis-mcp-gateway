@@ -84,7 +84,7 @@ If you are migrating existing repositories, import and remove any repo-local `mc
 
 ## Resource Limits
 
-The default `docker-compose.yml` sets:
+The default `compose.yaml` sets:
 - Memory: 2GB
 - CPU: 2 cores
 

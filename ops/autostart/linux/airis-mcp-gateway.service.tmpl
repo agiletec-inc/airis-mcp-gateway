@@ -7,8 +7,8 @@ Requires=docker.service
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory={{REPO_ROOT}}
-ExecStart=/usr/bin/docker compose -f {{REPO_ROOT}}/docker-compose.yml up -d
-ExecStop=/usr/bin/docker compose -f {{REPO_ROOT}}/docker-compose.yml down
+ExecStart=/usr/bin/docker compose -f {{REPO_ROOT}}/compose.yaml up -d
+ExecStop=/usr/bin/docker compose -f {{REPO_ROOT}}/compose.yaml down
 User={{USER}}
 Group={{USER}}
 

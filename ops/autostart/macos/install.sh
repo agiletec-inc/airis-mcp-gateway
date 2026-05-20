@@ -119,7 +119,7 @@ cat > "$PLIST_DEST" << EOF
         <string>$DOCKER_COMPOSE_PATH</string>
         <string>compose</string>
         <string>-f</string>
-        <string>$REPO_ROOT/docker-compose.yml</string>
+        <string>$REPO_ROOT/compose.yaml</string>
         <string>up</string>
         <string>-d</string>
     </array>
