@@ -1,0 +1,46 @@
+name: CodeQL
+
+# Static analysis (SAST) for Python and JS/TS sources — issue #94.
+# Dependency scanning (pip-audit / npm audit) lives in ci.yml; this workflow
+# adds code-level vulnerability detection on top of it.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    # Weekly full scan to catch newly published CodeQL queries on dormant code.
+    - cron: '23 5 * * 1'
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - python
+          - javascript-typescript
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # Python and JS/TS are interpreted — no compilation step needed.
+          build-mode: none
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
