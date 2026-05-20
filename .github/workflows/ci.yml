@@ -33,8 +33,12 @@ jobs:
               - 'scripts/airis-gateway'
               - 'scripts/quick-install.sh'
               - 'scripts/test-airis-gateway-smoke.sh'
+              - 'scripts/test-compose-references.sh'
               - 'install.sh'
               - '.tasks.d/test.yml'
+              - '.tasks.d/dev.yml'
+              - 'compose.yaml'
+              - 'ops/autostart/**'
               - '.github/workflows/ci.yml'
 
   # Python tests (only when Python files change)
@@ -134,4 +138,7 @@ jobs:
 
       - name: Run airis-gateway smoke tests
         run: bash scripts/test-airis-gateway-smoke.sh
+
+      - name: Run compose reference tests
+        run: bash scripts/test-compose-references.sh
 
