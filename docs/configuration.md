@@ -35,7 +35,7 @@ Optional bearer token authentication. Disabled by default (open access).
 # Generate a secure API key
 openssl rand -hex 32
 
-# Set in .env or docker-compose.yml
+# Set in .env or compose.yaml
 AIRIS_API_KEY=your-generated-key
 ```
 
@@ -52,7 +52,7 @@ curl -H "Authorization: Bearer your-api-key" http://localhost:9400/health
 The gateway includes a configurable fail-safe timeout to prevent Claude Code from hanging indefinitely on frozen MCP tool calls:
 
 ```bash
-# In docker-compose.yml or .env
+# In compose.yaml or .env
 TOOL_CALL_TIMEOUT=90  # Default: 90 seconds
 ```
 

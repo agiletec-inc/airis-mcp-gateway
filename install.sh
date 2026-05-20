@@ -71,9 +71,9 @@ install() {
 
     check_dependencies
 
-    # Detect existing installation
+    # Detect existing installation (accept legacy docker-compose.yml name)
     local is_update=false
-    if [ -f "$DIR/docker-compose.yml" ]; then
+    if [ -f "$DIR/compose.yaml" ] || [ -f "$DIR/docker-compose.yml" ]; then
         is_update=true
         log_info "Existing installation detected. Updating..."
     fi
@@ -82,7 +82,9 @@ install() {
     log_step "1/4 Downloading configuration..."
     mkdir -p "$DIR"
 
-    download "$BASE_URL/docker-compose.dist.yml" "$DIR/docker-compose.yml"
+    download "$BASE_URL/docker-compose.dist.yml" "$DIR/compose.yaml"
+    # Drop the legacy filename so Docker Compose does not auto-discover two files
+    rm -f "$DIR/docker-compose.yml"
 
     # Only download mcp-config if not exists (preserve user customizations)
     if [ ! -f "$DIR/mcp-config.json" ]; then
@@ -187,7 +189,7 @@ install() {
     echo ""
     echo "  Files:"
     echo "    Config:  $DIR/mcp-config.json"
-    echo "    Compose: $DIR/docker-compose.yml"
+    echo "    Compose: $DIR/compose.yaml"
     echo ""
     echo "  CLI: airis-gateway"
     if ! $path_ok; then
@@ -256,8 +258,8 @@ uninstall() {
         claude mcp remove airis-mcp-gateway --scope user 2>/dev/null || true
     fi
 
-    # Stop containers
-    if [ -f "$DIR/docker-compose.yml" ]; then
+    # Stop containers (accept legacy docker-compose.yml name)
+    if [ -f "$DIR/compose.yaml" ] || [ -f "$DIR/docker-compose.yml" ]; then
         log_step "Stopping containers..."
         cd "$DIR"
         docker compose down -v 2>/dev/null || true
