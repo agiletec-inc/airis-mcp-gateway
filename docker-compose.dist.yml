@@ -33,8 +33,8 @@ services:
     restart: unless-stopped
 
   # Docker MCP Gateway (manages MCP servers from Docker catalog)
-  gateway:
-    container_name: airis-mcp-gateway-core
+  docker-mcp-gateway:
+    container_name: airis-docker-mcp-gateway
     image: docker/mcp-gateway:latest
     command:
       - --transport=sse
@@ -60,7 +60,7 @@ services:
     ports:
       - "9400:8000"
     environment:
-      - MCP_GATEWAY_URL=http://gateway:9390
+      - MCP_GATEWAY_URL=http://docker-mcp-gateway:9390
       - MCP_CONFIG_PATH=/app/mcp-config.json
       # Embedded mode (default): mindbase runs locally
       # Remote mode: set URLs to external services
@@ -71,7 +71,7 @@ services:
       - ./mcp-config.json:/app/mcp-config.json:ro
       - ./profiles:/app/profiles:rw
     depends_on:
-      gateway:
+      docker-mcp-gateway:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]

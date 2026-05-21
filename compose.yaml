@@ -50,8 +50,8 @@ services:
 
   # Docker MCP Gateway (internal, port 9390)
   # Manages MCP servers from Docker catalog (time, mindbase via stdio)
-  gateway:
-    container_name: airis-mcp-gateway-core
+  docker-mcp-gateway:
+    container_name: airis-docker-mcp-gateway
     # Pinned by digest — docker/mcp-gateway does not publish versioned tags (issue #77).
     # Refresh: docker pull docker/mcp-gateway:latest && docker inspect --format='{{index .RepoDigests 0}}' docker/mcp-gateway:latest
     image: docker/mcp-gateway@sha256:f79574a3f86603ad65fd5c04f1251a2f2ecda56c1df76ed4418c1c11401c9432
@@ -105,7 +105,7 @@ services:
     mem_limit: 2g
     cpus: 2
     environment:
-      - MCP_GATEWAY_URL=http://gateway:9390
+      - MCP_GATEWAY_URL=http://docker-mcp-gateway:9390
       - MCP_CONFIG_PATH=/app/mcp-config.json
       - GATEWAY_CONFIG_PATH=/app/config/gateway-config.yaml
       # Dynamic MCP: exposes only meta-tools instead of all tools
@@ -143,7 +143,7 @@ services:
       - ./config/gateway-config.yaml:/app/config/gateway-config.yaml:ro
       - ./profiles:/app/profiles:rw
       # Host workspace for airis-workspace tools (workspace_init / workspace_status etc.).
-      # Same convention as the mcp-core "gateway" service above.
+      # Same convention as the docker-mcp-gateway service above.
       - ${HOST_WORKSPACE_DIR:-${HOME}/github}:/workspace:rw
       # Persistent data volumes (appuser home directory)
       - cache-uv:/home/appuser/.cache/uv   # uvx package cache (faster restarts)
@@ -152,7 +152,7 @@ services:
       # Host Claude Code config for airis-commands rules/settings management
       - ${HOME}/.claude:/host-claude:rw
     depends_on:
-      gateway:
+      docker-mcp-gateway:
         condition: service_healthy
       serena:
         condition: service_started

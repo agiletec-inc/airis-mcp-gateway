@@ -29,10 +29,10 @@ section "# 1. Start the gateway"
 fake_type '$ docker compose up -d'
 sleep 0.3
 printf "${COLOR_DIM}[+] Running 4/4${COLOR_RESET}\n"
-printf " ${COLOR_GREEN}✔${COLOR_RESET} Container mindbase-postgres-dev  ${COLOR_GREEN}Healthy${COLOR_RESET}\n"
-printf " ${COLOR_GREEN}✔${COLOR_RESET} Container airis-mcp-gateway-core ${COLOR_GREEN}Healthy${COLOR_RESET}\n"
-printf " ${COLOR_GREEN}✔${COLOR_RESET} Container airis-serena           ${COLOR_GREEN}Healthy${COLOR_RESET}\n"
-printf " ${COLOR_GREEN}✔${COLOR_RESET} Container airis-mcp-gateway      ${COLOR_GREEN}Healthy${COLOR_RESET}\n"
+printf " ${COLOR_GREEN}✔${COLOR_RESET} Container mindbase-postgres-dev     ${COLOR_GREEN}Healthy${COLOR_RESET}\n"
+printf " ${COLOR_GREEN}✔${COLOR_RESET} Container airis-docker-mcp-gateway  ${COLOR_GREEN}Healthy${COLOR_RESET}\n"
+printf " ${COLOR_GREEN}✔${COLOR_RESET} Container airis-serena              ${COLOR_GREEN}Healthy${COLOR_RESET}\n"
+printf " ${COLOR_GREEN}✔${COLOR_RESET} Container airis-mcp-gateway         ${COLOR_GREEN}Healthy${COLOR_RESET}\n"
 sleep 1.5
 
 # Step 2
