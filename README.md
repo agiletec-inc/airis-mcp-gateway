@@ -36,11 +36,15 @@ docker compose up -d
 docker compose logs -f api
 ```
 
-> **Tip:** For secure secret management, use [Doppler](https://doppler.com) instead of `.env`:
+> **Tip:** With access to the team [Doppler](https://doppler.com) project you can
+> bulk-fill the API keys instead of pasting them one by one. Run this right after
+> `cp .env.example .env`:
 > ```bash
-> doppler setup                              # One-time setup
-> doppler run -- docker compose up -d        # Injects secrets at runtime
+> doppler secrets download --project airis-mcp-gateway --config dev \
+>   --format env --no-file >> .env
 > ```
+> `.env` is gitignored and loaded directly by `docker compose` — no `doppler run`
+> runtime injection needed.
 
 ### 2. Connect Your AI Client
 Register the gateway once, and access all backend MCP servers (Stripe, Supabase, GitHub, etc.) through a single connection.

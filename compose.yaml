@@ -61,6 +61,19 @@ services:
       - --watch
       - --additional-catalog=/catalogs/airis-catalog.yaml
       - --servers=time,mindbase
+    environment:
+      # Clear OrbStack-injected proxy vars. docker/mcp-gateway fetches its
+      # catalog over HTTPS; the injected proxy host (proxyproxy.orb.internal)
+      # does not resolve, which crash-loops the container. Same fix the api
+      # service already carries — issue: it was applied there but not here.
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      - ALL_PROXY=
+      - NO_PROXY=
+      - http_proxy=
+      - https_proxy=
+      - all_proxy=
+      - no_proxy=
     expose:
       - "9390"
     volumes:
