@@ -70,20 +70,10 @@ airis-mcp-gateway (port 9400)
 
 ## Deployment
 
-### Lite Mode (Default)
-
-Gateway + process-based MCP servers (uvx/npx):
+Local stack — gateway + process-based MCP servers (uvx/npx):
 
 ```bash
 docker compose up -d
-```
-
-### Full Mode
-
-All services as Docker containers:
-
-```bash
-docker compose -f infra/compose.yaml --profile full up -d
 ```
 
 ## Adding New Features
