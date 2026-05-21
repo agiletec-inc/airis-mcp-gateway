@@ -38,7 +38,7 @@ Python tests locally without Docker: `cd apps/api && uv pip install -e ".[test]"
 
 The gateway image bakes a specific `airis-workspace` release. To bump it:
 
-1. Edit `AIRIS_VERSION` in `apps/api/Dockerfile` (single source of truth — the version is pulled at build time from the airis-workspace GitHub release).
+1. Edit `AIRIS_VERSION` in `Dockerfile` (single source of truth — the version is pulled at build time from the airis-workspace GitHub release).
 2. `task docker:build` (or `docker compose build api`) — verify the Dockerfile download step succeeds.
 3. `task docker:up` and confirm `airis-workspace` tools resolve via `airis-find`.
 4. Commit `Dockerfile` only — there is no `package.json` pin to keep in sync.
@@ -64,7 +64,7 @@ The API in `apps/api/src/app/api/endpoints/` is split into focused modules:
 
 In DYNAMIC_MCP mode, `tools/list` returns only meta-tools + currently active HOT server tools. Full tool discovery goes through `airis-find`.
 
-The `airis` CLI itself is baked into the gateway image (see `apps/api/Dockerfile`, fetched from the airis-workspace GitHub release pinned via `AIRIS_VERSION`), so `airis-workspace`'s 11 tools (`workspace_init`, `workspace_gen`, `workspace_doctor`, `workspace_status`, `manifest_validate`, `manifest_apply`, `migration_execute`, etc.) are available out of the box without host installation. The gateway container mounts `${HOST_WORKSPACE_DIR:-${HOME}/github}` at `/workspace` so those tools can operate on real projects.
+The `airis` CLI itself is baked into the gateway image (see `Dockerfile`, fetched from the airis-workspace GitHub release pinned via `AIRIS_VERSION`), so `airis-workspace`'s 11 tools (`workspace_init`, `workspace_gen`, `workspace_doctor`, `workspace_status`, `manifest_validate`, `manifest_apply`, `migration_execute`, etc.) are available out of the box without host installation. The gateway container mounts `${HOST_WORKSPACE_DIR:-${HOME}/github}` at `/workspace` so those tools can operate on real projects.
 
 Note on JSON-RPC tolerance: airis-workspace emits `"error": null` alongside successful results. The gateway treats that as "no error" (see `process_runner._initialize` and the `tools/call` paths in `mcp_proxy.py` / `process_mcp.py`). New servers with the same quirk will work transparently.
 

@@ -1,0 +1,16 @@
+# airis-mcp-gateway pnpm workspace.
+# apps/api is a Python service and is intentionally excluded.
+packages:
+  - apps/gateway-control
+  - apps/airis-commands
+
+# Shared dependency versions. gateway-control and airis-commands have an
+# identical dependency set, so versions are declared once here and each app
+# references them with `catalog:`.
+catalog:
+  "@modelcontextprotocol/sdk": "^1.29.0"
+  zod: "^4.4.3"
+  "@types/node": "^25.6.2"
+  esbuild: "^0.28.0"
+  typescript: "^6.0.3"
+  vitest: "^4.1.5"

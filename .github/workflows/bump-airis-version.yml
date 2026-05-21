@@ -19,7 +19,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           LATEST=$(gh api repos/agiletec-inc/airis-workspace/releases/latest --jq '.tag_name | ltrimstr("v")')
-          CURRENT=$(grep '^ARG AIRIS_VERSION=' apps/api/Dockerfile | cut -d= -f2)
+          CURRENT=$(grep '^ARG AIRIS_VERSION=' Dockerfile | cut -d= -f2)
           echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
           echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
           if [ "$LATEST" != "$CURRENT" ]; then
@@ -31,7 +31,7 @@ jobs:
       - name: Bump AIRIS_VERSION in Dockerfile
         if: steps.ver.outputs.needs_bump == 'true'
         run: |
-          sed -i 's/^ARG AIRIS_VERSION=.*/ARG AIRIS_VERSION=${{ steps.ver.outputs.latest }}/' apps/api/Dockerfile
+          sed -i 's/^ARG AIRIS_VERSION=.*/ARG AIRIS_VERSION=${{ steps.ver.outputs.latest }}/' Dockerfile
 
       - name: Create pull request
         if: steps.ver.outputs.needs_bump == 'true'
