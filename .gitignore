@@ -30,7 +30,6 @@ servers/*/node_modules/
 apps/*/node_modules/
 node_modules/
 .pnpm-store/
-# package-lock.json is tracked (Dockerfile uses npm install)
 
 # Build outputs
 apps/*/out/
@@ -80,8 +79,8 @@ Casks/
 # Binary artifacts
 mcp-publisher
 
-# Lock files — the TypeScript apps are standardised on npm (issue #81),
-# so we track package-lock.json and reject any stray pnpm-lock.yaml that
-# shows up from a developer running pnpm by accident.
-apps/*/pnpm-lock.yaml
-pnpm-lock.yaml
+# Lock files — the TypeScript apps use a single pnpm workspace (issue #81).
+# The root pnpm-lock.yaml is tracked; reject any stray npm lockfiles that
+# show up from a developer running npm by accident.
+package-lock.json
+apps/*/package-lock.json

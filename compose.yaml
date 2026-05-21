@@ -93,7 +93,7 @@ services:
     container_name: airis-mcp-gateway
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
+      dockerfile: Dockerfile
     ports:
       - "9400:8000"
     extra_hosts:

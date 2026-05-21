@@ -4,7 +4,6 @@
   "description": "AIRIS utility commands MCP server",
   "type": "module",
   "main": "dist/index.js",
-  "packageManager": "npm@11.14.1",
   "scripts": {
     "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
     "typecheck": "tsc --noEmit",
@@ -13,17 +12,13 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "zod": "^4.4.3"
+    "@modelcontextprotocol/sdk": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^25.6.2",
-    "esbuild": "^0.28.0",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.5"
-  },
-  "overrides": {
-    "hono": "^4.12.18",
-    "@hono/node-server": "^2.0.2"
+    "@types/node": "catalog:",
+    "esbuild": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

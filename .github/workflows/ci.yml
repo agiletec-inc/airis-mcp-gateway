@@ -29,6 +29,10 @@ jobs:
             typescript:
               - 'apps/gateway-control/**'
               - 'apps/airis-commands/**'
+              - 'pnpm-workspace.yaml'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - '.npmrc'
             shell:
               - 'scripts/airis-gateway'
               - 'scripts/quick-install.sh'
@@ -90,44 +94,34 @@ jobs:
     needs: changes
     if: needs.changes.outputs.typescript == 'true'
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        package: [gateway-control, airis-commands]
     steps:
       - uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '22'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: |
-          cd apps/${{ matrix.package }}
-          # npm ci enforces that package-lock.json is in sync with
-          # package.json so a developer who forgot to regenerate the
-          # lockfile fails the build instead of silently drifting.
-          npm ci
+        # --frozen-lockfile fails the build if pnpm-lock.yaml is out of sync
+        # with the manifests instead of silently drifting.
+        run: pnpm install --frozen-lockfile
 
       - name: Run tests
-        run: |
-          cd apps/${{ matrix.package }}
-          npm test
+        run: pnpm -r run test
 
       - name: Typecheck
-        run: |
-          cd apps/${{ matrix.package }}
-          npx tsc --noEmit
+        run: pnpm -r run typecheck
 
       - name: Build
-        run: |
-          cd apps/${{ matrix.package }}
-          npm run build
+        run: pnpm -r run build
 
-      - name: Audit npm dependencies
-        run: |
-          cd apps/${{ matrix.package }}
-          npm audit --audit-level=high
+      - name: Audit dependencies
+        run: pnpm audit --audit-level=high
 
   test-shell:
     needs: changes
