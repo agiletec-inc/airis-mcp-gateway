@@ -51,7 +51,7 @@ services:
     ports:
       - "${GATEWAY_PORT:-9400}:8000"
     environment:
-      - MCP_GATEWAY_URL=http://mcp-core:9390
+      - MCP_GATEWAY_URL=http://docker-mcp-gateway:9390
       - MCP_CONFIG_PATH=/app/mcp-config.json
       - DATABASE_URL=postgresql://${POSTGRES_USER:-airis}:${POSTGRES_PASSWORD:-airis}@postgres:5432/${POSTGRES_DB:-airis}
     volumes:
@@ -63,7 +63,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      mcp-core:
+      docker-mcp-gateway:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
@@ -72,9 +72,9 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # Docker MCP Gateway Core (internal)
-  mcp-core:
-    container_name: airis-mcp-core
+  # Docker MCP Gateway (internal)
+  docker-mcp-gateway:
+    container_name: airis-docker-mcp-gateway
     image: docker/mcp-gateway:latest
     command:
       - --transport=sse
@@ -158,12 +158,12 @@ volumes:
 #
 # Lite (default):
 #   docker compose -f infra/compose.yaml up -d
-#   - postgres, mcp-core, gateway
+#   - postgres, docker-mcp-gateway, gateway
 #   - Gateway routes to process-based MCP servers (uvx/npx)
 #
 # Full:
 #   docker compose -f infra/compose.yaml --profile full up -d
-#   - postgres, mcp-core, gateway, agent, mindbase
+#   - postgres, docker-mcp-gateway, gateway, agent, mindbase
 #   - All services as Docker containers
 #
 # With Serena:
