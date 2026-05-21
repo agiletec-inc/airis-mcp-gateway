@@ -9,6 +9,16 @@ on:
       - main
 
 jobs:
+  # airis-mcp-gateway is a PUBLIC repo — every job must run on a GitHub-hosted
+  # runner. This guard runs unconditionally (no path filter) so it can serve as
+  # a required status check that blocks any PR introducing a self-hosted runner.
+  verify-runners:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify all workflows use GitHub-hosted runners
+        run: bash scripts/test-workflow-runners.sh
+
   # Detect which paths changed
   changes:
     runs-on: ubuntu-latest
