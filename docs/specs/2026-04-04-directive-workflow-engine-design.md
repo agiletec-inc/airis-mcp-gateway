@@ -1,65 +1,74 @@
 # Directive Workflow Engine 設計仕様書
 
-> **Status (2026-04-13):** この文書は設計段階のドラフトを保存した履歴で、実装は意図的に簡素化されました。実装と一致する部分だけを参照し、詳細は末尾の **Implementation delta** セクションを優先してください (#76)。
+> **Status (2026-05-22):** この文書は現行実装に一致するよう全面更新済み (#76)。
+> 当初は 7-field の `WorkflowConfig` + トークンバジェット制御を持つ設計だったが、
+> YAGNI を適用して 5-field + バジェット制御なしに簡素化して実装された。
+> 簡素化前のドラフト設計は末尾「History」を参照。
 
 ## コンテキスト
 
-AIRIS MCP Gateway の Dynamic MCP はツールトークンを ~98% 削減済み（42k → ~600 tokens）。しかし LLM は接続された MCP ツールを自発的に使わない。現在の `behavior_compiler.py` は「WHEN X → Use Y」という提案を生成するだけで、LLM はこれを無視できる。
+AIRIS MCP Gateway の Dynamic MCP はツールトークンを ~98% 削減済み（42k → ~600 tokens）。しかし LLM は接続された MCP ツールを自発的に使わない。`behavior_compiler.py` が「WHEN X → Use Y」という提案を生成するだけでは、LLM はこれを無視できる。
 
 **問題**: ツールは接続されているのに使われない。LLM に「このタスクにはこのツールを使え」と強制する仕組みがない。
 
-**特に深刻な例**: LLM は学習データが古いにもかかわらず、既知のライブラリ（Next.js, React 等）のドキュメントを確認せずにコードを書く。公式ドキュメントには最新のサンプルコードが丁寧に用意されているのに、古い知識で実装してバグを生む。
+**特に深刻な例**: LLM は学習データが古いにもかかわらず、既知のライブラリ（Next.js, React 等）のドキュメントを確認せずにコードを書く。公式ドキュメントには最新のサンプルコードが用意されているのに、古い知識で実装してバグを生む。
 
-**ゴール**: 特定のタスクパターンを検出したら、LLM がユーザーの指示なしに所定のワークフローを自動的に実行する状態にする。
+**ゴール**: 特定のタスクパターンに対し、LLM がユーザーの指示なしに所定のワークフローを実行する状態にする。
 
-**アプローチ**: A+C ハイブリッド — 高頻度ワークフローは Directive Instructions で強制 + それ以外は airis-find フォールバックでオンデマンド発見。
+**アプローチ**: A+C ハイブリッド — 高頻度ワークフローを Directive Instructions で強制 + それ以外は airis-find フォールバックでオンデマンド発見。
 
 ## アーキテクチャ
 
 ### コンパイルフロー
 
 ```
-workflows/*.yaml + mcp-config.json
+workflows/*.yaml
     │
-    ▼ (ビルド時)
-behavior_compiler.py
+    ▼ workflow_loader.load_workflows()
+list[WorkflowConfig]  （バリデーション済み・priority 順）
     │
-    ▼
-MCP initialize response の instructions フィールド (~1500 tokens 上限)
+    ▼ behavior_compiler.compile_instructions(server_configs)
+MCP initialize response の instructions フィールド
     │
     ▼
 LLM が読んで従う（指令）
 ```
 
+ワークフローはランタイムにマッチングされるのではなく、Gateway 起動時に `mcp-config.json` の server config と合わせて instructions 文字列へコンパイルされ、MCP `initialize` レスポンスに乗る。`behavior_compiler.py` / `workflow_loader.py` を変更した場合は Docker イメージの再ビルドが必要（`docs` フォルダ外の挙動なので CLAUDE.md の Debugging 節を参照）。
+
 ### ファイル構造
 
 ```
 workflows/                          # ワークフローレシピ (YAML)
-├── implement-feature.yaml          # 高頻度: ライブラリ/API 使用時
-├── web-research.yaml               # 高頻度: 調査・検索時
-├── data-query.yaml                 # 高頻度: DB 操作時
+├── implement-feature.yaml          # high: ライブラリ/API 使用時
+├── web-research.yaml               # high: 調査・検索時
+├── data-query.yaml                 # high: DB 操作時
+├── proactive-usage.yaml            # ツールの能動的利用を促す指令
+├── tool-routing.yaml               # ツール選択のルーティング指針
 └── README.md                       # ワークフロー追加ガイド
 
 apps/api/src/app/core/
-├── behavior_compiler.py            # 改修: workflow YAML → instructions にコンパイル
-├── workflow_loader.py              # 新規: YAML 読み込み + バリデーション
-└── dynamic_mcp.py                  # 変更なし（fallback は instructions で対応）
+├── workflow_loader.py              # YAML 読み込み + バリデーション + ソート
+├── behavior_compiler.py            # workflow texts + behavior + routing → instructions
+└── routing_engine.py               # routing-table.json → Quick Routes セクション
 ```
 
-## Workflow YAML スキーマ (v1)
+## Workflow YAML スキーマ
+
+実装は `apps/api/src/app/core/workflow_loader.py` の `WorkflowConfig` dataclass。
 
 ```yaml
 # workflows/implement-feature.yaml
 name: implement-feature
-description: "ライブラリ/API 実装時に公式ドキュメントを必ず参照するワークフロー"
-priority: high          # high | medium | low
-max_tokens: 200         # バリデーション閾値（超過でビルドエラー）
-servers:                # このワークフローがカバーするサーバー名
+compile_to: mcp_instructions
+priority: high
+servers:
   - context7
 
-trigger: "implementing with any library, framework, or external API"
+text: |
+  ## Required Workflows
+  You MUST follow these workflows. They are directives, not suggestions.
 
-compile_to: |
   ### Implementing with Libraries/APIs
   WHEN writing code that uses ANY library, framework, or external API:
   1. FIRST: Call context7:resolve-library-id to identify the library
@@ -71,303 +80,132 @@ compile_to: |
 
 ### フィールド定義
 
-| フィールド | 必須 | 説明 |
-|-----------|------|------|
-| `name` | Yes | 一意な識別子（kebab-case） |
-| `description` | Yes | 人間向けの説明（LLM には送信しない） |
-| `priority` | Yes | `high` / `medium` / `low` — トークンバジェット内での優先度 |
-| `max_tokens` | Yes | バリデーション閾値。`compile_to` がこれを超えたらビルドエラー |
-| `servers` | Yes | このワークフローがカバーするサーバー名リスト。behavior 重複排除に使用 |
-| `trigger` | Yes | 人間向けのトリガー説明（ドキュメント用、ランタイムマッチングなし） |
-| `compile_to` | Yes | instructions に注入する確定テキスト。テンプレート処理なし |
-
-### 意図的に除外（YAGNI）
-
-- `steps` フィールド（airis-route 連携は v2 で検討）
-- 動的テンプレート変数
-- プロジェクトローカルオーバーライド（`.airis/workflows/` マージは v2）
-
-## トークン見積もりとバリデーション
-
-### 見積もりロジック
-
-```python
-def estimate_tokens(text: str) -> int:
-    ascii_chars = sum(1 for c in text if ord(c) < 128)
-    non_ascii_chars = len(text) - ascii_chars
-    # ASCII: ~4文字/token、非ASCII（日本語等）: ~2文字/token
-    return (ascii_chars // 4) + (non_ascii_chars // 2)
-```
-
-`compile_to` に日本語が混じると 1文字 ≒ 1-2 トークンになるため、ASCII 前提の `chars/4` は使わない。非 ASCII 文字は `chars/2` で見積もる。
-
-### バリデーション
-
-- `compile_to` のトークン見積もりが `max_tokens` を超えた場合 → **ビルドエラー**（動的トランケートはしない）
-- エラーメッセージ例: `Workflow 'implement-feature' exceeds max_tokens: estimated 250 > limit 200`
-
-## Priority 制御ロジック
-
-1. `workflows/*.yaml` を全読み込み
-2. priority でソート（high > medium > low）、同 priority 内はファイル名順
-3. 全 `high` の `compile_to` を結合 → トークン数計算
-4. ワークフローセクションのバジェット（~800 tokens）に余裕があれば `medium` を追加
-5. 余裕がなければスキップ → ビルド時に warning ログ出力（スキップされたワークフロー名を表示）
-6. `low` は大幅に余裕がある場合のみ
-
-### トークンバジェット内訳
-
-| セクション | バジェット |
-|-----------|-----------|
-| ヘッダー + 指令前文 | ~100 tokens |
-| ワークフロー指令（3-5個） | ~800 tokens |
-| フォールバック指令 | ~200 tokens |
-| サーバー一覧（自動生成） | ~150 tokens |
-| **合計** | **~1250 tokens** |
-
-## コンパイル結果（instructions 出力）
-
-```
-This is AIRIS MCP Gateway with Dynamic MCP.
-All 60+ tools are accessed through airis-exec.
-
-## Required Workflows
-You MUST follow these workflows. They are directives, not suggestions.
-
-### Implementing with Libraries/APIs
-WHEN writing code that uses ANY library, framework, or external API:
-1. FIRST: Call context7:resolve-library-id to identify the library
-2. THEN: Call context7:query-docs to read official documentation
-3. THEN: Write implementation following official examples and patterns
-NEVER skip this workflow. Your training data is outdated.
-Official documentation has current, working sample code — use it.
-
-### Web Research
-WHEN you need current information, external data, or best practices:
-1. Call tavily:tavily-search with a focused search query
-2. Synthesize results before proceeding with implementation
-
-### Database Operations
-WHEN querying, modifying, or analyzing database data:
-1. Call supabase:query with the appropriate SQL statement
-
-## Tool Discovery Fallback
-If your task requires capabilities NOT covered by the Required Workflows above,
-you MUST call airis-find with keywords describing what you need before attempting the task.
-Do NOT proceed without checking available tools first.
-
-## Available Servers
-context7, tavily, supabase, stripe, cloudflare, figma, memory, github, ...
-```
-
-**Available Servers は `mcp-config.json` から自動生成。** 全サーバー名（disabled 含む）を列挙。手動メンテ不要。
-
-## 実装変更
-
-### 1. `workflow_loader.py`（新規 — ~80行）
-
 ```python
 @dataclass
 class WorkflowConfig:
-    name: str
-    description: str
-    priority: str       # "high" | "medium" | "low"
-    max_tokens: int
-    servers: list[str]  # カバーするサーバー名
-    trigger: str
-    compile_to: str
-
-def load_workflows(workflows_dir: Path) -> list[WorkflowConfig]:
-    """全ワークフロー YAML を読み込み、バリデーション、ソートして返す。"""
-    # - workflows_dir/*.yaml を glob
-    # - 各 YAML をパース
-    # - 必須フィールドのバリデーション
-    # - compile_to トークン数 <= max_tokens のバリデーション（超過でエラー）
-    # - priority → ファイル名でソート
-
-def validate_workflow(config: WorkflowConfig) -> list[str]:
-    """バリデーションエラーのリストを返す。"""
-    # - name が kebab-case
-    # - priority が {high, medium, low}
-    # - compile_to が非空
-    # - compile_to トークン見積もり <= max_tokens
-    # - servers が非空リスト
+    name: str                 # kebab-case 識別子
+    compile_to: str           # 注入先ターゲット種別 (例: "mcp_instructions")
+    priority: str             # "high" | "medium" | "low"
+    text: str                 # instructions に注入する確定テキスト
+    servers: list[str] = []   # このワークフローがカバーするサーバー名
 ```
 
-### 2. `behavior_compiler.py`（改修）
+| フィールド | 必須 | 説明 |
+|-----------|------|------|
+| `name` | Yes | 一意な識別子（kebab-case）。`^[a-z][a-z0-9]*(-[a-z0-9]+)*$` |
+| `compile_to` | Yes | 注入先ターゲット種別。`instructions` へ出力したいものは `mcp_instructions` を指定 |
+| `priority` | Yes | `high` / `medium` / `low`。連結順の制御に使用 |
+| `text` | Yes | instructions に注入する確定テキスト。テンプレート処理なし、verbatim 出力 |
+| `servers` | No | このワークフローがカバーするサーバー名リスト。指定したサーバーは behavior 行から除外される。省略時は空リスト |
 
-主な変更点:
-- `load_workflows()` を呼び出してワークフローを読み込み
-- ワークフローの `compile_to` を priority 順に結合
-- ワークフローの `servers` でカバー済みのサーバーを除外して、残りの behavior を "Additional Tool Hints" として出力
-- サーバー一覧を `server_configs` から自動生成
+YAML パースに失敗したファイル、mapping でないファイルは warning ログを出してスキップされる。未指定フィールドは `name`/`compile_to`/`text` が空文字、`priority` が `"medium"`、`servers` が `[]` として扱われ、その後バリデーションで弾かれる。
 
-```python
-def compile_instructions(server_configs: dict[str, McpServerConfig]) -> str:
-    sections = [
-        _BASE_INSTRUCTIONS,
-        _compile_workflow_section(),        # NEW: ワークフロー指令
-        _compile_fallback_section(),        # NEW: airis-find フォールバック
-        _compile_server_list(server_configs),  # NEW: 自動生成サーバー一覧
-    ]
+### 意図的に実装していないフィールド（YAGNI）
 
-    # ワークフローでカバー済みのサーバーを抽出
-    workflow_servers = set()
-    for wf in workflows:
-        workflow_servers.update(wf.servers)
+| 当初ドラフトにあったもの | 不採用の理由 |
+|--------------------------|--------------|
+| `description` | 説明はファイル先頭コメントで賄う |
+| `max_tokens` / トークン見積もり | バジェット制御機構ごと不採用（後述） |
+| `trigger` | ランタイムのトリガーマッチングをしないため不要 |
+| `steps`（airis-route 連携） | v2 で検討 |
+| 動的テンプレート変数 | verbatim 出力で十分 |
+| プロジェクトローカルオーバーライド | v2 で検討 |
 
-    # カバーされていないサーバーの behavior を追加
-    remaining = _compile_behavior_lines(server_configs, exclude=workflow_servers)
-    if remaining:
-        sections.append("## Additional Tool Hints\n" + "\n".join(remaining))
+## バリデーション
 
-    return "\n\n".join(sections)
-```
+`workflow_loader._validate()` がチェックする。エラーがあるワークフローは `logger.error` でログ出力し、ロード対象から除外される（ビルド失敗にはしない）。
 
-### 3. 初期ワークフローファイル（3個）
+- `name` が非空、かつ kebab-case
+- `priority` が `{high, medium, low}` のいずれか
+- `compile_to` が非空
+- `text` が非空（`strip()` 後も非空）
 
-| ファイル | priority | servers | 要点 |
-|---------|----------|---------|------|
-| `implement-feature.yaml` | high | context7 | 全ライブラリ/API で公式ドキュメント必須 |
-| `web-research.yaml` | high | tavily | 最新情報・調査は web 検索必須 |
-| `data-query.yaml` | high | supabase | DB 操作は supabase:query |
+**トークン数のバリデーションは存在しない。** `max_tokens` 閾値チェック、`estimate_tokens()`、バジェット超過によるビルドエラーはいずれも未実装。instructions のサイズは workflow ファイルを書くときに手動で気をつける運用。
 
-3つとも high。DB 操作も agiletec プロジェクト群では高頻度であり、3つ合計でも ~800 tokens のバジェット内に収まるため。
+## Priority とソート
 
-### 4. `workflows/README.md`
+`load_workflows()` は読み込んだワークフローを `(priority_order, filename)` でソートする。
 
-```markdown
-# Workflow Recipes
+- `PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}`（未知の priority は `1` = medium 扱い）
+- 同 priority 内はファイル名の昇順
 
-LLM に MCP ツールの自動使用を指令するワークフローレシピ。
+**priority によるスキップ／トランケートは行わない。** 当初設計の「ワークフローセクション ~800 tokens のバジェットに収まる範囲で high → medium → low を採用」というバジェット制御は実装されていない。priority は連結順を決めるだけで、全ワークフローが instructions に出力される。
 
-## ワークフロー追加手順
+## instructions の構成
 
-1. 既存の YAML をコピーしてテンプレートにする
-2. 全フィールドを記入（特に compile_to は英語で、強い指令語を使う）
-3. `task docker:restart` でビルド → バリデーションエラーがないか確認
-4. Claude Code で実際にタスクを投げて、ワークフローが発火するか確認
-5. PR を作成
+`behavior_compiler.compile_instructions(server_configs)` が以下のセクションを `\n\n` で連結する。
 
-## 指令文の書き方
+| 順序 | セクション | 由来 |
+|------|-----------|------|
+| 1 | base instructions | `_BASE_INSTRUCTIONS` 定数（airis-find / airis-schema の案内） |
+| 2 | `## Additional Meta-Tools` | `_META_TOOLS_SECTION` 定数 |
+| 3 | workflow texts | `_compile_workflow_texts(workflows)`。空なら `_TOOL_ROUTING_GUIDE` 定数にフォールバック |
+| 4 | `## Proactive Tool Usage` | `_compile_behavior_lines()`。behavior 行が 1 件以上ある場合のみ |
+| 5 | `## Quick Routes` | `routing_engine.format_routing_table_as_instructions()`。`routing-table.json` がある場合のみ |
 
-- MUST, FIRST, THEN, NEVER を使う（提案ではなく指令）
-- 「Your training data is outdated」のような理由を添える
-- 1ワークフロー ~150-200 tokens 以内
-- compile_to は英語で書く（instructions はLLMのシステムプロンプトに注入されるため）
-```
+### 3. workflow texts のコンパイル
 
-## 既存 behavior config との共存
+`_compile_workflow_texts(workflows)` は `compile_to == "mcp_instructions"` かつ `text` が非空のワークフローを priority 順に `text` を `\n\n` で単純連結する。テンプレート展開・変数置換はない（verbatim）。
 
-現在の `mcp-config.json` の behavior 設定は **そのまま動作する**。
+仕様で当初挙げていた `_compile_workflow_section` / `_compile_fallback_section` / `_compile_server_list` の 3 分割関数は実装されていない。フォールバック指令（airis-find への誘導）は `_BASE_INSTRUCTIONS` と `_TOOL_ROUTING_GUIDE` の固定文言に埋め込まれており、`mcp-config.json` からサーバー一覧を自動生成する機構（`_compile_server_list`）も廃止された。
 
-- ワークフロー YAML の `servers` フィールドでカバー済みのサーバー → behavior は instructions から除外（ワークフローが優先）
-- カバーされていないサーバー → 従来通り "Additional Tool Hints" セクションで出力
-- 破壊的変更なし
+### 4. behavior 行のコンパイル
+
+`_compile_behavior_lines(server_configs, exclude)` は、各 server config の `behavior`（`triggers` と `instruction` の両方を持つもの）から `WHEN <triggers を " / " で連結> → <instruction> [server_name]` という行を生成し、priority 順にソートして返す。
+
+`exclude` には全ワークフローの `servers` フィールドの和集合が渡され、ワークフローでカバー済みのサーバーは behavior 行から除外される（ワークフロー指令が優先）。
+
+## 実装ファイル
+
+- `apps/api/src/app/core/workflow_loader.py` — `WorkflowConfig`, `load_workflows()`, `_validate()`
+- `apps/api/src/app/core/behavior_compiler.py` — `compile_instructions()`, `_compile_workflow_texts()`, `_compile_behavior_lines()`
+- `apps/api/src/app/core/routing_engine.py` — `format_routing_table_as_instructions()`（Quick Routes セクション）
+- `workflows/implement-feature.yaml`, `web-research.yaml`, `data-query.yaml`, `proactive-usage.yaml`, `tool-routing.yaml`, `README.md`
 
 ## テスト
 
-### ユニットテスト
-- `test_workflow_loader.py`: YAML パース、バリデーション（必須フィールド欠落、トークン超過、不正 priority、非 ASCII トークン見積もり）
-- `test_behavior_compiler.py`: ワークフローコンパイル、priority 順序、トークンバジェット制御、サーバー一覧自動生成、behavior 重複排除
+- `apps/api/tests/unit/test_workflow_loader.py` — YAML パース、バリデーション（必須フィールド欠落、不正 priority、kebab-case 違反）、priority ソートを検証。
 
-### 統合テスト
-- Gateway 起動 → MCP initialize レスポンスの instructions フィールドにワークフロー指令が含まれることを確認
+**`behavior_compiler.py` 専用のユニットテストは未実装。** 当初仕様で挙げていた `test_behavior_compiler.py`（ワークフローコンパイル、priority 順序、behavior 重複排除の検証）は存在しない。core モジュールのテストカバレッジ不足は #85 で追跡している。
 
 ### フォールバック発火テスト（手動）
 
-実装後に Claude Code で以下を検証:
+実装後に Claude Code で以下を検証する想定。
 
 | テストケース | 期待動作 |
 |-------------|---------|
 | 「Stripe で決済機能を実装して」 | airis-find が呼ばれる（Stripe はワークフロー外） |
 | 「Next.js でページを作って」 | context7:resolve-library-id が呼ばれる（implement-feature 発火） |
-| 「Hono でミドルウェアを作って」 | context7:resolve-library-id が呼ばれる（馴染みの薄いライブラリでも確実に発火するか確認） |
 | 「最新の React ベストプラクティスを調べて」 | tavily:tavily-search が呼ばれる（web-research 発火） |
 
-airis-find が呼ばれない場合はフォールバック指令の文言を強化:
-```
-WARNING: Attempting any task involving external services without calling airis-find first
-will result in incorrect implementations based on outdated knowledge.
-```
+## 既知の制約
 
-## 既知の制約 (v1)
-
-1. **プロジェクトローカルオーバーライドなし**: 全ワークフローはグローバル。v2 で `.airis/workflows/` マージ追加
-2. **ランタイムトリガーマッチングなし**: trigger フィールドはドキュメント用。LLM の判断に委ねる
-3. **ワークフロー間の重複**: 複合タスクで複数ワークフローが該当する場合、LLM が判断（v1 は許容）
-4. **トークン見積もりは近似**: 実際のトークン数と ~10% の誤差あり
+1. **プロジェクトローカルオーバーライドなし**: 全ワークフローはグローバル。
+2. **ランタイムトリガーマッチングなし**: ワークフローは起動時に全件コンパイルされる。発火判断は LLM に委ねる。
+3. **トークンバジェット制御なし**: instructions のサイズ管理は手動運用。
+4. **`behavior_compiler.py` のテストなし**: #85 で追跡。
 
 ## 将来 (v2 候補、スコープ外)
 
-- `.airis/workflows/` プロジェクトローカルオーバーライド + マージ戦略
+次のいずれかが必要になった時点で、対応する設計を別 issue で再検討する。
+
+- workflow の自動トランケート / 優先度ベースのバジェット制御（instructions が実測で肥大化し始めた場合）
+- `.airis/workflows/` プロジェクトローカルオーバーライド + マージ戦略（複数プロジェクトが同一 Gateway を共有する場合）
 - `steps` フィールドで airis-route 連携
 - ランタイムメトリクス: LLM がどのワークフローに従ったかを追跡
-- ワークフロー有効性スコアリング（ツール呼び出しパターンから算出）
 
 ---
 
-## Implementation delta (2026-04-13)
+## History
 
-上記の仕様は YAGNI を適用した簡素化版として実装されました。実装とのズレを以下に記録します (#76)。この節と実装の内容が一致していれば、上の仕様本文は「当初の意図」として読み、実際の挙動を確認するときはこの節を最優先してください。
+この文書は当初、より複雑な設計のドラフトだった。実装時に YAGNI を適用して簡素化された主な差分は以下。
 
-### WorkflowConfig (5 フィールドに簡素化)
-
-`apps/api/src/app/core/workflow_loader.py` で実装されている dataclass は次のとおり。
-
-```python
-@dataclass
-class WorkflowConfig:
-    name: str               # kebab-case 識別子
-    compile_to: str         # 注入先を識別するターゲット種別 (e.g. "mcp_instructions")
-    priority: str           # "high" | "medium" | "low"
-    text: str               # instructions に注入する確定テキスト
-    servers: list[str] = field(default_factory=list)
-```
-
-仕様本文との差分:
-
-| 仕様 (当初)                           | 実装                     | 備考 |
-|---------------------------------------|---------------------------|------|
-| `description`                         | 削除                      | 説明はファイルコメントで賄う |
-| `max_tokens`                          | 削除                      | トークン見積もり機構ごと廃止 |
-| `trigger`                             | 削除                      | ランタイムマッチングをしないので不要 |
-| `compile_to` = 注入テキスト本体       | `compile_to` = ターゲット種別 | 注入テキスト本体は `text` フィールドに分離 |
-| (新設) `text`                         | `text` が本文             | `compile_to: "mcp_instructions"` と組で使う |
-
-### バリデーション
-
-`validate_workflow()` は廃止され、モジュール内部の `_validate()` が同等のチェックを行います。対象:
-
-- `name` が非空かつ kebab-case
-- `priority` が {high, medium, low} のいずれか
-- `compile_to` が非空
-- `text` が非空
-
-**トークン数のバリデーションと `max_tokens` 閾値チェックは実装されていません**。関連して `estimate_tokens()` / トークンバジェット制御 (`~800 tokens` の上限、`medium`/`low` のスキップ) も存在しません。現状は workflow ファイルを書くときに手動でサイズに気をつける運用です。
-
-### コンパイルフロー
-
-`apps/api/src/app/core/behavior_compiler.py` にある関数は次の 1 つだけです。
-
-```python
-def _compile_workflow_texts(workflows: list[WorkflowConfig]) -> str:
-    ...
-```
-
-仕様で挙げていた `_compile_workflow_section` / `_compile_fallback_section` / `_compile_server_list` の 3 分割は実装されず、`_compile_workflow_texts()` が workflows を単純連結して返します。フォールバック指令 (airis-find 誘導) は `_BASE_INSTRUCTIONS` 側の固定文言として埋め込まれており、実行時に `mcp-config.json` から自動生成するサーバー一覧 (`_compile_server_list`) も廃止されています。
-
-### 実装済みファイル
-
-- `apps/api/src/app/core/workflow_loader.py` (loader + validator)
-- `apps/api/src/app/core/behavior_compiler.py` (`_compile_workflow_texts`)
-- `workflows/implement-feature.yaml`, `workflows/web-research.yaml`, `workflows/data-query.yaml`, `workflows/proactive-usage.yaml`, `workflows/tool-routing.yaml`
-- `apps/api/tests/unit/test_workflow_loader.py`, `test_behavior_compiler.py`
-
-### 将来スペック復活のトリガー
-
-次のいずれかが必要になった時点で、本仕様書の対応セクションを復活させるか別 issue で再設計します。
-
-- workflow の自動トランケート / 優先度ベースのバジェット制御が実運用で必要になった
-- 複数プロジェクトが同じ Gateway を共有して project-local override が必要になった
-- instructions のサイズが実測で肥大化し始めた (`~1500 tokens` 近辺)
+| 当初ドラフト | 現行実装 |
+|--------------|----------|
+| 7-field `WorkflowConfig`（`description`, `max_tokens`, `trigger` を含む） | 5-field（`name`, `compile_to`, `priority`, `text`, `servers`） |
+| `compile_to` = 注入テキスト本体 | `compile_to` = ターゲット種別、本体は `text` フィールドに分離 |
+| `estimate_tokens()` + `max_tokens` 超過でビルドエラー | トークン見積もり機構ごと廃止 |
+| `~800 tokens` バジェット内で priority ベースに採用／スキップ | priority は連結順のみ、全件採用 |
+| `_compile_workflow_section` / `_compile_fallback_section` / `_compile_server_list` の 3 分割 | `_compile_workflow_texts()` 1 関数で単純連結。フォールバックは固定文言 |
+| `validate_workflow()`（公開関数） | `_validate()`（モジュール内部関数） |
+| サーバー一覧を `mcp-config.json` から自動生成 | 廃止 |
