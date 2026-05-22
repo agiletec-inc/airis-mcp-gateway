@@ -77,9 +77,12 @@ jobs:
           uv pip install --system -e ".[test]"
 
       - name: Run tests with coverage
+        # --cov-fail-under is a regression ratchet, not the end goal. It must
+        # never be lowered — raise it as coverage improves. Target is 70%
+        # (issue #85); bump this number in the same PR that adds the tests.
         run: |
           cd apps/api
-          python -m pytest tests/unit -v --tb=short --cov=src --cov-report=xml --cov-report=term-missing
+          python -m pytest tests/unit -v --tb=short --cov=src --cov-report=xml --cov-report=term-missing --cov-fail-under=48
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6
