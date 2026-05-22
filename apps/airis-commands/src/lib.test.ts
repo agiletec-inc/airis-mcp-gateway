@@ -79,6 +79,18 @@ describe("validateProfileName", () => {
     expect(validateProfileName("../../etc/passwd")).toBe(false);
   });
 
+  it("rejects absolute paths and OS-specific separators", () => {
+    expect(validateProfileName("/etc/passwd")).toBe(false);
+    expect(validateProfileName("..\\..\\windows")).toBe(false);
+    expect(validateProfileName("C:\\Windows\\system32")).toBe(false);
+  });
+
+  it("rejects null bytes and control characters", () => {
+    expect(validateProfileName("profile\0.json")).toBe(false);
+    expect(validateProfileName("profile\nname")).toBe(false);
+    expect(validateProfileName("profile\t")).toBe(false);
+  });
+
   it("rejects special characters", () => {
     expect(validateProfileName("has space")).toBe(false);
     expect(validateProfileName("a/b")).toBe(false);
