@@ -5,13 +5,17 @@ Routes for process-based MCP servers (uvx/npx).
 These endpoints handle direct process communication without Docker Gateway.
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import Any, Optional
 
+from ...core.auth import verify_api_key
 from ...core.process_manager import get_process_manager
 
-router = APIRouter()
+# Every /process/* route is an admin/mutation endpoint (enable/disable, tool
+# calls, raw JSON-RPC). Gate the whole router behind verify_api_key so it is
+# never served unauthenticated outside local development.
+router = APIRouter(dependencies=[Depends(verify_api_key)])
 
 
 class ToolCallRequest(BaseModel):
