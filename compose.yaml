@@ -91,9 +91,15 @@ services:
   # Hybrid MCP Multiplexer: Docker Gateway + Process (uvx/npx)
   api:
     container_name: airis-mcp-gateway
+    # Single-file workflow: with both `image` and `build` set, `docker compose up`
+    # PULLS the prebuilt image by default (end-users who didn't clone the repo),
+    # while contributors run `docker compose up -d --build` to build from source.
+    # pull_policy: missing → use the cached/pulled image if present, otherwise pull.
+    image: ghcr.io/agiletec-inc/airis-mcp-gateway:latest
     build:
       context: .
       dockerfile: Dockerfile
+    pull_policy: missing
     ports:
       - "9400:8000"
     extra_hosts:

@@ -16,23 +16,29 @@
 
 ---
 
-## 🛠️ Quick Install & Universal Setup
+## 🛠️ Install
 
-### 1. Start the Gateway
+Two steps: **(1)** start the gateway itself, **(2)** connect each AI client to it.
+
+### Step 1 — Start the Gateway
+
+Pick whichever fits you.
+
+**Option A — Quick install** (end users, no source checkout)
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/agiletec-inc/airis-mcp-gateway/main/install.sh | bash
 ```
 
-### Development Setup
+Uses pre-built images from GHCR. Installs to `~/.local/share/airis-mcp-gateway/`, sets up the `airis-gateway` CLI, and initializes the registry. Remove anytime with `airis-gateway --uninstall`.
+
+**Option B — From source** (developers)
 
 ```bash
-# 1. Copy and fill in your API keys
-cp .env.example .env
-
-# 2. Start the gateway
+git clone https://github.com/agiletec-inc/airis-mcp-gateway.git
+cd airis-mcp-gateway
+cp .env.example .env      # then fill in your API keys
 docker compose up -d
-
-# 3. View logs
 docker compose logs -f api
 ```
 
@@ -46,21 +52,26 @@ docker compose logs -f api
 > `.env` is gitignored and loaded directly by `docker compose` — no `doppler run`
 > runtime injection needed.
 
-### 2. Connect Your AI Client
-Register the gateway once, and access all backend MCP servers (Stripe, Supabase, GitHub, etc.) through a single connection.
+Once it is up, the gateway listens on port `9400` — verify with `curl http://localhost:9400/health`.
+
+### Step 2 — Connect Your AI Client
+
+Register the gateway **once per client** as a user-scoped MCP server. One connection exposes every backend MCP server (Stripe, Supabase, GitHub, …).
 
 | Client | Connection Command / Setup |
 | :--- | :--- |
-| **Codex** | `codex mcp add airis-mcp-gateway --url http://localhost:9400/mcp` |
 | **Claude Code** | `claude mcp add --transport http --scope user airis-gateway http://localhost:9400/mcp/` |
-| **Gemini CLI** | `gemini mcp add --transport sse airis-mcp-gateway http://localhost:9400/sse` |
-| **Cursor** | Settings > Features > MCP > **Add New MCP Server**<br>Name: `airis-mcp-gateway`, Type: `SSE`, URL: `http://localhost:9400/sse` |
+| **Codex** | `codex mcp add airis-gateway --url http://localhost:9400/mcp` |
+| **Gemini CLI** | `gemini mcp add --transport sse airis-gateway http://localhost:9400/sse` |
+| **Cursor** | Settings > Features > MCP > **Add New MCP Server**<br>Name: `airis-gateway`, Type: `SSE`, URL: `http://localhost:9400/sse` |
 | **Windsurf** | Add SSE URL `http://localhost:9400/sse` to `~/.codeium/config.json` |
 
-Docker Compose publishes the API on port `9400`. Codex and Claude Code use Streamable HTTP at `http://localhost:9400/mcp/`. SSE clients (Gemini CLI, Cursor, Windsurf) use `http://localhost:9400/sse`.
+Codex and Claude Code use Streamable HTTP at `http://localhost:9400/mcp/`. SSE clients (Gemini CLI, Cursor, Windsurf) use `http://localhost:9400/sse`.
 
 > [!NOTE]
-> The `--scope user` flag registers the server globally across all projects. Do NOT also install via `/install-plugin` — duplicate endpoint causes the plugin's MCP connection to be silently ignored.
+> Registering the gateway as a user-scoped MCP server (the commands above) is the **only** install method — one registration is shared across all your projects. There is no separate plugin to install.
+
+> **Tip:** To skip per-tool permission prompts in Claude Code, add `"mcp__airis-gateway__*"` to the `permissions.allow` list in `~/.claude/settings.json`.
 
 ---
 
@@ -141,7 +152,7 @@ Claude / Gemini / Cursor / Windsurf
     GitHub, etc.          etc.
 ```
 
-> See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full system design.
+> See [docs/architecture.md](./docs/architecture.md) for the full system design.
 
 <details>
 <summary><h2>Available Servers</h2></summary>
@@ -191,15 +202,16 @@ Source of truth: [`mcp-config.json`](./mcp-config.json). HOT servers are always 
 
 ## Documentation
 
-- [Dynamic MCP deep-dive](./docs/dynamic-mcp.md) — Architecture, cache behavior, auto-enable flow
-- [Target architecture](./docs/target-architecture.md) — Toolset-centric AIRIS direction and design boundaries
-- [Toolset roadmap](./docs/toolset-roadmap.md) — Phased implementation plan for capability slices
+- [Architecture](./docs/architecture.md) — System design, Dynamic MCP (current + target), component responsibilities
+- [Toolset roadmap](./docs/toolset-roadmap.md) — Phased plan toward toolset-centric exposure
 - [Capability selection guide](./docs/capability-selection.md) — When to use MCP vs skills vs hooks vs subagents vs CLI
 - [Configuration reference](./docs/configuration.md) — Environment variables, TTL settings, server config
 - [Gateway vs Plugins](./docs/gateway-vs-plugins.md) — When to use Gateway vs Claude Code plugins
-- [Deployment guide](./DEPLOYMENT.md) — Production setup, API auth, monitoring, reverse proxy
-- [Architecture](./ARCHITECTURE.md) — System design and component responsibilities
+- [Deployment guide](./docs/DEPLOYMENT.md) — Production setup, API auth, monitoring, reverse proxy
+- [Migration guide](./docs/MIGRATION.md) — Version upgrade path
 - [Contributing](./CONTRIBUTING.md) — Development setup, Devbox, go-task, PR guidelines
+
+See [docs/](./docs/) for the full index.
 
 ## License
 

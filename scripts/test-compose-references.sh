@@ -15,10 +15,23 @@ fail() { echo "FAIL: $1" >&2; exit 1; }
 # 1. The canonical compose file exists at the repo root.
 [ -f "$ROOT_DIR/compose.yaml" ] || fail "compose.yaml missing at repo root"
 
-# 2. No docker-compose.yml at the root. Two auto-discovered names would make
-#    Docker Compose pick the wrong file — the original issue #135 symptom.
-[ -e "$ROOT_DIR/docker-compose.yml" ] && \
-    fail "docker-compose.yml present at repo root — auto-discovery conflict with compose.yaml"
+# 2. compose.yaml is the ONLY compose file at the repo root. No compose.yml,
+#    no compose.<env>.yaml overrides (e.g. .dev/.dist), no legacy
+#    docker-compose*.{yml,yaml}. One file builds-or-pulls for every audience
+#    (image+build+pull_policy in compose.yaml), so any sibling is either a
+#    reintroduced variant or an auto-discovery conflict (issue #135).
+shopt -s nullglob
+strays=()
+for f in "$ROOT_DIR"/compose.yml \
+         "$ROOT_DIR"/compose.*.yaml "$ROOT_DIR"/compose.*.yml \
+         "$ROOT_DIR"/docker-compose*.yml "$ROOT_DIR"/docker-compose*.yaml; do
+    # compose.yml has no wildcard, so nullglob can't drop it — test existence.
+    [ -e "$f" ] && strays+=("$(basename "$f")")
+done
+shopt -u nullglob
+if [ ${#strays[@]} -gt 0 ]; then
+    fail "stray compose file(s) at repo root: ${strays[*]} — there must be exactly one compose file: compose.yaml"
+fi
 
 # 3. Every "<REPO_ROOT>/<file>.ya?ml" compose reference resolves to a real file.
 #    Covers both `{{.REPO_ROOT}}` (go-task) and `{{REPO_ROOT}}` (autostart

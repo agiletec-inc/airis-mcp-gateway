@@ -2,33 +2,30 @@ version: '3'
 
 vars:
   COMPOSE_FILE: "{{.REPO_ROOT}}/compose.yaml"
-  COMPOSE_DEV_FILE: "{{.REPO_ROOT}}/docker-compose.dev.yml"
 
 tasks:
   up:
-    desc: Start stack in development mode (hot reload)
-    deps:
-      - build:local
+    desc: Start stack built from local source (docker:up pulls the prebuilt image instead)
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} -f {{.COMPOSE_DEV_FILE}} up -d
+      - docker compose -f {{.COMPOSE_FILE}} up -d --build
 
   down:
-    desc: Stop development stack
+    desc: Stop the stack
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} -f {{.COMPOSE_DEV_FILE}} down
+      - docker compose -f {{.COMPOSE_FILE}} down
 
   restart:
-    desc: Restart API in dev mode
+    desc: Rebuild and restart the API from local source
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} -f {{.COMPOSE_DEV_FILE}} restart api
+      - docker compose -f {{.COMPOSE_FILE}} up -d --build api
 
   logs:
-    desc: Follow dev logs
+    desc: Follow API logs
     cmds:
-      - docker compose -f {{.COMPOSE_FILE}} -f {{.COMPOSE_DEV_FILE}} logs -f api
+      - docker compose -f {{.COMPOSE_FILE}} logs -f api
 
   build:local:
-    desc: Build MCP servers locally (for dev volume mounts)
+    desc: Build the bundled TypeScript MCP servers
     cmds:
       - task: build:mcp
 

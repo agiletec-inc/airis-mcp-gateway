@@ -9,9 +9,10 @@ mcp.json
 mcp-config.json
 !mcp-config.json.example
 
-# Docker volumes
+# Docker volumes / runtime bind-mounts (recreated by Compose on `up`)
 data/
 logs/
+profiles/
 
 # Context7 specific
 context7/
@@ -32,6 +33,7 @@ node_modules/
 .pnpm-store/
 
 # Build outputs
+target/
 apps/*/out/
 apps/*/dist/
 apps/*/build/
