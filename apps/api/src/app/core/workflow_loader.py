@@ -35,13 +35,16 @@ class WorkflowConfig:
         priority: Importance level — high/medium/low.
         text: Confirmed text content, emitted verbatim.
         servers: Optional list of server names this workflow covers.
+        topic: Optional task topic key, used by the airis-workflow meta-tool
+            to serve on-demand workflows (compile_to: "airis_workflow").
     """
 
     name: str
-    compile_to: str  # target type: "mcp_instructions"
+    compile_to: str  # target type: "mcp_instructions" | "airis_workflow"
     priority: str  # "high" | "medium" | "low"
     text: str  # confirmed text, emitted verbatim
     servers: list[str] = field(default_factory=list)
+    topic: str = ""  # task topic key for the airis-workflow meta-tool
 
 
 def load_workflows(workflows_dir: Optional[Path] = None) -> list[WorkflowConfig]:
@@ -91,6 +94,7 @@ def load_workflows(workflows_dir: Optional[Path] = None) -> list[WorkflowConfig]
             priority=raw.get("priority", "medium"),
             text=raw.get("text", ""),
             servers=raw.get("servers", []),
+            topic=raw.get("topic", ""),
         )
 
         errors = _validate(config)

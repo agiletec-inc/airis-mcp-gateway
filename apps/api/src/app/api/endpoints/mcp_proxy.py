@@ -787,6 +787,9 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
         if tool_name == "airis-route":
             return await handle_airis_route(rpc_request, session_id=session_id)
 
+        if tool_name == "airis-workflow":
+            return await handle_airis_workflow(rpc_request, session_id=session_id)
+
     # Handle prompts/get request
     if rpc_request.get("method") == "prompts/get":
         params = rpc_request.get("params", {})
@@ -1615,6 +1618,96 @@ async def handle_airis_schema(rpc_request: Dict[str, Any], session_id: Optional[
         queue = await get_response_queue(session_id)
         await queue.put(response_data)
         logger.info(f"Queued airis-schema response for session {session_id}")
+        return Response(status_code=202)
+
+    # Fallback to HTTP response if no session_id
+    return Response(
+        content=json.dumps(response_data),
+        status_code=200,
+        media_type="application/json"
+    )
+
+
+async def handle_airis_workflow(rpc_request: Dict[str, Any], session_id: Optional[str] = None) -> Response:
+    """
+    airis-workflow ツールコール: タスク種別ごとの安全な手順テキストを返す
+
+    workflows/*.yaml のうち compile_to == "airis_workflow" のものを on-demand で返す。
+    initialize 命令には dump されないため、呼ばれた時だけ context に載る。
+
+    Args:
+        rpc_request: JSON-RPC 2.0 リクエスト
+        session_id: SSE session ID for response routing
+
+    Returns:
+        JSON-RPC 2.0 レスポンス
+    """
+    from app.core.workflow_loader import load_workflows
+
+    params = rpc_request.get("params", {})
+    arguments = params.get("arguments", {})
+    topic = arguments.get("topic")
+
+    # Build {topic: WorkflowConfig} for on-demand airis-workflow entries
+    workflows = {
+        wf.topic: wf
+        for wf in load_workflows()
+        if wf.compile_to == "airis_workflow" and wf.topic
+    }
+    valid_topics = ", ".join(sorted(workflows)) or "(none configured)"
+
+    if not topic:
+        error_data = {
+            "jsonrpc": "2.0",
+            "id": rpc_request.get("id"),
+            "error": {
+                "code": -32602,
+                "message": f"topic is required. Valid topics: {valid_topics}",
+            },
+        }
+        if session_id:
+            queue = await get_response_queue(session_id)
+            await queue.put(error_data)
+            return Response(status_code=202)
+        return Response(
+            content=json.dumps(error_data),
+            status_code=200,
+            media_type="application/json",
+        )
+
+    workflow = workflows.get(topic)
+    if workflow is None:
+        error_data = {
+            "jsonrpc": "2.0",
+            "id": rpc_request.get("id"),
+            "error": {
+                "code": -32602,
+                "message": f"Unknown workflow topic: '{topic}'. Valid topics: {valid_topics}",
+            },
+        }
+        if session_id:
+            queue = await get_response_queue(session_id)
+            await queue.put(error_data)
+            return Response(status_code=202)
+        return Response(
+            content=json.dumps(error_data),
+            status_code=200,
+            media_type="application/json",
+        )
+
+    response_data = {
+        "jsonrpc": "2.0",
+        "id": rpc_request.get("id"),
+        "result": {
+            "content": [{"type": "text", "text": workflow.text.strip()}]
+        },
+    }
+
+    # MCP SSE Transport: Response via SSE stream
+    if session_id:
+        queue = await get_response_queue(session_id)
+        await queue.put(response_data)
+        logger.info(f"Queued airis-workflow response for session {session_id}")
         return Response(status_code=202)
 
     # Fallback to HTTP response if no session_id

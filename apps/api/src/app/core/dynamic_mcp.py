@@ -716,6 +716,26 @@ class DynamicMCP:
                     "required": ["tool"]
                 }
             },
+            {
+                "name": "airis-workflow",
+                "description": (
+                    "Get the safe step-by-step procedure for a kind of task BEFORE acting. "
+                    "Use when you are about to query or modify a database, debug an issue "
+                    "involving external services or APIs, implement a feature with an "
+                    "unfamiliar library/API, or research a library/API."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "topic": {
+                            "type": "string",
+                            "enum": ["database", "debugging", "implementation", "research"],
+                            "description": "The kind of task you are about to start"
+                        }
+                    },
+                    "required": ["topic"]
+                }
+            },
         ]
 
         # Extended meta-tools (only in "full" mode)

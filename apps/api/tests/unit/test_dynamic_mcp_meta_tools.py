@@ -5,7 +5,7 @@ Guards:
 - The meta-tools literal must remain syntactically valid (an earlier edit left
   dangling braces and an orphaned `"required": ["tool"]` after the airis-exec
   definition, making the file unparseable).
-- Core mode must yield exactly two tools (airis-find, airis-schema);
+- Core mode must yield three tools (airis-find, airis-schema, airis-workflow);
   full mode must add the four optional meta-tools.
 - Lazy Schema: active tool definitions must expose stub `{"type": "object"}`
   inputSchemas so the client never ingests the backend's full JSON schema.
@@ -29,7 +29,7 @@ def test_core_meta_tools_shape():
     mcp = DynamicMCP()
     tools = mcp.get_meta_tools(mode="core")
     names = [t["name"] for t in tools]
-    assert names == ["airis-find", "airis-schema"]
+    assert names == ["airis-find", "airis-schema", "airis-workflow"]
     for tool in tools:
         assert "inputSchema" in tool
         assert tool["inputSchema"].get("type") == "object"
@@ -46,6 +46,21 @@ def test_airis_find_advertises_inventory_and_server_drilldown():
     desc = find["description"].lower()
     assert "no argument" in desc  # bare call → full inventory
     assert "server" in desc
+
+
+def test_airis_workflow_is_core_tool_with_topic_enum():
+    """airis-workflow is a core meta-tool taking a required topic enum."""
+    mcp = DynamicMCP()
+    core = {t["name"]: t for t in mcp.get_meta_tools(mode="core")}
+    assert "airis-workflow" in core
+    schema = core["airis-workflow"]["inputSchema"]
+    assert schema["required"] == ["topic"]
+    assert set(schema["properties"]["topic"]["enum"]) == {
+        "database",
+        "debugging",
+        "implementation",
+        "research",
+    }
 
 
 def test_full_meta_tools_adds_optional_tools():
