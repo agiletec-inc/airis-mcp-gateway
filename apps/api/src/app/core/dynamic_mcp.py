@@ -681,12 +681,23 @@ class DynamicMCP:
         tools = [
             {
                 "name": "airis-find",
-                "description": "Optional fallback search for finding tools.",
+                "description": (
+                    "Discover MCP tools and servers. Call with NO arguments for a "
+                    "full inventory of every connected server (hot/cold/docker, "
+                    "enabled status, tool counts) plus toolsets. Pass "
+                    "server=\"<name>\" to drill into one server's tools, or "
+                    "query=\"keywords\" to search tools across all servers."
+                ),
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "query": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "Keywords to search tools across all servers"
+                        },
+                        "server": {
+                            "type": "string",
+                            "description": "Server name to list that server's tools"
                         }
                     }
                 }
@@ -837,3 +848,24 @@ def get_dynamic_mcp() -> DynamicMCP:
     if _dynamic_mcp is None:
         _dynamic_mcp = DynamicMCP()
     return _dynamic_mcp
+
+
+def inject_schema_on_validation_error(
+    error: Optional[dict], tool_name: str
+) -> None:
+    """Re-hydrate an MCP validation error with the tool's full input schema.
+
+    Under SCHEMA_MODE=lazy every tool's inputSchema is stubbed to {"type":
+    "object"} to save context, so a client that calls a tool blind gets a
+    -32602/-32000 back from the backend. Appending the real schema lets the
+    caller self-heal on retry without a separate airis-schema round-trip.
+
+    Mutates `error` in place. No-op for other error codes or unknown tools.
+    """
+    if not error or error.get("code") not in (-32602, -32000):
+        return
+    schema_info = get_dynamic_mcp().get_tool_schema(tool_name)
+    input_schema = schema_info.get("inputSchema") if schema_info else None
+    if input_schema:
+        error["message"] += f"\n\nFull Schema: {input_schema}"
+        error["hint"] = "Retry with the full schema provided above."

@@ -49,7 +49,7 @@ from .tool_shaping import (
 )
 from ...core.behavior_compiler import compile_instructions
 from ...core.config import settings
-from ...core.dynamic_mcp import get_dynamic_mcp
+from ...core.dynamic_mcp import get_dynamic_mcp, inject_schema_on_validation_error
 from ...core.logging import get_logger
 from ...core.mcp_config_loader import ServerMode
 from ...core.process_manager import get_process_manager
@@ -858,6 +858,9 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
                 # airis-workspace) emit it alongside a successful result.
                 server_error = server_response.get("error") if isinstance(server_response, dict) else None
                 if server_error is not None:
+                    # Lazy schema stubs hide params, so a blind call returns
+                    # -32602; re-hydrate it with the full schema for self-heal.
+                    inject_schema_on_validation_error(server_error, tool_name)
                     response_data["error"] = server_error
                 else:
                     response_data["result"] = server_response.get("result")
@@ -892,6 +895,7 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
                 }
                 inner_error = result.get("error") if isinstance(result, dict) else None
                 if inner_error is not None:
+                    inject_schema_on_validation_error(inner_error, tool_name)
                     response_data["error"] = inner_error
                 else:
                     response_data["result"] = result.get("result")

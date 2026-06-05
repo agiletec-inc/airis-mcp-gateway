@@ -35,6 +35,19 @@ def test_core_meta_tools_shape():
         assert tool["inputSchema"].get("type") == "object"
 
 
+def test_airis_find_advertises_inventory_and_server_drilldown():
+    """airis-find must expose the `server` param and document the bare-call
+    inventory so clients can discover servers/tools without guessing."""
+    mcp = DynamicMCP()
+    find = next(t for t in mcp.get_meta_tools(mode="core") if t["name"] == "airis-find")
+    props = find["inputSchema"]["properties"]
+    assert "query" in props
+    assert "server" in props  # was supported by the handler but hidden from the schema
+    desc = find["description"].lower()
+    assert "no argument" in desc  # bare call → full inventory
+    assert "server" in desc
+
+
 def test_full_meta_tools_adds_optional_tools():
     mcp = DynamicMCP()
     tools = mcp.get_meta_tools(mode="full")
