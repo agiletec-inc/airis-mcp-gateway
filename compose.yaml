@@ -124,6 +124,7 @@ services:
       - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
       - FIGMA_API_KEY=${FIGMA_API_KEY:-}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - MAGIC_API_KEY=${MAGIC_API_KEY:-}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
       - SUPABASE_ACCESS_TOKEN=${SUPABASE_ACCESS_TOKEN:-}
       # Clear OrbStack-injected proxy vars: NO_PROXY contains IPv6 CIDRs that
