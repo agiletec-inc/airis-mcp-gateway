@@ -161,7 +161,7 @@ DYNAMIC_MCP=false docker compose up -d
 | `/api/tools/combined` | All tools from all sources |
 | `/api/tools/status` | Server status overview |
 | `/process/servers` | List process servers |
-| `/metrics` | Prometheus metrics (see [Deployment Guide](../DEPLOYMENT.md#monitoring)) |
+| `/metrics` | Prometheus metrics (see [Deployment Guide](./DEPLOYMENT.md#monitoring)) |
 
 ## Prometheus Metrics
 

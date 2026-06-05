@@ -1,5 +1,8 @@
 # Toolset Roadmap
 
+> **Status:** forward-looking plan. For what ships today and the target end state, see
+> [architecture.md](./architecture.md). This doc is the phased path between them.
+
 ## Objective
 
 Introduce **toolset-centric exposure** without rewriting the entire gateway lifecycle model.

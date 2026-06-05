@@ -3,7 +3,7 @@ Rate limiting middleware for API protection.
 
 In-memory fixed window rate limiting. Note: This does NOT work across
 multiple processes/instances. For production with multiple workers,
-use Redis-backed rate limiting (see DEPLOYMENT.md).
+use Redis-backed rate limiting (see docs/DEPLOYMENT.md).
 
 Key priority: API-Key header > client IP
 """

@@ -183,8 +183,10 @@ server {
 
 ### Traefik
 
+Add the labels to the `api` service in `compose.yaml`:
+
 ```yaml
-# docker-compose.override.yml
+# compose.yaml
 services:
   api:
     labels:
