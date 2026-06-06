@@ -368,6 +368,30 @@
       "tools_index": [
         {"name": "query", "description": "Execute a SQL query against the PostgreSQL database"}
       ]
+    },
+    "notebooklm": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "notebooklm-mcp@latest"
+      ],
+      "env": {},
+      "enabled": true,
+      "mode": "cold",
+      "tools_index": [
+        {"name": "get_notebooks", "description": "List all NotebookLM notebooks for the current user"},
+        {"name": "create_notebook", "description": "Create a new, empty NotebookLM notebook"},
+        {"name": "chat_notebook", "description": "Chat with a specific NotebookLM notebook, optionally returning source citations"},
+        {"name": "delete_notebook", "description": "Delete a NotebookLM notebook by its ID"},
+        {"name": "get_health", "description": "Inspect server state"},
+        {"name": "setup_auth", "description": "Open a browser window for first-time Google login"},
+        {"name": "re_auth", "description": "Switch to a different Google account or recover from broken auth"},
+        {"name": "cleanup_data", "description": "Two-phase deep cleanup of all server data on disk"},
+        {"name": "add_source", "description": "Ingest a source into a NotebookLM notebook"},
+        {"name": "generate_audio", "description": "Trigger podcast-style Audio Overview generation for a notebook"},
+        {"name": "get_audio_status", "description": "Non-blocking probe for the current Audio Overview state of a notebook"},
+        {"name": "download_audio", "description": "Save the completed Audio Overview to disk as a .m4a file"}
+      ]
     }
   },
   "profiles": {
