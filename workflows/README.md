@@ -1,7 +1,9 @@
 # Workflow Recipes
 
-LLM に MCP ツールの自動使用を指令するワークフローレシピ。
-`behavior_compiler.py` がビルド時に読み込み、MCP initialize response の instructions フィールドに注入する。
+LLM に MCP ツールの安全な使い方を指令するワークフローレシピ。`workflow_loader.py` が読み込み、`compile_to` で配信先が決まる:
+
+- `compile_to: mcp_instructions` — `behavior_compiler.py` が MCP initialize response の instructions フィールドに注入(常時ロード)。
+- `compile_to: airis_workflow` — initialize には dump されず、`airis-workflow` メタツールが `topic` 指定で on-demand に返す。
 
 ## ワークフロー追加手順
 
@@ -15,11 +17,12 @@ LLM に MCP ツールの自動使用を指令するワークフローレシピ�
 
 ```yaml
 name: kebab-case-name              # 一意な識別子
-compile_to: mcp_instructions       # ターゲットタイプ（現在は mcp_instructions のみ）
+compile_to: mcp_instructions       # mcp_instructions（initialize に注入）| airis_workflow（airis-workflow ツールで on-demand 配信）
 priority: high                     # high | medium | low
-servers:                           # カバーするサーバー名リスト（behavior 重複排除用）
+servers:                           # カバーするサーバー名リスト（behavior 重複排除用、任意）
   - server-name
-text: |                            # instructions に注入する確定テキスト（verbatim 出力）
+topic: database                    # airis_workflow の場合のトピックキー（airis-workflow ツールの enum と一致）
+text: |                            # 確定テキスト（verbatim 出力）
   ### Section Title
   WHEN condition:
   1. FIRST: Call tool:name

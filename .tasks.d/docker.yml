@@ -1,8 +1,5 @@
 version: '3'
 
-vars:
-  COMPOSE_DEV_FILE: "{{.REPO_ROOT}}/docker-compose.dev.yml"
-
 tasks:
   up:
     desc: Start the stack

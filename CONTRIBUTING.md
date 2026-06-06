@@ -2,7 +2,7 @@
 
 ## Repository Scope
 
-This repository handles **MCP routing/proxy and intelligence layer**. Before contributing, read [ARCHITECTURE.md](./ARCHITECTURE.md).
+This repository handles **MCP routing/proxy and intelligence layer**. Before contributing, read [docs/architecture.md](./docs/architecture.md).
 
 ## What Belongs Here
 
@@ -72,32 +72,35 @@ task status               # Quick health check
 
 | Namespace | Description |
 |-----------|-------------|
-| `docker:*` | Container lifecycle (up, down, logs, shell, clean) |
-| `dev:*` | Development mode with hot reload |
+| `docker:*` | Container lifecycle — `docker:up` PULLS the prebuilt image |
+| `dev:*` | Same stack, BUILT from local source (`docker compose up --build`) |
 | `build:*` | MCP server builds (pnpm/esbuild) |
 | `test:*` | Health checks and e2e tests |
+
+There is a single root `compose.yaml`. It declares both `image:` (GHCR) and
+`build:` with `pull_policy: missing`, so `docker compose up` pulls the prebuilt
+image for end-users, while `--build` rebuilds from source for contributors —
+no `.dev` / `.dist` override files.
 
 ## Dev Workflow
 
 ```bash
 devbox shell              # Enter dev environment
-task dev:up               # Start with hot reload
-task docker:logs          # Watch for changes
+task dev:up               # Build from local source and start (docker compose up -d --build)
+task dev:logs             # Follow API logs
 ```
 
-**What dev mode provides:**
-- Python hot reload (uvicorn `--reload`)
-- Source code mounted - edit `apps/api/src/` and changes apply immediately
-- Node dist folders mounted - rebuild locally, changes reflect without Docker rebuild
+Editing `apps/api/src/` or the bundled TypeScript MCP servers? Re-run
+`task dev:up` (or `task dev:restart`) to rebuild the image with your changes.
 
-**TypeScript changes:**
+**TypeScript-only iteration:**
 ```bash
-task build:mcp            # Rebuild MCP servers
-# Or use watch mode:
-task dev:watch            # Auto-rebuild on file changes
+task build:mcp            # Rebuild the bundled MCP servers
+task dev:watch            # Auto-rebuild them on file changes
 ```
 
-**Note:** Dev and prod use the same ports (9400). Stop one before starting the other.
+**Note:** `docker:up` (pull) and `dev:up` (build) use the same port (9400).
+Stop one before starting the other.
 
 ## Adding New Servers
 

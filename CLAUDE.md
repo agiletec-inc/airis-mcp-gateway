@@ -8,9 +8,9 @@ FastAPI-based MCP multiplexer that exposes many MCP servers (process + Docker Ga
 - **Streamable HTTP** at `http://localhost:9400/mcp/` — for Codex and Claude Code (recommended)
 - **SSE** at `http://localhost:9400/sse` — for Gemini CLI, Cursor, Windsurf
 
-Dynamic MCP mode (default) exposes only 2 meta-tools (`airis-find`, `airis-schema`) instead of 60+ raw tools. COLD servers auto-discover and auto-enable on first native tool call — no router wrapper needed.
+Dynamic MCP mode (default) exposes only 3 meta-tools (`airis-find`, `airis-schema`, `airis-workflow`) instead of 60+ raw tools. COLD servers auto-discover and auto-enable on first native tool call — no router wrapper needed.
 
-Source of truth for server config: `mcp-config.json` (runtime) and `workflows/*.yaml` (compiled into MCP `initialize` instructions by `apps/api/src/app/core/behavior_compiler.py`).
+Source of truth for server config: `mcp-config.json` (runtime) and `workflows/*.yaml`. Workflows split by `compile_to`: `mcp_instructions` ones are baked into the MCP `initialize` instructions by `apps/api/src/app/core/behavior_compiler.py`; `airis_workflow` ones are served on-demand by the `airis-workflow` meta-tool keyed by `topic`.
 
 ## Repo layout
 
@@ -18,14 +18,17 @@ Source of truth for server config: `mcp-config.json` (runtime) and `workflows/*.
 - `apps/gateway-control/` — TypeScript MCP server exposing gateway control tools to agents.
 - `apps/airis-commands/` (`@airis/commands`) — TypeScript MCP server bundling slash-command tooling.
 - `mcp-config.json` — runtime server registry (HOT/COLD, tools index, behavior).
-- `workflows/*.yaml` — compiled into MCP `initialize` instructions.
-- `manifest.toml` + `airis gen` produce `compose.yaml`, `package.json`, etc. Do not hand-edit generated files.
+- `workflows/*.yaml` — behavior recipes. `compile_to: mcp_instructions` → baked into `initialize`; `compile_to: airis_workflow` (named `airis-workflow-<topic>.yaml`) → served on-demand via the `airis-workflow` meta-tool.
+- `docs/architecture.md` — current + target architecture (the old root `ARCHITECTURE.md` was moved here).
+- `manifest.toml` + `airis gen` produce `package.json` etc. Do not hand-edit files that carry a `DO NOT EDIT` header.
 
 ## Commands
 
 All commands use go-task inside `devbox shell`. Run `task --list-all` for the full list.
 
 Most used: `task docker:up` / `task docker:down` / `task docker:logs` / `task docker:restart` / `task test:e2e` / `task test:api`.
+
+There is a single root `compose.yaml` (no `.dev`/`.dist` overrides). It declares both `image:` (GHCR) and `build:` with `pull_policy: missing`, so `task docker:up` pulls the prebuilt image (end users) while `task dev:up` rebuilds from local source (`docker compose up -d --build`, for contributors). Both bind port 9400 — stop one before starting the other. After editing `apps/api/src/` or a bundled TS server, re-run `task dev:up` to rebuild.
 
 Test layout under `apps/api/tests/`:
 - `unit/` — pure logic, no network. Default target for `task test:api`.
@@ -78,9 +81,11 @@ Note on JSON-RPC tolerance: airis-workspace emits `"error": null` alongside succ
 
 ## Dynamic MCP
 
-`DYNAMIC_MCP=true` (default) exposes 2 meta-tools: `airis-find` (discover tools), `airis-schema` (get input schema). `META_TOOLS_MODE=full` adds `airis-confidence`, `airis-repo-index`, `airis-suggest`, `airis-route`. COLD servers auto-discover and auto-enable on first native tool call — no router wrapper needed.
+`DYNAMIC_MCP=true` (default) exposes 3 meta-tools: `airis-find` (discover tools), `airis-schema` (get input schema), `airis-workflow` (fetch a task-specific procedure by `topic`). `META_TOOLS_MODE=full` adds `airis-confidence`, `airis-repo-index`, `airis-suggest`, `airis-route`. COLD servers auto-discover and auto-enable on first native tool call — no router wrapper needed.
 
-Instructions returned on `initialize` are compiled from `workflows/*.yaml` — **edit the YAML, not the Python**. Each workflow needs `name`, `compile_to: mcp_instructions`, `priority`, and a `text:` block. Missing `text` makes it emit literal `compile_to` values (bug: 2026-04-14).
+Instructions returned on `initialize` are compiled from the `compile_to: mcp_instructions` `workflows/*.yaml` — **edit the YAML, not the Python**. Each needs `name`, `compile_to`, `priority`, and a `text:` block. Missing `text` makes it emit literal `compile_to` values (bug: 2026-04-14).
+
+On-demand workflows use `compile_to: airis_workflow` plus a `topic:` key (matching the `airis-workflow` tool's `topic` enum); they are NOT dumped into `initialize` — the agent fetches them by calling `airis-workflow` with that topic. Handler: `handle_airis_workflow()` in `apps/api/src/app/api/endpoints/mcp_proxy.py`.
 
 ## Tool Routing Guide
 
@@ -116,7 +121,7 @@ What NOT to route through the Gateway:
    ```bash
    claude mcp add --transport http --scope user airis-gateway http://localhost:9400/mcp/
    ```
-   Do NOT also use `/install-plugin` — duplicate endpoint causes the plugin's MCP connection to be silently ignored. Codex uses Streamable HTTP at `http://localhost:9400/mcp/`. Claude Desktop is intentionally unmanaged.
+   Registering as a user-scoped MCP server is the only install method — there is no separate plugin. Codex uses Streamable HTTP at `http://localhost:9400/mcp/`. Claude Desktop is intentionally unmanaged.
 2. **All MCP servers go through the gateway.** Users do not register individual servers. Add new ones to `mcp-config.json`. Repo-local `mcp.json` is forbidden after migration — use `airis-gateway import <dir> --apply` + `airis-gateway clean <dir>` to migrate.
 3. **Auto-start on boot.** `task autostart:install` creates a macOS LaunchAgent or Linux systemd user unit. `task autostart:status` to verify.
 

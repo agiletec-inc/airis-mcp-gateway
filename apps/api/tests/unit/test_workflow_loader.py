@@ -204,3 +204,31 @@ class TestLoadWorkflows:
         workflows = load_workflows(tmp_path)
         assert len(workflows) == 1
         assert workflows[0].compile_to == "mcp_instructions"
+
+    def test_topic_field_loaded(self, tmp_path):
+        """compile_to: airis_workflow + topic loads with the topic populated."""
+        (tmp_path / "wf.yaml").write_text(
+            "name: airis-workflow-database\n"
+            "compile_to: airis_workflow\n"
+            "topic: database\n"
+            "priority: medium\n"
+            "text: DB workflow body\n"
+        )
+
+        workflows = load_workflows(tmp_path)
+        assert len(workflows) == 1
+        assert workflows[0].compile_to == "airis_workflow"
+        assert workflows[0].topic == "database"
+
+    def test_topic_defaults_to_empty(self, tmp_path):
+        """A workflow without a topic field defaults topic to empty string."""
+        (tmp_path / "wf.yaml").write_text(
+            "name: no-topic\n"
+            "compile_to: mcp_instructions\n"
+            "priority: high\n"
+            "text: body\n"
+        )
+
+        workflows = load_workflows(tmp_path)
+        assert len(workflows) == 1
+        assert workflows[0].topic == ""

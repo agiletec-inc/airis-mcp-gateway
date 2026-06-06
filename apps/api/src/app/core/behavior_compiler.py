@@ -28,6 +28,10 @@ _BASE_INSTRUCTIONS = (
 
 _META_TOOLS_SECTION = (
     "## Additional Meta-Tools\n"
+    "- 'airis-workflow': Get the safe step-by-step procedure for a task type. "
+    "Call it with the matching topic (database / debugging / implementation / research) "
+    "BEFORE querying or modifying a database, debugging an issue involving external "
+    "services, implementing with an unfamiliar library/API, or researching an API.\n"
     "- 'airis-confidence': Pre-implementation confidence check. Use before starting complex tasks.\n"
     "- 'airis-repo-index': Generate repository structure overview for unfamiliar codebases.\n"
     "- 'airis-suggest': Get tool recommendations from natural language intent.\n\n"

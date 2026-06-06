@@ -82,7 +82,7 @@ install() {
     log_step "1/4 Downloading configuration..."
     mkdir -p "$DIR"
 
-    download "$BASE_URL/docker-compose.dist.yml" "$DIR/compose.yaml"
+    download "$BASE_URL/compose.yaml" "$DIR/compose.yaml"
     # Drop the legacy filename so Docker Compose does not auto-discover two files
     rm -f "$DIR/docker-compose.yml"
 
@@ -135,10 +135,11 @@ install() {
     # Register with Claude Code (if available)
     local claude_registered=false
     if command -v claude >/dev/null 2>&1; then
-        # Remove old registrations
+        # Remove old registrations (current and legacy names)
+        claude mcp remove airis-gateway --scope user 2>/dev/null || true
         claude mcp remove airis-mcp-gateway --scope user 2>/dev/null || true
 
-        if claude mcp add --scope user --transport sse airis-mcp-gateway http://localhost:9400/sse 2>/dev/null; then
+        if claude mcp add --scope user --transport http airis-gateway http://localhost:9400/mcp/ 2>/dev/null; then
             claude_registered=true
         fi
     fi
@@ -210,7 +211,7 @@ install() {
         echo -e "  Claude Code: ${GREEN}Registered (global)${NC}"
     else
         echo "  Register with Claude Code:"
-        echo "    claude mcp add --scope user --transport sse airis-mcp-gateway http://localhost:9400/sse"
+        echo "    claude mcp add --scope user --transport http airis-gateway http://localhost:9400/mcp/"
     fi
     echo "  Claude Desktop: unmanaged (AIRIS does not modify its MCP config automatically)"
     echo ""
@@ -255,6 +256,7 @@ uninstall() {
     # Unregister from Claude Code
     if command -v claude >/dev/null 2>&1; then
         log_step "Unregistering from Claude Code..."
+        claude mcp remove airis-gateway --scope user 2>/dev/null || true
         claude mcp remove airis-mcp-gateway --scope user 2>/dev/null || true
     fi
 
