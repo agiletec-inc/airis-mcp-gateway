@@ -21,8 +21,11 @@ jobs:
       - name: Determine version bump
         id: version
         run: |
-          # Get highest version tag (sort semantically)
-          LATEST_TAG=$(git tag -l 'v*' | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
+          # Get highest version tag. `sort -V` understands the leading "v" and
+          # compares major.minor.patch correctly. The previous
+          # `sort -t. -k1,1n` treated the "v"-prefixed major field as 0, so it
+          # ignored major entirely and picked v1.34.1 over v2.1.0.
+          LATEST_TAG=$(git tag -l 'v*' | sort -V | tail -1)
           if [ -z "$LATEST_TAG" ]; then
             LATEST_TAG="v0.0.0"
           fi
@@ -98,16 +101,24 @@ jobs:
             fi
           done
 
-          git checkout -b "$BRANCH"
+          # Idempotent on re-run: reset the branch (-B) and force-push so a
+          # stale remote branch from an earlier run can't cause a
+          # non-fast-forward rejection. Only open a PR if one isn't already
+          # tracking the branch (a re-run just updates it via the force-push).
+          git checkout -B "$BRANCH"
           git add VERSION apps/*/package.json apps/*/pyproject.toml
           git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
-          git push origin "$BRANCH"
+          git push --force-with-lease origin "$BRANCH"
 
-          gh pr create \
-            --base main \
-            --head "$BRANCH" \
-            --title "chore: bump version to $NEW_VERSION" \
-            --body "Automated version bump to ${NEW_VERSION}."
+          if [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            echo "ℹ️  PR for $BRANCH already open; updated it via force-push."
+          else
+            gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "chore: bump version to $NEW_VERSION" \
+              --body "Automated version bump to ${NEW_VERSION}."
+          fi
 
       - name: Create GitHub Release
         if: steps.check_tag.outputs.exists == 'false'
