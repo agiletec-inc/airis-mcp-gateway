@@ -3,9 +3,10 @@ name: Bump AIRIS_VERSION
 on:
   workflow_dispatch:
 
+# Privileged push/PR uses the App token below; the ambient GITHUB_TOKEN only
+# needs read access (checkout + cross-repo public release lookup).
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   bump:
@@ -13,9 +14,36 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # Short-lived, least-privilege App token — GITHUB_TOKEN cannot open PRs
+      # (org-wide "Actions can create/approve PRs" is disabled by default).
+      - name: Generate App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_BUMPER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_BUMPER_APP_PRIVATE_KEY }}
+          owner: agiletec-inc
+          repositories: airis-mcp-gateway
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Resolve App bot identity
+        id: bot
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          SLUG="${{ steps.app-token.outputs.app-slug }}"
+          USER_ID=$(gh api "/users/${SLUG}[bot]" --jq .id)
+          {
+            echo "name=${SLUG}[bot]"
+            echo "email=${USER_ID}+${SLUG}[bot]@users.noreply.github.com"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Check latest airis-workspace version
         id: ver
         env:
+          # Cross-repo public read — the App token is scoped to this repo only,
+          # so use the ambient token here.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           LATEST=$(gh api repos/agiletec-inc/airis-workspace/releases/latest --jq '.tag_name | ltrimstr("v")')
@@ -38,7 +66,9 @@ jobs:
         id: pr
         uses: peter-evans/create-pull-request@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
+          committer: "${{ steps.bot.outputs.name }} <${{ steps.bot.outputs.email }}>"
+          author: "${{ steps.bot.outputs.name }} <${{ steps.bot.outputs.email }}>"
           branch: chore/bump-airis-${{ steps.ver.outputs.latest }}
           commit-message: "chore: bump AIRIS_VERSION to ${{ steps.ver.outputs.latest }}"
           title: "chore: bump AIRIS_VERSION to ${{ steps.ver.outputs.latest }}"
@@ -51,5 +81,5 @@ jobs:
       - name: Auto-merge pull request
         if: steps.pr.outputs.pull-request-number
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: gh pr merge ${{ steps.pr.outputs.pull-request-number }} --merge --auto

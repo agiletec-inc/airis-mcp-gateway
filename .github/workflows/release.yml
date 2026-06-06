@@ -9,14 +9,46 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # All privileged actions use the App token minted below; the ambient
+    # GITHUB_TOKEN only needs read access.
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
+      # Mint a short-lived (1h), least-privilege GitHub App installation token.
+      # GITHUB_TOKEN cannot open PRs — "Allow GitHub Actions to create and
+      # approve pull requests" is disabled org-wide as the secure default — and
+      # GitHub recommends an App token over a long-lived PAT for this.
+      - name: Generate App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_BUMPER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_BUMPER_APP_PRIVATE_KEY }}
+          owner: agiletec-inc
+          repositories: airis-mcp-gateway
+          # Least-privilege: only what the bump PR + release creation need.
+          permission-contents: write
+          permission-pull-requests: write
+
+      # Resolve the bot's numeric user-id so the bump commit is attributed to a
+      # verified <id>+<slug>[bot]@users.noreply.github.com author.
+      - name: Resolve App bot identity
+        id: bot
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          SLUG="${{ steps.app-token.outputs.app-slug }}"
+          USER_ID=$(gh api "/users/${SLUG}[bot]" --jq .id)
+          {
+            echo "name=${SLUG}[bot]"
+            echo "email=${USER_ID}+${SLUG}[bot]@users.noreply.github.com"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Checkout code
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Determine version bump
         id: version
@@ -79,13 +111,13 @@ jobs:
         # all steps because the tag already exists at that point.
         if: steps.check_tag.outputs.exists == 'false'
         env:
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           NEW_VERSION=${{steps.version.outputs.version}}
           BRANCH="chore/bump-version-${NEW_VERSION}"
 
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "${{ steps.bot.outputs.name }}"
+          git config --global user.email "${{ steps.bot.outputs.email }}"
 
           echo "$NEW_VERSION" > VERSION
           for f in apps/*/package.json; do
@@ -123,7 +155,7 @@ jobs:
       - name: Create GitHub Release
         if: steps.check_tag.outputs.exists == 'false'
         env:
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           VERSION=${{steps.version.outputs.version}}
 
