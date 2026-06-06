@@ -39,7 +39,7 @@ registry:
       - name: OLLAMA_URL
         value: '{{mindbase_settings.ollama_url|default:"http://host.docker.internal:11434"}}'
       - name: EMBEDDING_MODEL
-        value: '{{mindbase_settings.embedding_model|default:"nomic-embed-text"}}'
+        value: "qwen3-embedding:0.6b"
     allowHosts:
       - "*"
 
