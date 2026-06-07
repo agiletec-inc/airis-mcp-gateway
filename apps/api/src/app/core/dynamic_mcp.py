@@ -435,6 +435,13 @@ class DynamicMCP:
             # Deduplicate while preserving order
             query_variants = list(dict.fromkeys(query_variants))
 
+        # Per-word keyword set for matching cached tools against TOOL_CATALOG.
+        # Substring matching on the full query misses keyword-style queries
+        # (e.g. "search past conversations" never substrings "conversation_search"),
+        # so cached tools also match when their catalog keywords intersect.
+        from .tool_suggester import TOOL_CATALOG, _extract_keywords
+        query_keywords = set(_extract_keywords(query)) if query_lower else set()
+
         # Search servers
         for name, info in self._servers.items():
             if server and name != server:
@@ -475,10 +482,13 @@ class DynamicMCP:
                 name_lower = name.lower()
                 desc_lower = info.description.lower()
                 server_lower = info.server.lower()
-                if not any(
+                substring_match = any(
                     v in name_lower or v in desc_lower or v in server_lower
                     for v in query_variants
-                ):
+                )
+                catalog_keywords = TOOL_CATALOG.get(info.server, {}).get(name, [])
+                keyword_match = bool(query_keywords & set(catalog_keywords))
+                if not (substring_match or keyword_match):
                     continue
 
             matched_tools.append({
