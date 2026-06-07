@@ -1,8 +1,0 @@
-name: Auto-merge
-on:
-  pull_request:
-    types: [opened, reopened, synchronize]
-jobs:
-  auto-merge:
-    uses: agiletec-inc/.github/.github/workflows/auto-merge.yml@main
-    secrets: inherit
