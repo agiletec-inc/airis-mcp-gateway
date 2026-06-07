@@ -150,3 +150,5 @@ Use the `playwright-cli` skill (host Chrome, headless). Flow: `playwright-cli op
 Path-based triggers:
 - `apps/api/**` → Python tests (pytest)
 - `apps/gateway-control/**` or `apps/airis-commands/**` → TypeScript build
+
+Releasing: `VERSION` is the source of truth. Bump it (run `task version:sync` to propagate to the package manifests) in a normal PR; on merge `release.yml` tags the commit `v<VERSION>` and publishes a GitHub Release (once per version). The release workflow only reads `VERSION` and creates the tag/Release with `GITHUB_TOKEN` — it never opens a PR, so no GitHub App is involved.
