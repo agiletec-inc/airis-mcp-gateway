@@ -20,8 +20,8 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
-          client-id: ${{ vars.RELEASE_BUMPER_APP_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_BUMPER_APP_PRIVATE_KEY }}
+          client-id: ${{ vars.IMAGE_BUMPER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.IMAGE_BUMPER_APP_PRIVATE_KEY }}
           owner: agiletec-inc
           repositories: airis-mcp-gateway
           permission-contents: write
