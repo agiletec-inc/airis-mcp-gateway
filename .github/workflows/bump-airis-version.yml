@@ -1,85 +1,60 @@
-name: Bump AIRIS_VERSION
+name: Check AIRIS_VERSION
+
+# Alert-only: opens a tracking issue when the bundled airis-workspace CLI baked
+# into the Dockerfile (ARG AIRIS_VERSION) is behind the latest airis-workspace
+# release. Bumping is a manual step (see CLAUDE.md → "Updating bundled airis
+# CLI"): edit ARG AIRIS_VERSION in the Dockerfile via a normal PR.
+#
+# This workflow never pushes a branch or opens a PR, so it needs no GitHub App
+# and no "Actions can create PRs" toggle — a plain GITHUB_TOKEN with
+# issues:write is enough (issue creation is not subject to the PR restriction).
 
 on:
+  schedule:
+    - cron: '0 9 * * 1' # weekly, Monday 09:00 UTC
   workflow_dispatch:
 
-# Privileged push/PR uses the App token below; the ambient GITHUB_TOKEN only
-# needs read access (checkout + cross-repo public release lookup).
 permissions:
   contents: read
+  issues: write
 
 jobs:
-  bump:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
-      # Short-lived, least-privilege App token — GITHUB_TOKEN cannot open PRs
-      # (org-wide "Actions can create/approve PRs" is disabled by default).
-      - name: Generate App token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.RELEASE_BUMPER_APP_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_BUMPER_APP_PRIVATE_KEY }}
-          owner: agiletec-inc
-          repositories: airis-mcp-gateway
-          permission-contents: write
-          permission-pull-requests: write
-
-      - name: Resolve App bot identity
-        id: bot
+      - name: Compare bundled vs latest airis-workspace version
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          SLUG="${{ steps.app-token.outputs.app-slug }}"
-          USER_ID=$(gh api "/users/${SLUG}[bot]" --jq .id)
-          {
-            echo "name=${SLUG}[bot]"
-            echo "email=${USER_ID}+${SLUG}[bot]@users.noreply.github.com"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Check latest airis-workspace version
-        id: ver
-        env:
-          # Cross-repo public read — the App token is scoped to this repo only,
-          # so use the ambient token here.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           LATEST=$(gh api repos/agiletec-inc/airis-workspace/releases/latest --jq '.tag_name | ltrimstr("v")')
           CURRENT=$(grep '^ARG AIRIS_VERSION=' Dockerfile | cut -d= -f2)
-          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
-          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
-          if [ "$LATEST" != "$CURRENT" ]; then
-            echo "needs_bump=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "needs_bump=false" >> "$GITHUB_OUTPUT"
+          echo "current=$CURRENT latest=$LATEST"
+
+          if [ "$LATEST" = "$CURRENT" ]; then
+            echo "✅ AIRIS_VERSION is up to date ($CURRENT)."
+            exit 0
           fi
 
-      - name: Bump AIRIS_VERSION in Dockerfile
-        if: steps.ver.outputs.needs_bump == 'true'
-        run: |
-          sed -i 's/^ARG AIRIS_VERSION=.*/ARG AIRIS_VERSION=${{ steps.ver.outputs.latest }}/' Dockerfile
+          echo "⚠️  AIRIS_VERSION is behind: $CURRENT → $LATEST"
+          TITLE="chore: bump AIRIS_VERSION to $LATEST"
 
-      - name: Create pull request
-        if: steps.ver.outputs.needs_bump == 'true'
-        id: pr
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-          committer: "${{ steps.bot.outputs.name }} <${{ steps.bot.outputs.email }}>"
-          author: "${{ steps.bot.outputs.name }} <${{ steps.bot.outputs.email }}>"
-          branch: chore/bump-airis-${{ steps.ver.outputs.latest }}
-          commit-message: "chore: bump AIRIS_VERSION to ${{ steps.ver.outputs.latest }}"
-          title: "chore: bump AIRIS_VERSION to ${{ steps.ver.outputs.latest }}"
-          body: |
-            Automated bump: `${{ steps.ver.outputs.current }}` → `${{ steps.ver.outputs.latest }}`
+          # Dedup: don't reopen if a matching issue is already open.
+          EXISTING=$(gh issue list --state open --search "in:title $TITLE" \
+            --json title --jq "[.[] | select(.title == \"$TITLE\")] | length")
+          if [ "$EXISTING" -gt 0 ]; then
+            echo "ℹ️  Tracking issue already open — nothing to do."
+            exit 0
+          fi
 
-            The gateway Docker image will be rebuilt automatically after this merges.
-          delete-branch: true
-
-      - name: Auto-merge pull request
-        if: steps.pr.outputs.pull-request-number
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: gh pr merge ${{ steps.pr.outputs.pull-request-number }} --merge --auto
+          BODY=$(printf '%s\n' \
+            "The bundled \`airis-workspace\` CLI is behind its latest release." \
+            "" \
+            "- Dockerfile \`ARG AIRIS_VERSION\`: \`$CURRENT\`" \
+            "- Latest \`airis-workspace\` release: \`$LATEST\`" \
+            "" \
+            "**To update** (see CLAUDE.md → \"Updating bundled airis CLI\"): set \`ARG AIRIS_VERSION=$LATEST\` in the Dockerfile in a normal PR. The gateway image rebuilds automatically after merge.")
+          gh issue create --title "$TITLE" --body "$BODY"
+          echo "📨 Opened tracking issue: $TITLE"
