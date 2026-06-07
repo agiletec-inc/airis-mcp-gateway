@@ -1,168 +1,64 @@
 name: Release
 
+# Tag + GitHub Release driven by the tracked VERSION file (org-standard pattern,
+# same as cmd-ime). The version is bumped by humans through a normal PR — this
+# workflow never creates a PR and never pushes to a branch, so it needs no
+# GitHub App and no "Actions can create PRs" toggle: a plain GITHUB_TOKEN with
+# contents:write can create the tag + Release.
+#
+# To cut a release: bump VERSION (run `task version:sync` to propagate to the
+# package manifests) in a normal PR. When it merges, this workflow tags the
+# commit v<VERSION> and publishes a GitHub Release once per version.
+
 on:
   push:
     branches:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: write # create the git tag + GitHub Release
+
 jobs:
   release:
     runs-on: ubuntu-latest
-    # All privileged actions use the App token minted below; the ambient
-    # GITHUB_TOKEN only needs read access.
-    permissions:
-      contents: read
     steps:
-      # Mint a short-lived (1h), least-privilege GitHub App installation token.
-      # GITHUB_TOKEN cannot open PRs — "Allow GitHub Actions to create and
-      # approve pull requests" is disabled org-wide as the secure default — and
-      # GitHub recommends an App token over a long-lived PAT for this.
-      - name: Generate App token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.RELEASE_BUMPER_APP_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_BUMPER_APP_PRIVATE_KEY }}
-          owner: agiletec-inc
-          repositories: airis-mcp-gateway
-          # Least-privilege: only what the bump PR + release creation need.
-          permission-contents: write
-          permission-pull-requests: write
-
-      # Resolve the bot's numeric user-id so the bump commit is attributed to a
-      # verified <id>+<slug>[bot]@users.noreply.github.com author.
-      - name: Resolve App bot identity
-        id: bot
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          SLUG="${{ steps.app-token.outputs.app-slug }}"
-          USER_ID=$(gh api "/users/${SLUG}[bot]" --jq .id)
-          {
-            echo "name=${SLUG}[bot]"
-            echo "email=${USER_ID}+${SLUG}[bot]@users.noreply.github.com"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
 
-      - name: Determine version bump
+      - name: Read version
         id: version
         run: |
-          # Get highest version tag. `sort -V` understands the leading "v" and
-          # compares major.minor.patch correctly. The previous
-          # `sort -t. -k1,1n` treated the "v"-prefixed major field as 0, so it
-          # ignored major entirely and picked v1.34.1 over v2.1.0.
-          LATEST_TAG=$(git tag -l 'v*' | sort -V | tail -1)
-          if [ -z "$LATEST_TAG" ]; then
-            LATEST_TAG="v0.0.0"
+          VERSION=$(tr -d '[:space:]' < VERSION)
+          if [ -z "$VERSION" ]; then
+            echo "::error::VERSION file is empty" >&2
+            exit 1
           fi
-          CURRENT_VERSION=${LATEST_TAG#v}
-
-          echo "📦 Current version: $CURRENT_VERSION (from $LATEST_TAG)"
-
-          # Parse semver
-          IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
-
-          # Get commit messages since last tag
-          COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"%s" 2>/dev/null || git log --pretty=format:"%s")
-
-          # Determine bump type based on conventional commits
-          BUMP_TYPE="patch"
-
-          if echo "$COMMITS" | grep -qE '^(feat!:|fix!:|BREAKING CHANGE:)'; then
-            BUMP_TYPE="major"
-          elif echo "$COMMITS" | grep -qE '^feat(\(.+\))?:'; then
-            BUMP_TYPE="minor"
-          fi
-
-          # Calculate new version
-          if [ "$BUMP_TYPE" = "major" ]; then
-            NEW_VERSION="$((major + 1)).0.0"
-          elif [ "$BUMP_TYPE" = "minor" ]; then
-            NEW_VERSION="${major}.$((minor + 1)).0"
-          else
-            NEW_VERSION="${major}.${minor}.$((patch + 1))"
-          fi
-
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
-          echo "🚀 Bumping $CURRENT_VERSION → $NEW_VERSION ($BUMP_TYPE)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "📦 Version (from VERSION file): $VERSION"
 
       - name: Check if already released
         id: check_tag
         run: |
-          if git rev-parse "v${{steps.version.outputs.version}}" >/dev/null 2>&1; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "⚠️  Tag v${{steps.version.outputs.version}} already exists, skipping"
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "⏭️  Tag v${{ steps.version.outputs.version }} already exists — nothing to release."
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "✅ Will create release v${{steps.version.outputs.version}}"
-          fi
-
-      - name: Create version bump PR
-        # Branch protection forbids direct push to main (issue #134).
-        # Open a PR instead; the existing auto-merge workflow merges it.
-        # When that PR lands, release.yml triggers again but check_tag skips
-        # all steps because the tag already exists at that point.
-        if: steps.check_tag.outputs.exists == 'false'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          NEW_VERSION=${{steps.version.outputs.version}}
-          BRANCH="chore/bump-version-${NEW_VERSION}"
-
-          git config --global user.name "${{ steps.bot.outputs.name }}"
-          git config --global user.email "${{ steps.bot.outputs.email }}"
-
-          echo "$NEW_VERSION" > VERSION
-          for f in apps/*/package.json; do
-            if [ -f "$f" ]; then
-              sed -i "s/\"version\": \".*\"/\"version\": \"$NEW_VERSION\"/" "$f"
-              echo "✅ Updated $f"
-            fi
-          done
-          for f in apps/*/pyproject.toml; do
-            if [ -f "$f" ]; then
-              sed -i "s/version = \".*\"/version = \"$NEW_VERSION\"/" "$f"
-              echo "✅ Updated $f"
-            fi
-          done
-
-          # Idempotent on re-run: reset the branch (-B) and force-push so a
-          # stale remote branch from an earlier run can't cause a
-          # non-fast-forward rejection. Only open a PR if one isn't already
-          # tracking the branch (a re-run just updates it via the force-push).
-          git checkout -B "$BRANCH"
-          git add VERSION apps/*/package.json apps/*/pyproject.toml
-          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
-          git push --force-with-lease origin "$BRANCH"
-
-          if [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
-            echo "ℹ️  PR for $BRANCH already open; updated it via force-push."
-          else
-            gh pr create \
-              --base main \
-              --head "$BRANCH" \
-              --title "chore: bump version to $NEW_VERSION" \
-              --body "Automated version bump to ${NEW_VERSION}."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "✅ Will release v${{ steps.version.outputs.version }}"
           fi
 
       - name: Create GitHub Release
         if: steps.check_tag.outputs.exists == 'false'
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION=${{steps.version.outputs.version}}
-
+          VERSION=${{ steps.version.outputs.version }}
           echo "🚀 Creating GitHub Release v${VERSION}..."
-
           gh release create "v${VERSION}" \
             --title "Release v${VERSION}" \
+            --target "${{ github.sha }}" \
             --generate-notes
-
-          echo "✅ Release v${VERSION} created successfully!"
+          echo "✅ Release v${VERSION} created."
