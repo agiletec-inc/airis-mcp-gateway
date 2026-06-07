@@ -133,7 +133,26 @@
       "env": {},
       "enabled": false,
       "mode": "cold",
-      "_comment": "Managed by Docker MCP Gateway via airis-catalog.yaml"
+      "_comment": "Managed by Docker MCP Gateway via airis-catalog.yaml",
+      "tools_index": [
+        {"name": "conversation_search", "description": "Semantic search across past LLM conversations (Claude Code, ChatGPT, Cursor, etc.) using pgvector cosine similarity with recency ranking"},
+        {"name": "conversation_hybrid_search", "description": "Hybrid search over conversations combining keyword (full-text), semantic (vector) and recency with configurable weights"},
+        {"name": "conversation_save", "description": "Save a conversation with automatic embedding generation for semantic search"},
+        {"name": "conversation_get", "description": "Retrieve conversations with filtering and pagination"},
+        {"name": "conversation_timeline", "description": "Chronological timeline of conversations across all sources"},
+        {"name": "conversation_topics", "description": "Topic groups spanning multiple conversation sources and time periods"},
+        {"name": "conversation_delete", "description": "Delete a conversation by ID"},
+        {"name": "memory_search", "description": "Semantic search across long-term memories using pgvector similarity"},
+        {"name": "memory_write", "description": "Write a memory to markdown file and database for future reference"},
+        {"name": "memory_read", "description": "Read a memory by name from markdown file or database"},
+        {"name": "memory_list", "description": "List all available memories with optional filtering"},
+        {"name": "memory_delete", "description": "Delete a memory from markdown file and database"},
+        {"name": "session_start", "description": "Start or resume a session (sets current conversation context)"},
+        {"name": "session_create", "description": "Create a new session for organizing conversations"},
+        {"name": "session_list", "description": "List recent sessions with metadata"},
+        {"name": "content_generate", "description": "Generate platform-tailored article drafts (note/Zenn/Qiita) from stored conversations"},
+        {"name": "content_publish", "description": "Publish generated content to a target platform"}
+      ]
     },
     "airis-mcp-gateway-control": {
       "command": "node",

@@ -83,6 +83,20 @@ class SuggestToolResponse:
 # Known MCP tool categories with common keywords
 # This serves as a fallback when we can't fetch from DynamicMCP
 TOOL_CATALOG: Dict[str, Dict[str, List[str]]] = {
+    "mindbase": {
+        "conversation_search": ["conversation", "conversations", "search", "past", "history", "semantic", "recall", "chat", "transcript", "memory", "find", "previous"],
+        "conversation_hybrid_search": ["conversation", "search", "hybrid", "keyword", "semantic", "history", "past"],
+        "conversation_save": ["conversation", "save", "store", "ingest", "transcript"],
+        "conversation_get": ["conversation", "get", "retrieve", "list", "fetch"],
+        "conversation_timeline": ["conversation", "timeline", "chronological", "history", "when"],
+        "conversation_topics": ["conversation", "topics", "themes", "group"],
+        "memory_search": ["memory", "search", "recall", "remember", "knowledge", "semantic"],
+        "memory_write": ["memory", "write", "save", "store", "remember", "note"],
+        "memory_read": ["memory", "read", "get", "recall"],
+        "memory_list": ["memory", "list", "show"],
+        "content_generate": ["content", "article", "generate", "draft", "blog", "note", "zenn", "qiita", "write"],
+        "content_publish": ["content", "publish", "post", "platform"],
+    },
     "memory": {
         "create_entities": ["memory", "entity", "create", "store", "save", "knowledge"],
         "search_nodes": ["memory", "search", "find", "query", "retrieve", "knowledge"],
