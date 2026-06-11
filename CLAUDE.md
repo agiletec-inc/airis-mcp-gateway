@@ -67,7 +67,7 @@ The API in `apps/api/src/app/api/endpoints/` is split into focused modules:
 
 In DYNAMIC_MCP mode, `tools/list` returns only meta-tools + currently active HOT server tools. Full tool discovery goes through `airis-find`.
 
-The `airis` CLI itself is baked into the gateway image (see `Dockerfile`, fetched from the airis-workspace GitHub release pinned via `AIRIS_VERSION`), so `airis-workspace`'s 11 tools (`workspace_init`, `workspace_gen`, `workspace_doctor`, `workspace_status`, `manifest_validate`, `manifest_apply`, `migration_execute`, etc.) are available out of the box without host installation. The gateway container mounts `${HOST_WORKSPACE_DIR:-${HOME}/github}` at `/workspace` so those tools can operate on real projects.
+The `airis` CLI itself is baked into the gateway image (see `Dockerfile`, fetched from the airis-workspace GitHub release pinned via `AIRIS_VERSION`), so `airis-workspace`'s 27 tools (`workspace_init`, `workspace_gen`, `workspace_doctor`, `workspace_status`, `manifest_validate`, `manifest_apply`, `migration_execute`, etc.) are available out of the box without host installation. The gateway container mounts `${HOST_WORKSPACE_DIR:-${HOME}/github}` at `/workspace` so those tools can operate on real projects.
 
 Note on JSON-RPC tolerance: airis-workspace emits `"error": null` alongside successful results. The gateway treats that as "no error" (see `process_runner._initialize` and the `tools/call` paths in `mcp_proxy.py` / `process_mcp.py`). New servers with the same quirk will work transparently.
 
@@ -92,7 +92,7 @@ On-demand workflows use `compile_to: airis_workflow` plus a `topic:` key (matchi
 When working in a project that uses this gateway, pick tools by this decision flow:
 
 ```
-Need official library docs?    → context7:resolve-library-id → context7:get-library-docs
+Need official library docs?    → context7:resolve-library-id → context7:query-docs
 Need current/external info?    → tavily:tavily-search
 Database query or schema?      → supabase:query
 Payment/billing?               → stripe:*
