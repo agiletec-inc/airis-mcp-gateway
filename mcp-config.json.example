@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "airis-workspace": {
-      "command": "airis",
+      "command": "airis-workspace",
       "args": ["mcp"],
       "env": {},
       "enabled": true,

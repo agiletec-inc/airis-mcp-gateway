@@ -76,7 +76,7 @@ RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 # missing release artifact fails loudly instead of silently dragging in a
 # Rust toolchain at image-build time. cargo-binstall is removed after use
 # to keep the runtime image lean.
-ARG AIRIS_VERSION=3.6.7
+ARG AIRIS_VERSION=4.0.0
 ARG BINSTALL_VERSION=1.18.1
 RUN set -eux; \
     curl -fsSL "https://github.com/cargo-bins/cargo-binstall/releases/download/v${BINSTALL_VERSION}/cargo-binstall-$(uname -m)-unknown-linux-musl.tgz" \
@@ -86,7 +86,7 @@ RUN set -eux; \
         --root /usr/local \
         airis-workspace --version "${AIRIS_VERSION}"; \
     rm /usr/local/bin/cargo-binstall; \
-    airis --version
+    airis-workspace --version
 
 # Install uv (for uvx MCP servers)
 RUN --mount=type=cache,target=/root/.cache/pip \
