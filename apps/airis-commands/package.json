@@ -1,6 +1,6 @@
 {
   "name": "@airis/commands",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "description": "AIRIS utility commands MCP server",
   "type": "module",
   "main": "dist/index.js",
