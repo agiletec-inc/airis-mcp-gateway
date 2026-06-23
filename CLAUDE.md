@@ -8,7 +8,7 @@ FastAPI-based MCP multiplexer that exposes many MCP servers (process + Docker Ga
 - **Streamable HTTP** at `http://localhost:9400/mcp/` — for Codex and Claude Code (recommended)
 - **SSE** at `http://localhost:9400/sse` — for Gemini CLI, Cursor, Windsurf
 
-Dynamic MCP mode (default) exposes only 3 meta-tools (`airis-find`, `airis-schema`, `airis-workflow`) instead of 60+ raw tools. COLD servers auto-discover and auto-enable on first native tool call — no router wrapper needed.
+Dynamic MCP mode (default) exposes only 4 meta-tools (`airis-find`, `airis-schema`, `airis-workflow`, `airis-exec`) instead of 60+ raw tools. COLD servers are not in `tools/list`; clients reach their tools through `airis-exec`, which auto-discovers and auto-enables the server on first call. (`airis-exec` is required because `tools/list`-only clients like Claude Code and Codex cannot call a tool that isn't advertised.)
 
 Source of truth for server config: `mcp-config.json` (runtime) and `workflows/*.yaml`. Workflows split by `compile_to`: `mcp_instructions` ones are baked into the MCP `initialize` instructions by `apps/api/src/app/core/behavior_compiler.py`; `airis_workflow` ones are served on-demand by the `airis-workflow` meta-tool keyed by `topic`.
 
@@ -81,7 +81,7 @@ Note on JSON-RPC tolerance: airis-workspace emits `"error": null` alongside succ
 
 ## Dynamic MCP
 
-`DYNAMIC_MCP=true` (default) exposes 3 meta-tools: `airis-find` (discover tools), `airis-schema` (get input schema), `airis-workflow` (fetch a task-specific procedure by `topic`). `META_TOOLS_MODE=full` adds `airis-confidence`, `airis-repo-index`, `airis-suggest`, `airis-route`. COLD servers auto-discover and auto-enable on first native tool call — no router wrapper needed.
+`DYNAMIC_MCP=true` (default) exposes 4 meta-tools: `airis-find` (discover tools), `airis-schema` (get input schema), `airis-workflow` (fetch a task-specific procedure by `topic`), `airis-exec` (execute any tool — the router for COLD-server tools that are not in `tools/list`). `META_TOOLS_MODE=full` adds `airis-confidence`, `airis-repo-index`, `airis-suggest`, `airis-route`. COLD servers auto-discover and auto-enable on the first `airis-exec` call.
 
 Instructions returned on `initialize` are compiled from the `compile_to: mcp_instructions` `workflows/*.yaml` — **edit the YAML, not the Python**. Each needs `name`, `compile_to`, `priority`, and a `text:` block. Missing `text` makes it emit literal `compile_to` values (bug: 2026-04-14).
 

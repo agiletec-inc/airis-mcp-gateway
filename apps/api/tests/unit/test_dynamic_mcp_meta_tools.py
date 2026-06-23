@@ -5,8 +5,8 @@ Guards:
 - The meta-tools literal must remain syntactically valid (an earlier edit left
   dangling braces and an orphaned `"required": ["tool"]` after the airis-exec
   definition, making the file unparseable).
-- Core mode must yield three tools (airis-find, airis-schema, airis-workflow);
-  full mode must add the four optional meta-tools.
+- Core mode must yield four tools (airis-find, airis-schema, airis-workflow,
+  airis-exec); full mode must add the four optional meta-tools.
 - Lazy Schema: active tool definitions must expose stub `{"type": "object"}`
   inputSchemas so the client never ingests the backend's full JSON schema.
 """
@@ -29,7 +29,7 @@ def test_core_meta_tools_shape():
     mcp = DynamicMCP()
     tools = mcp.get_meta_tools(mode="core")
     names = [t["name"] for t in tools]
-    assert names == ["airis-find", "airis-schema", "airis-workflow"]
+    assert names == ["airis-find", "airis-schema", "airis-workflow", "airis-exec"]
     for tool in tools:
         assert "inputSchema" in tool
         assert tool["inputSchema"].get("type") == "object"
@@ -70,16 +70,19 @@ def test_full_meta_tools_adds_optional_tools():
     assert {"airis-confidence", "airis-repo-index", "airis-suggest", "airis-route"} <= names
 
 
-def test_deprecated_meta_tools_removed():
-    """airis-exec and airis-activate are no longer exposed as meta-tools.
+def test_airis_exec_is_core_router():
+    """airis-exec is a core meta-tool: the always-advertised router that lets
+    tools/list-only clients (Claude Code, Codex) reach COLD-server tools, which
+    are otherwise absent from tools/list. Its handler (handle_airis_exec) auto-
+    discovers and auto-enables the COLD server on first call.
 
-    They were marked [DEPRECATED] and have been removed from the core toolset.
-    Their routing logic (auto-discovery, auto-enable) remains as internal handlers.
+    airis-activate stays out — airis-exec alone covers COLD reachability.
     """
     mcp = DynamicMCP()
-    tools = {t["name"] for t in mcp.get_meta_tools(mode="core")}
-    assert "airis-exec" not in tools, "airis-exec removed from core meta-tools"
-    assert "airis-activate" not in tools, "airis-activate removed from core meta-tools"
+    core = {t["name"]: t for t in mcp.get_meta_tools(mode="core")}
+    assert "airis-exec" in core, "airis-exec must be advertised so clients can call COLD tools"
+    assert core["airis-exec"]["inputSchema"]["required"] == ["tool"]
+    assert "airis-activate" not in core, "airis-activate is not re-exposed (airis-exec suffices)"
 
 
 def test_active_tool_definitions_use_lazy_schema():

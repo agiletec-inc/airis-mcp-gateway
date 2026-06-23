@@ -196,7 +196,7 @@ Claude / Gemini / Cursor / Windsurf
 | **git** | Git operations |
 | **time** | Time utilities |
 
-Source of truth: [`mcp-config.json`](./mcp-config.json). HOT servers are always listed in `tools/list`; COLD servers are surfaced via `airis-find` and auto-enable on first native tool call — no manual setup needed.
+Source of truth: [`mcp-config.json`](./mcp-config.json). HOT servers are always listed in `tools/list`; COLD servers are discovered via `airis-find` and called through `airis-exec`, which auto-enables the server on first call — no manual setup needed.
 
 </details>
 

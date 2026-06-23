@@ -1,6 +1,6 @@
 [project]
 name = "airis-mcp-gateway-api"
-version = "2.2.0"
+version = "2.2.1"
 description = "AIRIS MCP Gateway API - Fixes Docker MCP Gateway initialized notification"
 requires-python = ">=3.12"
 

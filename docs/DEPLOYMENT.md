@@ -80,7 +80,7 @@ If you are migrating existing repositories, import and remove any repo-local `mc
 |----------|---------|-------------|
 | `MCP_GATEWAY_URL` | `http://gateway:9390` | Internal Docker MCP Gateway URL |
 | `MCP_CONFIG_PATH` | `/app/mcp-config.json` | Path to MCP server configuration |
-| `DYNAMIC_MCP` | `true` | Enable Dynamic MCP (3 meta-tools only) |
+| `DYNAMIC_MCP` | `true` | Enable Dynamic MCP (4 meta-tools: find/schema/workflow/exec) |
 
 ## Resource Limits
 
