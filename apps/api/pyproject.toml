@@ -1,11 +1,18 @@
 [project]
 name = "airis-mcp-gateway-api"
-version = "2.2.1"
+version = "2.2.2"
 description = "AIRIS MCP Gateway API - Fixes Docker MCP Gateway initialized notification"
 requires-python = ">=3.12"
 
 dependencies = [
-    "fastapi>=0.136.1,<1.0.0",
+    # FastAPI 0.137+ changed how an empty-path route ("") inside a router
+    # included with a prefix is registered, dropping the prefix-root routes
+    # (e.g. the "/mcp" and "/mcp/" GET/HEAD/DELETE/POST handlers in
+    # api/endpoints/mcp_proxy.py). The Streamable HTTP transport relies on those,
+    # and CI/Docker install with `uv pip install -e .` (lock-ignoring) so they
+    # pick up the newest FastAPI. Cap to the last working line (0.136.x) until
+    # those routes are made 0.137-safe.
+    "fastapi>=0.136.1,<0.137.0",
     "uvicorn[standard]>=0.46.0,<1.0.0",
     "httpx>=0.28.1,<1.0.0",
     "pydantic>=2.13.4,<3.0.0",
