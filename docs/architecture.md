@@ -75,11 +75,13 @@ native MCP tools. As shipped today the control plane exposes **two meta-tools**:
 
 1. `tools/list` returns the meta-tools plus any already-active HOT server tools
 2. The model uses `airis-find` to locate the capability it needs
-3. The first native tool call against a COLD server auto-discovers and auto-enables it
-4. The model calls the native MCP tool directly
+3. The model calls the COLD tool through `airis-exec` (`tool="server:tool"`, `arguments={…}`)
+4. `airis-exec` auto-discovers and auto-enables the COLD server on first call, then runs the tool
 
-No router wrapper, no `airis-exec` indirection — COLD servers auto-enable on first
-native call.
+`airis-exec` is the router for COLD tools: they are not in `tools/list`, and
+`tools/list`-only clients (Claude Code, Codex) can only call advertised tools, so a
+single always-advertised router is required to reach them. Use `airis-schema` to get a
+tool's argument schema before calling `airis-exec`.
 
 ### Hot / cold / disabled
 

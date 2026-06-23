@@ -746,6 +746,35 @@ class DynamicMCP:
                     "required": ["topic"]
                 }
             },
+            {
+                "name": "airis-exec",
+                "description": (
+                    "Execute any MCP tool, including COLD-server tools that are not "
+                    "shown in tools/list (supabase:query, stripe:*, twilio:*, figma:*, "
+                    "tavily:* …). The COLD server is auto-enabled on first call. "
+                    "Discover tool names with airis-find; get a tool's argument schema "
+                    "with airis-schema. tools/list-only clients (Claude Code, Codex) "
+                    "MUST use this to reach COLD tools."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "tool": {
+                            "type": "string",
+                            "description": (
+                                "Tool reference: 'server:tool' (e.g. 'supabase:query') "
+                                "or a bare tool name (server auto-discovered)."
+                            )
+                        },
+                        "arguments": {
+                            "type": "object",
+                            "description": "Arguments for the target tool (see airis-schema).",
+                            "additionalProperties": True
+                        }
+                    },
+                    "required": ["tool"]
+                }
+            },
         ]
 
         # Extended meta-tools (only in "full" mode)
