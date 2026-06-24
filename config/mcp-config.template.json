@@ -111,7 +111,7 @@
       "command": "npx",
       "args": ["-y", "mcp-remote", "https://mcp.supabase.com/mcp"],
       "env": {},
-      "enabled": true,
+      "enabled": false,
       "mode": "cold",
       "description": "Supabase: database, migrations, Edge Functions (OAuth)"
     }

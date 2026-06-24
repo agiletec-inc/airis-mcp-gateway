@@ -238,7 +238,7 @@
         "${SUPABASE_ACCESS_TOKEN}"
       ],
       "env": {},
-      "enabled": true,
+      "enabled": false,
       "mode": "cold",
       "tools_index": [
         {"name": "query", "description": "Execute SQL query against a Supabase database"},
