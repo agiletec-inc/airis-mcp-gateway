@@ -320,6 +320,28 @@
         {"name": "list_invoices", "description": "List invoices with optional filters"}
       ]
     },
+    "clarity": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@microsoft/clarity-mcp-server",
+        "--clarity_api_token=${CLARITY_API_TOKEN}"
+      ],
+      "env": {},
+      "enabled": true,
+      "mode": "cold",
+      "_comment": "Microsoft Clarity Data Export API (10 req/day/project, 3 days, 3 dims). Token via CLI flag from Clarity Settings > Data Export.",
+      "tools_index": [
+        {"name": "query-analytics-dashboard", "description": "Query aggregated Clarity analytics: scroll depth, engagement, traffic, and session metrics."},
+        {"name": "list-session-recordings", "description": "List available Clarity session recordings (metadata only, no playback)."},
+        {"name": "query-documentation-resources", "description": "Query Clarity product documentation resources."}
+      ],
+      "behavior": {
+        "triggers": ["LP離脱", "UX分析", "ヒートマップ", "セッション考察"],
+        "instruction": "Clarityで定性的なLP行動分析。ヒートマップPNG/CSVはダッシュボード手動確認(ここでは非露出)。",
+        "priority": "medium"
+      }
+    },
     "twilio": {
       "command": "npx",
       "args": [

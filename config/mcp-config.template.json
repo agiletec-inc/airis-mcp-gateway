@@ -107,6 +107,19 @@
       "mode": "cold",
       "description": "Stripe API: customers, products, prices, subscriptions (OAuth)"
     },
+    "clarity": {
+      "command": "npx",
+      "args": ["-y", "@microsoft/clarity-mcp-server", "--clarity_api_token=${CLARITY_API_TOKEN}"],
+      "env": {},
+      "enabled": true,
+      "mode": "cold",
+      "description": "Microsoft Clarity Data Export API (10 req/day/project, 3 days, 3 dims). Token via CLI flag from Clarity Settings > Data Export.",
+      "behavior": {
+        "triggers": ["LP離脱", "UX分析", "ヒートマップ", "セッション考察"],
+        "instruction": "Clarityで定性的なLP行動分析。ヒートマップPNG/CSVはダッシュボード手動確認(ここでは非露出)。",
+        "priority": "medium"
+      }
+    },
     "supabase": {
       "command": "npx",
       "args": ["-y", "mcp-remote", "https://mcp.supabase.com/mcp"],
