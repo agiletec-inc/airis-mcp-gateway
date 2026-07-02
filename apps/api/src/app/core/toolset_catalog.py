@@ -42,6 +42,11 @@ def build_toolset_index(server_configs: dict[str, object]) -> dict[str, ToolsetI
     toolsets: dict[str, ToolsetInfo] = {}
 
     for server_name, config in server_configs.items():
+        if not getattr(config, "enabled", False):
+            # Disabled servers cannot execute tool calls, so their tools
+            # must not surface in the discoverable toolset catalog.
+            continue
+
         indexed_tools = [
             entry.get("name")
             for entry in getattr(config, "tools_index", []) or []

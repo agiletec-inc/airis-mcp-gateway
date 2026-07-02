@@ -6,7 +6,7 @@ text: |
   ## Tool Routing Guide
   Use Gateway (airis-exec) for API/service calls. Use host tools for everything else.
 
-  Gateway (airis-exec): library docs → context7 | web search → tavily | database → supabase | payments → stripe | DNS/workers → cloudflare | design files → figma
+  Gateway (airis-exec): library docs → context7 | web search → tavily | payments → stripe | design files → figma
 
   Host tools (NOT Gateway): browser automation → playwright-cli skill (needs host Chrome) | file generation (docx/xlsx/pdf) → claude-api plugin | TDD/debugging/planning → superpowers plugin | git operations → gh CLI or native git | simple code read/edit → native Read/Edit/Grep tools
 

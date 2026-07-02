@@ -94,9 +94,8 @@ When working in a project that uses this gateway, pick tools by this decision fl
 ```
 Need official library docs?    → context7:resolve-library-id → context7:query-docs
 Need current/external info?    → tavily:tavily-search
-Database query or schema?      → supabase:query
+Database query or schema?      → supabase is disabled by default (not authorized); do not call supabase:* unless a human has explicitly enabled it
 Payment/billing?               → stripe:*
-DNS/workers/KV?                → cloudflare:*
 Figma/design?                  → figma:*
 Browser testing/screenshots?   → playwright-cli skill (host Chrome — NOT MCP playwright)
 File generation (docx/xlsx/…)? → claude-api plugin (host filesystem)

@@ -119,14 +119,14 @@ AIRIS is not only a central MCP registry. It also distributes operating guidance
 
 ## How It Works
 
-Airis aggregates 20+ MCP servers behind a single endpoint — Streamable HTTP at `/mcp/` for Codex / Claude Code, and SSE at `/sse` for Gemini CLI, Cursor, and Windsurf. Your AI agent connects once and gets access to everything.
+Airis aggregates the MCP servers registered in [`mcp-config.json`](./mcp-config.json) (~24 entries, roughly half enabled by default) behind a single endpoint — Streamable HTTP at `/mcp/` for Codex / Claude Code, and SSE at `/sse` for Gemini CLI, Cursor, and Windsurf. Your AI agent connects once and gets access to everything that's enabled.
 
 ```
 Without Gateway:                          With Gateway:
   claude mcp add stripe ...                 claude mcp add airis ...
-  claude mcp add supabase ...               # Done. 100+ tools available.
-  claude mcp add tavily ...                 # Shared across Gemini, Cursor, etc.
-  ... Manage 20 servers individually ...
+  claude mcp add tavily ...                 # Done. Every enabled tool available.
+  claude mcp add github ...                 # Shared across Gemini, Cursor, etc.
+  ... Manage each server individually ...
 ```
 
 Servers start on-demand when a tool is called and auto-terminate when idle. No resources wasted.
@@ -173,21 +173,20 @@ Claude / Gemini / Cursor / Windsurf
 | **airis-legal** | Japanese court document automation (証拠説明書 / 準備書面) |
 | **fetch** | Fetch a URL and return it as markdown |
 | **tavily** | Web search via Tavily API |
-| **supabase** | Supabase database management |
 | **stripe** | Stripe payments API |
 | **twilio** | Twilio voice/SMS API |
-| **cloudflare** | Cloudflare DNS / Workers / KV |
 | **figma** | Figma design files |
 | **magic** | UI component generation |
 | **chrome-devtools** | Chrome debugging |
 
-### Disabled — auto-enable on first tool call
+### Disabled — not registered, no advertised tools
 
 | Server | Description |
 |--------|-------------|
 | **github** | GitHub API |
 | **postgres** | Direct PostgreSQL access |
 | **memory** | Knowledge graph (entities, relations) |
+| **supabase** | Supabase database management — disabled, never authorized for this deployment |
 | **mindbase** | Local memory substrate (pgvector + Ollama) |
 | **serena** | Semantic code retrieval and editing |
 | **morphllm** | Code editing with warpgrep |

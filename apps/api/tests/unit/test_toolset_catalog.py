@@ -11,6 +11,7 @@ from app.core.toolset_catalog import build_toolset_index
 @dataclass
 class _FakeConfig:
     tools_index: list[dict]
+    enabled: bool = True
 
 
 def _stub_seed_catalog(seed: dict | None = None):
@@ -120,6 +121,26 @@ def test_tools_outside_indexed_list_are_ignored_from_seed():
         result = build_toolset_index(configs)
 
     assert result["stripe.payments"].tools == ["create_payment"]
+
+
+def test_disabled_server_is_excluded_from_toolset_index():
+    """Disabled servers must never surface tools in the discoverable catalog
+    (issue #193: airis-find was advertising tools of enabled:false servers)."""
+    configs = {
+        "supabase": _FakeConfig(
+            enabled=False,
+            tools_index=[{"name": "query"}, {"name": "list_tables"}],
+        ),
+        "github": _FakeConfig(
+            enabled=True,
+            tools_index=[{"name": "get_issue"}],
+        ),
+    }
+    with _stub_seed_catalog({}):
+        result = build_toolset_index(configs)
+
+    assert list(result.keys()) == ["github.default"]
+    assert "supabase.default" not in result
 
 
 def test_toolsets_with_no_matching_tools_are_skipped():

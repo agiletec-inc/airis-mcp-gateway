@@ -224,12 +224,13 @@ class DynamicMCP:
                         source="docker"
                     )
 
-        # Cache tools_index from ALL servers (including COLD/disabled)
-        # This enables discovery without starting servers
+        # Cache tools_index from ALL enabled servers (including COLD)
+        # This enables discovery without starting servers. Disabled servers
+        # are excluded so airis-find never surfaces tools that cannot be run.
         index_count = 0
         for name in process_manager.get_server_names():
             config = process_manager._server_configs.get(name)
-            if config and config.tools_index:
+            if config and config.enabled and config.tools_index:
                 for tool_entry in config.tools_index:
                     tool_name = tool_entry.get("name", "")
                     if tool_name and tool_name not in new_tools:
