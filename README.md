@@ -194,6 +194,7 @@ Claude / Gemini / Cursor / Windsurf
 |--------|-------------|
 | **supabase** | Supabase database management — disabled, never authorized for this deployment |
 | **mindbase** | Local memory substrate (pgvector + Ollama) — disabled, never authorized for this deployment |
+| **cloudflare** | Cloudflare API access (KV, Workers, DNS) — disabled, never authorized for this deployment |
 
 Source of truth: [`mcp-config.json`](./mcp-config.json). HOT servers are always listed in `tools/list` with full schema. COLD servers are also listed directly, with a lazy stub schema (`{"type":"object"}`) — a client can call one by name straight from `tools/list` and it auto-enables on first call, no `airis-find`/`airis-exec` hop needed. `airis-find`/`airis-schema` remain available for browsing servers and fetching full schemas; `airis-exec` remains as a compat router for clients that can't act on a bare `tools/list` name.
 

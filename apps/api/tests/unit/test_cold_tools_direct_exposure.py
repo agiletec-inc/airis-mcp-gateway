@@ -218,6 +218,63 @@ async def test_every_discoverable_cold_indexed_tool_is_listed(monkeypatch):
     assert not missing, f"COLD indexed tools missing from tools/list: {missing}"
 
 
+@pytest.mark.asyncio
+async def test_advertised_cold_name_resolves_to_the_server_it_was_attributed_to(
+    monkeypatch,
+):
+    """Resolver/collector parity canary (issue #198 review finding 1): every
+    COLD tool name advertised in tools/list must resolve, via
+    DynamicMCP.get_server_for_tool_from_index, to a discoverable server —
+    and specifically the SAME server the collector attributed it to.
+
+    Regression this guards: `query` is indexed by both `supabase`
+    (policy_disabled) and `postgres` (discoverable) in the real registry.
+    The collector skips supabase and advertises `query` for postgres, but a
+    resolver that iterates ALL servers (including policy_disabled ones)
+    without the same is_discoverable() filter can return supabase first —
+    so calling the advertised name silently 1-hops into the wrong,
+    policy-disabled server instead of the one that was listed.
+    """
+    from app.core.mcp_config_loader import is_discoverable, load_mcp_config
+
+    parsed = load_mcp_config(str(REPO_ROOT / "mcp-config.json.example"))
+
+    pm = _build_pm(monkeypatch)
+    pm._server_configs = dict(parsed)
+
+    # Mirror collect_cold_discoverable_tools()'s exact attribution: iterate
+    # servers in the same order, first occurrence of a bare name wins.
+    attributed_server: dict[str, str] = {}
+    for name in pm.get_server_names():
+        config = pm._server_configs.get(name)
+        if not config or config.mode != ServerMode.COLD:
+            continue
+        if not is_discoverable(config):
+            continue
+        for tool_entry in config.tools_index or []:
+            tool_name = tool_entry.get("name")
+            if not tool_name or tool_name in attributed_server:
+                continue
+            attributed_server[tool_name] = name
+
+    listed_names = {t["name"] for t in await _list_tools(pm)}
+    dmcp = DynamicMCP()
+
+    for tool_name in listed_names & attributed_server.keys():
+        resolved = dmcp.get_server_for_tool_from_index(tool_name, pm)
+        expected_server = attributed_server[tool_name]
+        assert resolved == expected_server, (
+            f"advertised tool '{tool_name}' resolves to server "
+            f"'{resolved}' but was advertised under '{expected_server}' "
+            f"(collector/resolver disagree — see is_discoverable filter)"
+        )
+        resolved_config = pm._server_configs.get(resolved)
+        assert resolved_config and is_discoverable(resolved_config), (
+            f"advertised tool '{tool_name}' resolved to non-discoverable "
+            f"server '{resolved}'"
+        )
+
+
 # ── Token budget guard ───────────────────────────────────────────────────
 
 
@@ -225,7 +282,7 @@ async def test_every_discoverable_cold_indexed_tool_is_listed(monkeypatch):
 async def test_tools_list_json_size_stays_within_budget(monkeypatch):
     """Guard against description-bloat regressions. The measured serialized
     size (meta-tools + all discoverable COLD stubs, from the real registry
-    mirror) was ~4.0KB at the time this test was written; ceiling is 1.5x
+    mirror) was ~9.0KB at the time this test was written; ceiling is 1.5x
     that measured value to leave headroom for legitimate registry growth
     while still catching a bloat regression."""
     from app.core.mcp_config_loader import load_mcp_config
