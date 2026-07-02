@@ -18,6 +18,8 @@ import json
 import time
 from typing import Any, Optional
 
+from tests.e2e.conftest import skip_or_fail
+
 # API base URL for E2E tests
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:9400")
 
@@ -88,7 +90,7 @@ class TestGatewayControlServer:
         data = result["data"]
         # May return result or timeout error
         if "error" in data and "timeout" in str(data.get("error", {}).get("message", "")).lower():
-            pytest.skip("Timeout waiting for COLD servers - expected in CI")
+            skip_or_fail("Timeout waiting for COLD servers - expected in CI")
 
         assert "result" in data
         text = data["result"]["content"][0]["text"]
@@ -100,7 +102,7 @@ class TestGatewayControlServer:
             "server_name": "airis-mcp-gateway-control"
         })
         if result.get("timeout"):
-            pytest.skip("Request timed out")
+            skip_or_fail("Request timed out")
         assert result["status_code"] == 200
 
         data = result["data"]
@@ -117,12 +119,12 @@ class TestAirisCommandsServer:
         """airis_config_get should return configuration."""
         result = call_tool(api_client, "airis_config_get", {})
         if result.get("timeout"):
-            pytest.skip("Request timed out")
+            skip_or_fail("Request timed out")
         assert result["status_code"] == 200
 
         data = result["data"]
         if "error" in data and "timeout" in str(data.get("error", {}).get("message", "")).lower():
-            pytest.skip("Timeout - expected in CI")
+            skip_or_fail("Timeout - expected in CI")
 
         assert "result" in data
         # Should return JSON config
@@ -134,12 +136,12 @@ class TestAirisCommandsServer:
         """airis_profile_list should return profiles."""
         result = call_tool(api_client, "airis_profile_list", {})
         if result.get("timeout"):
-            pytest.skip("Request timed out")
+            skip_or_fail("Request timed out")
         assert result["status_code"] == 200
 
         data = result["data"]
         if "error" in data and "timeout" in str(data.get("error", {}).get("message", "")).lower():
-            pytest.skip("Timeout - expected in CI")
+            skip_or_fail("Timeout - expected in CI")
 
         assert "result" in data
 

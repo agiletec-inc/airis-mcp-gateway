@@ -27,7 +27,14 @@ tasks:
       - docker compose logs api 2>&1 | grep -E "Pre-warm" | tail -10
 
   e2e:
-    desc: Run end-to-end test suite
+    desc: Run end-to-end test suite (against a running `docker compose up -d` stack)
+    # E2E_STRICT=1: the documented e2e entrypoint must be strict. Without it,
+    # tests/e2e/test_mcp_servers_e2e.py silently `pytest.skip()`s on timeouts
+    # instead of failing, so a green `task test:e2e` could mean "everything
+    # timed out" instead of "the stack is healthy" (issue #195). Casual local
+    # runs of `pytest tests/e2e` directly (not through this task) still skip.
+    env:
+      E2E_STRICT: "1"
     cmds:
       - echo "=== Gateway Health ==="
       - task: health
@@ -40,6 +47,9 @@ tasks:
       - echo ""
       - echo "=== Pre-warm Status ==="
       - task: prewarm
+      - echo ""
+      - echo "=== Pytest E2E Suite (strict) ==="
+      - cd apps/api && uv run --extra test python -m pytest tests/e2e -v
       - echo ""
       - echo "✓ All checks passed"
 

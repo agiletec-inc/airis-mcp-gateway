@@ -19,10 +19,16 @@ DOCKERIGNORE = REPO_ROOT / ".dockerignore"
 
 # CI runs pytest from a full repo checkout, so .dockerignore is reachable.
 # Inside the api container the repo is not mounted (only apps/api is COPYed),
-# so these tests must skip — the CI run is the authoritative gate.
-if not DOCKERIGNORE.exists():
+# so these tests must skip there — the CI run is the authoritative gate.
+#
+# The skip condition checks `.git` (an environment signal independent of the
+# guarded file), NOT `.dockerignore.exists()` itself. If it checked the
+# guarded file directly, a real regression (someone deletes .dockerignore in
+# a full checkout) would silently skip instead of failing — the guard must
+# fail loudly whenever it can positively see the repo root (issue #195).
+if not (REPO_ROOT / ".git").exists():
     pytest.skip(
-        f".dockerignore not reachable from {DOCKERIGNORE} — likely running "
+        f"{REPO_ROOT} is not a full repo checkout (no .git) — likely running "
         "inside the api container, skipping. CI on a full repo checkout "
         "provides the real gate.",
         allow_module_level=True,
