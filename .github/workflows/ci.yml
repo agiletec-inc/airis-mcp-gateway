@@ -77,10 +77,23 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
 
-      - name: Install dependencies
+      - name: Check uv.lock is in sync with pyproject.toml
+        # Fails the build instead of silently re-resolving when uv.lock and
+        # pyproject.toml have drifted apart (issue #192).
         run: |
           cd apps/api
-          uv pip install --system -e ".[test]"
+          uv lock --check
+
+      - name: Install dependencies
+        # Frozen, lockfile-driven install: `uv export --frozen` refuses to
+        # re-resolve and errors if uv.lock is stale, so the exact versions
+        # pinned in uv.lock (including the project itself, via `-e .`) are
+        # installed into the system site-packages (issue #192, mirrors
+        # pnpm's --frozen-lockfile).
+        run: |
+          cd apps/api
+          uv export --frozen --extra test --no-hashes -o requirements.lock.txt
+          uv pip install --system -r requirements.lock.txt
 
       - name: Run tests with coverage
         # --cov-fail-under is a regression ratchet, not the end goal. It must
