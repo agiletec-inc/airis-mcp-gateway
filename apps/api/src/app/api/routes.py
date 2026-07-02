@@ -1,3 +1,19 @@
+"""
+`api_router` below (dashboard/secrets/mcp-config/server-states/admin — all
+DB-backed via SQLAlchemy) is intentionally UNMOUNTED. `app.main` mounts only
+`mcp_proxy`, `process_mcp`, and `sse_tools` directly; it never imports this
+module's `api_router`.
+
+This is by design, not an oversight (issue #196): SQLAlchemy is a test-extra
+dependency (`.[test]`), not a runtime dependency of the production/lite
+image, so the shipped container must be able to boot the MCP gateway without
+it. Mounting `api_router` requires adding `sqlalchemy` (and its async driver)
+to the runtime dependency group first.
+
+Guarded mechanically by `tests/unit/test_lite_mode_invariants.py`:
+(a) importing `app.main` never imports `sqlalchemy`, and (b) none of this
+router's paths appear in the app's effective route table.
+"""
 from fastapi import APIRouter
 from .endpoints.mcp_servers import router as mcp_servers_router
 from .endpoints.secrets import router as secrets_router

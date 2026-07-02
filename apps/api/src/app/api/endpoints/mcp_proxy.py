@@ -812,9 +812,6 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
             return await handle_expand_schema(rpc_request)
 
         # Dynamic MCP meta-tools (only when DYNAMIC_MCP=true)
-        if tool_name == "airis-activate":
-            return await handle_airis_activate(rpc_request, session_id=session_id)
-
         if tool_name == "airis-find":
             return await handle_airis_find(rpc_request, session_id=session_id)
 
@@ -1271,100 +1268,6 @@ async def handle_airis_find(rpc_request: Dict[str, Any], session_id: Optional[st
         return Response(status_code=202)
 
     # Fallback to HTTP response if no session_id
-    return Response(
-        content=json.dumps(response_data),
-        status_code=200,
-        media_type="application/json"
-    )
-
-
-async def handle_airis_activate(rpc_request: Dict[str, Any], session_id: Optional[str] = None) -> Response:
-    """
-    Activate a toolset so its native tools appear in tools/list and can be called directly.
-    """
-    params = rpc_request.get("params", {})
-    arguments = params.get("arguments", {})
-    toolset_ref = arguments.get("toolset")
-
-    if not toolset_ref:
-        error_data = {
-            "jsonrpc": "2.0",
-            "id": rpc_request.get("id"),
-            "error": {"code": -32602, "message": "toolset is required"}
-        }
-        if session_id:
-            queue = await get_response_queue(session_id)
-            await queue.put(error_data)
-            return Response(status_code=202)
-        return Response(
-            content=json.dumps(error_data),
-            status_code=200,
-            media_type="application/json"
-        )
-
-    dynamic_mcp = get_dynamic_mcp()
-    process_manager = get_process_manager()
-    dynamic_mcp.refresh_toolsets(process_manager)
-    result = await dynamic_mcp.activate_toolset(toolset_ref, process_manager)
-
-    if not result.get("ok"):
-        error_data = {
-            "jsonrpc": "2.0",
-            "id": rpc_request.get("id"),
-            "error": {"code": -32602, "message": result["message"]}
-        }
-        if session_id:
-            queue = await get_response_queue(session_id)
-            await queue.put(error_data)
-            return Response(status_code=202)
-        return Response(
-            content=json.dumps(error_data),
-            status_code=200,
-            media_type="application/json"
-        )
-
-    lines = [
-        f"Activated {len(result['toolsets'])} toolset(s).",
-        "",
-        "## Toolsets",
-    ]
-    for ref in result["toolsets"]:
-        lines.append(f"- **{ref}**")
-
-    if result["servers"]:
-        lines.extend(["", "## Enabled Servers"])
-        for name in result["servers"]:
-            lines.append(f"- **{name}**")
-
-    if result["tools"]:
-        lines.extend(["", "## Native Tools Now Available"])
-        for tool_name in result["tools"]:
-            server_name = dynamic_mcp.get_server_for_tool(tool_name) or "unknown"
-            lines.append(f"- **{server_name}:{tool_name}**")
-
-    lines.extend([
-        "",
-        "Call the native MCP tool directly after the client refreshes tools/list."
-    ])
-
-    response_data = {
-        "jsonrpc": "2.0",
-        "id": rpc_request.get("id"),
-        "result": {
-            "content": [{"type": "text", "text": "\n".join(lines)}]
-        }
-    }
-
-    if session_id:
-        queue = await get_response_queue(session_id)
-        await queue.put(response_data)
-        await queue.put({
-            "jsonrpc": "2.0",
-            "method": "notifications/tools/list_changed"
-        })
-        logger.info(f"Queued airis-activate response for session {session_id}")
-        return Response(status_code=202)
-
     return Response(
         content=json.dumps(response_data),
         status_code=200,

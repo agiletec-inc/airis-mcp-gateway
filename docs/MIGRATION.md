@@ -29,8 +29,8 @@ If you were calling tools directly:
 # Old
 result = mcp.call("memory:create_entities", {...})
 
-# New
-mcp.call("airis-activate", {"toolset": "memory.core"})
+# New — no activation step: calling the tool auto-discovers and
+# auto-enables its COLD server on first use
 result = mcp.call("memory:create_entities", {...})
 ```
 
@@ -43,10 +43,11 @@ Use `airis-find` only when the needed tool or toolset is unclear:
 mcp.call("airis-find", {"query": "memory"})
 ```
 
-If you already know the capability slice, activate it directly:
+If you already know the tool, call it directly (or via `airis-exec`) —
+the gateway auto-enables the COLD server on first call:
 
 ```python
-mcp.call("airis-activate", {"toolset": "stripe.customers"})
+mcp.call("airis-exec", {"tool": "stripe:create_customer", "arguments": {...}})
 ```
 
 ### Reverting to Legacy Mode
@@ -67,10 +68,12 @@ The SSE endpoint remains the same:
 
 #### "Tool not found"
 
-Activate the relevant toolset first:
+Call the tool by its full `server:tool` name via `airis-exec` — COLD
+servers auto-enable on first call. If the name is unknown, search first:
 
 ```
-airis-activate toolset="provider.slice"
+airis-find query="<capability>"
+airis-exec tool="provider:tool_name" arguments={...}
 ```
 
 #### Server not starting

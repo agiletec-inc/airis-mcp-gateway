@@ -252,7 +252,6 @@ async def apply_schema_partitioning(data: Dict[str, Any]) -> Dict[str, Any]:
         # HOT servers: expose full schema directly, in parallel with a
         # per-server timeout so a single broken server cannot stall the
         # whole tools/list response.
-        hot_tool_names: set[str] = set()
         hot_tools_list: list[dict] = []
         try:
             hot_servers = [
@@ -277,8 +276,6 @@ async def apply_schema_partitioning(data: Dict[str, Any]) -> Dict[str, Any]:
                 *[get_tools_for_server(s) for s in hot_servers]
             )
             for server_tools in results:
-                for t in server_tools:
-                    hot_tool_names.add(t.get("name", ""))
                 hot_tools_list.extend(server_tools)
         except Exception as e:
             logger.error(f"Failed to list HOT tools: {e}")
@@ -298,11 +295,6 @@ async def apply_schema_partitioning(data: Dict[str, Any]) -> Dict[str, Any]:
             ]
 
         tools.extend(hot_tools_list)
-        active_tools_list = dynamic_mcp.get_active_tool_definitions(
-            excluded_servers=excluded_servers,
-            excluded_tool_names=hot_tool_names,
-        )
-        tools.extend(active_tools_list)
 
         data["result"]["tools"] = tools
         hot_count = len(tools) - meta_count

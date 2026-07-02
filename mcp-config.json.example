@@ -248,10 +248,6 @@
         {"name": "describe_table", "description": "Get schema details for a specific table"}
       ]
     },
-    "_playwright_removed": {
-      "_comment": "Removed: @playwright/mcp doesn't work in Docker (no Chrome). Use playwright-cli skill instead: `playwright-cli install --skills`",
-      "enabled": false
-    },
     "magic": {
       "command": "npx",
       "args": [
@@ -349,6 +345,7 @@
         "CLOUDFLARE_ACCOUNT_ID": "${CLOUDFLARE_ACCOUNT_ID}"
       },
       "enabled": false,
+      "policy_disabled": true,
       "mode": "cold",
       "tools_index": [
         {"name": "cloudflare_kv_get", "description": "Get a value from Cloudflare KV"},
