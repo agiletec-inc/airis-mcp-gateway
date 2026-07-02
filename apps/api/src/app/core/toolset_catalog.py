@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .logging import get_logger
+from .mcp_config_loader import is_discoverable
 
 logger = get_logger(__name__)
 
@@ -42,9 +43,11 @@ def build_toolset_index(server_configs: dict[str, object]) -> dict[str, ToolsetI
     toolsets: dict[str, ToolsetInfo] = {}
 
     for server_name, config in server_configs.items():
-        if not getattr(config, "enabled", False):
-            # Disabled servers cannot execute tool calls, so their tools
-            # must not surface in the discoverable toolset catalog.
+        if not is_discoverable(config):
+            # Policy-disabled servers (e.g. supabase, mindbase) must never
+            # run, so their tools must not surface in the discoverable
+            # toolset catalog. Plain enabled=False COLD servers (e.g.
+            # stripe) remain discoverable — they auto-enable on first call.
             continue
 
         indexed_tools = [

@@ -22,7 +22,11 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
 # `server:tool` call syntax, e.g. "supabase:query", "stripe:create_customer".
-TOOL_REF_PATTERN = re.compile(r"\b([a-z][a-z0-9-]+):([a-z][a-z0-9_-]+)\b")
+# Also matches the `server:*` wildcard form (e.g. "figma:*", "cloudflare:*")
+# used in routing-guide prose — a plain trailing `\b` never matches after
+# `*` (both neighbours are non-word chars), so a negative lookahead is used
+# instead to bound the match for both the alnum and wildcard tool forms.
+TOOL_REF_PATTERN = re.compile(r"\b([a-z][a-z0-9-]+):(\*|[a-z][a-z0-9_-]+)(?![a-z0-9_-])")
 
 # `[server]` routing-tag syntax used in workflows/*.yaml mcp_instructions bullets.
 BRACKET_REF_PATTERN = re.compile(r"\[([a-z][a-z0-9-]+)\]")
@@ -34,14 +38,6 @@ BRACKET_REF_PATTERN = re.compile(r"\[([a-z][a-z0-9-]+)\]")
 # scope). Always a violation, even if a disabled stub happens to exist in
 # mcp-config.json.example and even if the line carries a caveat.
 FORBIDDEN_SERVERS = {"cloudflare"}
-
-# Servers that are `enabled: false` for a POLICY reason (never authorized /
-# not wired up), not just "COLD and not yet lazily started". Most COLD
-# servers (stripe, twilio, postgres, ...) start `enabled: false` and are
-# EXPECTED to be advertised — they auto-enable transparently on first call
-# (see CLAUDE.md "Dynamic MCP"). Only servers in this curated set must never
-# be routed to without an explicit disabled-server caveat in the same line.
-POLICY_DISABLED_SERVERS = {"supabase", "mindbase"}
 
 # Phrases that indicate a disabled-server mention is a deliberate, honest
 # caveat ("don't call this, it's off") rather than a routing instruction.
@@ -66,16 +62,24 @@ SCAN_FILES = [
 ]
 
 
-def _load_registry() -> tuple[set[str], set[str]]:
-    """Return (all_servers, enabled_servers) from the tracked registry mirror."""
+def _load_registry() -> tuple[set[str], set[str], set[str]]:
+    """Return (all_servers, enabled_servers, policy_disabled_servers) from the
+    tracked registry mirror.
+
+    `policy_disabled_servers` is DERIVED directly from each server's
+    `policy_disabled` flag (e.g. supabase, mindbase) rather than a hardcoded
+    Python set, so this gate can't silently drift from the registry itself —
+    a server can only become policy-disabled by an explicit registry edit.
+    """
     data = json.loads((REPO_ROOT / "mcp-config.json.example").read_text())
     servers = data["mcpServers"]
     all_servers = set(servers.keys())
     enabled_servers = {name for name, cfg in servers.items() if cfg.get("enabled")}
-    return all_servers, enabled_servers
+    policy_disabled_servers = {name for name, cfg in servers.items() if cfg.get("policy_disabled")}
+    return all_servers, enabled_servers, policy_disabled_servers
 
 
-ALL_SERVERS, ENABLED_SERVERS = _load_registry()
+ALL_SERVERS, ENABLED_SERVERS, POLICY_DISABLED_SERVERS = _load_registry()
 
 
 def _line_is_disqualified(line: str) -> bool:

@@ -7,13 +7,16 @@ registry:
   # NOTE: airis-agent has been integrated into airis-mcp-gateway as native tools
   # (airis-confidence, airis-repo-index, airis-suggest, airis-route)
 
-  # DISABLED (issue #193): mindbase is `enabled: false` in mcp-config.json —
-  # never authorized for this deployment. This catalog entry is kept so the
+  # DISABLED (issue #193): mindbase is `policy_disabled: true` in
+  # mcp-config.json — never authorized for this deployment, and must never
+  # auto-enable even via COLD lazy-start. This catalog entry is kept so the
   # Docker MCP Gateway definition matches the real image/config, but it must
   # NOT be advertised as discoverable/callable while the registry entry is
-  # disabled. `dynamic_mcp.py` / `toolset_catalog.py` filter disabled servers
-  # out of airis-find results at runtime; this comment documents why the
-  # entry still exists here.
+  # policy-disabled. `dynamic_mcp.py` / `toolset_catalog.py` filter only
+  # `policy_disabled` servers out of airis-find results at runtime via
+  # `is_discoverable()` — plain `enabled: false` COLD/lazy servers (e.g.
+  # stripe) are NOT filtered, since they auto-enable transparently on first
+  # call. This comment documents why the mindbase entry still exists here.
   mindbase:
     title: MindBase MCP Server
     description: Mindbase knowledge graph operations with vector search

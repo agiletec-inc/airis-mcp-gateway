@@ -178,19 +178,19 @@ Claude / Gemini / Cursor / Windsurf
 | **figma** | Figma design files |
 | **magic** | UI component generation |
 | **chrome-devtools** | Chrome debugging |
+| **github** | GitHub API |
+| **memory** | Knowledge graph (entities, relations) |
+| **serena** | Semantic code retrieval and editing |
+| **morphllm** | Code editing with warpgrep |
+| **sequential-thinking** | Step-by-step reasoning |
 
 ### Disabled — not registered, no advertised tools
 
 | Server | Description |
 |--------|-------------|
-| **github** | GitHub API |
 | **postgres** | Direct PostgreSQL access |
-| **memory** | Knowledge graph (entities, relations) |
 | **supabase** | Supabase database management — disabled, never authorized for this deployment |
-| **mindbase** | Local memory substrate (pgvector + Ollama) |
-| **serena** | Semantic code retrieval and editing |
-| **morphllm** | Code editing with warpgrep |
-| **sequential-thinking** | Step-by-step reasoning |
+| **mindbase** | Local memory substrate (pgvector + Ollama) — disabled, never authorized for this deployment |
 | **filesystem** | File system operations |
 | **git** | Git operations |
 | **time** | Time utilities |

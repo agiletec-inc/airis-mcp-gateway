@@ -8,6 +8,7 @@ from typing import Any, Optional
 from dataclasses import dataclass, field
 
 from .logging import get_logger
+from .mcp_config_loader import is_discoverable
 from .toolset_catalog import ToolsetInfo, build_toolset_index
 
 logger = get_logger(__name__)
@@ -224,13 +225,14 @@ class DynamicMCP:
                         source="docker"
                     )
 
-        # Cache tools_index from ALL enabled servers (including COLD)
-        # This enables discovery without starting servers. Disabled servers
-        # are excluded so airis-find never surfaces tools that cannot be run.
+        # Cache tools_index from ALL discoverable servers (including COLD
+        # and disabled-but-not-policy-disabled, e.g. stripe). This enables
+        # discovery without starting servers. Only policy_disabled servers
+        # (e.g. supabase, mindbase) are excluded — see is_discoverable().
         index_count = 0
         for name in process_manager.get_server_names():
             config = process_manager._server_configs.get(name)
-            if config and config.enabled and config.tools_index:
+            if config and is_discoverable(config) and config.tools_index:
                 for tool_entry in config.tools_index:
                     tool_name = tool_entry.get("name", "")
                     if tool_name and tool_name not in new_tools:
@@ -296,7 +298,7 @@ class DynamicMCP:
                 if name in excluded:
                     continue
                 config = process_manager._server_configs.get(name)
-                if config and config.tools_index:
+                if config and is_discoverable(config) and config.tools_index:
                     tools = [
                         t.get("name") for t in config.tools_index
                         if t.get("name") and t.get("name") not in hot_tools
@@ -587,6 +589,15 @@ class DynamicMCP:
         logger.info(f"Auto-discovered COLD tool '{tool_name}' on server '{server_name}'")
 
         config = process_manager._server_configs.get(server_name)
+        if config and getattr(config, "policy_disabled", False):
+            logger.warning(f"Refused auto-enable of policy-disabled server: {server_name}")
+            return {
+                "error": {
+                    "code": -32001,
+                    "message": f"server '{server_name}' is policy-disabled and cannot be auto-enabled",
+                }
+            }
+
         if config and config.mode == ServerMode.COLD and not config.enabled:
             logger.info(f"Auto-enabling COLD server: {server_name}")
             await process_manager.enable_server(server_name)

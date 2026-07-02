@@ -132,6 +132,7 @@
       ],
       "env": {},
       "enabled": false,
+      "policy_disabled": true,
       "mode": "cold",
       "_comment": "Managed by Docker MCP Gateway via airis-catalog.yaml",
       "tools_index": [
@@ -239,6 +240,7 @@
       ],
       "env": {},
       "enabled": false,
+      "policy_disabled": true,
       "mode": "cold",
       "tools_index": [
         {"name": "query", "description": "Execute SQL query against a Supabase database"},
@@ -411,6 +413,31 @@
         {"name": "get_audio_status", "description": "Non-blocking probe for the current Audio Overview state of a notebook"},
         {"name": "download_audio", "description": "Save the completed Audio Overview to disk as a .m4a file"}
       ]
+    },
+    "figma": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "figma-developer-mcp",
+        "--figma-api-key=${FIGMA_API_KEY}",
+        "--stdio"
+      ],
+      "env": {},
+      "enabled": true,
+      "mode": "cold",
+      "_comment": "Framelink figma-developer-mcp; set FIGMA_API_KEY. Wiring not yet verified against the live runtime config — TODO: populate tools_index once catalogued (do not guess tool names).",
+      "tools_index": []
+    },
+    "airis-legal": {
+      "command": "node",
+      "args": [
+        "/app/airis-legal/index.js"
+      ],
+      "env": {},
+      "enabled": true,
+      "mode": "cold",
+      "_comment": "agiletec-inc/airis-legal (証拠説明書/準備書面 automation). Wiring and tool names not yet verified against the live runtime config — TODO: populate tools_index once catalogued.",
+      "tools_index": []
     }
   },
   "profiles": {
