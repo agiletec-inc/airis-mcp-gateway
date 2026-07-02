@@ -575,14 +575,35 @@ class DynamicMCP:
         """
         Look up server name from tools_index in mcp-config.json.
         Used for auto-discovery when tool is not in cache.
+
+        Discoverable (non policy_disabled) servers are matched first, so a
+        bare tool name resolves to the same server the exposure collector
+        advertised it under whenever a discoverable candidate exists (see
+        is_discoverable / issue #198) — this is what fixes 'query' (indexed
+        by both policy-disabled supabase and discoverable postgres)
+        resolving to supabase instead of the advertised postgres.
+
+        Non-discoverable servers are only used as a fallback when no
+        discoverable server indexes the name, so a bare call for a tool that
+        exists *solely* on a policy-disabled server still resolves to it and
+        gets the explicit -32001 policy-disabled refusal in
+        auto_discover_and_execute (rather than a generic "not found"),
+        matching explicit `server:tool` addressing which bypasses this
+        resolver entirely and always hits that refusal.
         """
+        fallback: Optional[str] = None
         for name in process_manager.get_server_names():
             config = process_manager._server_configs.get(name)
-            if config and config.tools_index:
-                for tool_entry in config.tools_index:
-                    if tool_entry.get("name") == tool_name:
+            if not config or not config.tools_index:
+                continue
+            for tool_entry in config.tools_index:
+                if tool_entry.get("name") == tool_name:
+                    if is_discoverable(config):
                         return name
-        return None
+                    if fallback is None:
+                        fallback = name
+                    break
+        return fallback
 
     async def auto_discover_and_execute(
         self, tool_name: str, arguments: dict, process_manager

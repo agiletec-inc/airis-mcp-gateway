@@ -8,7 +8,7 @@ FastAPI-based MCP multiplexer that exposes many MCP servers (process + Docker Ga
 - **Streamable HTTP** at `http://localhost:9400/mcp/` — for Codex and Claude Code (recommended)
 - **SSE** at `http://localhost:9400/sse` — for Gemini CLI, Cursor, Windsurf
 
-Dynamic MCP mode (default) exposes only 4 meta-tools (`airis-find`, `airis-schema`, `airis-workflow`, `airis-exec`) instead of 60+ raw tools. COLD servers are not in `tools/list`; clients reach their tools through `airis-exec`, which auto-discovers and auto-enables the server on first call. (`airis-exec` is required because `tools/list`-only clients like Claude Code and Codex cannot call a tool that isn't advertised.)
+Dynamic MCP mode (default) exposes 4 meta-tools (`airis-find`, `airis-schema`, `airis-workflow`, `airis-exec`) plus every discoverable COLD server's indexed tools with a lazy stub schema (`{"type":"object"}`), instead of 60+ fully-schema'd raw tools. A client that only reads `tools/list` can call a COLD tool by name directly — the server auto-discovers and auto-enables it on first call, one hop, no meta-tool round trip. `airis-find`/`airis-schema` remain available as an optional discovery aid (server browsing, full schemas); `airis-exec` remains as the compat router for older clients. Set `COLD_TOOLS_IN_LIST=false` to restore the old meta-tool-only listing for context-constrained clients.
 
 Source of truth for server config: `mcp-config.json` (runtime) and `workflows/*.yaml`. Workflows split by `compile_to`: `mcp_instructions` ones are baked into the MCP `initialize` instructions by `apps/api/src/app/core/behavior_compiler.py`; `airis_workflow` ones are served on-demand by the `airis-workflow` meta-tool keyed by `topic`.
 
@@ -62,10 +62,10 @@ The API in `apps/api/src/app/api/endpoints/` is split into focused modules:
 
 ### HOT/COLD server split
 
-- **HOT**: ProcessManager process servers (uvx/npx/airis) always listed in `tools/list` — pre-warmed at API startup, never idle-killed. Default HOT set: `context7`, `airis-mcp-gateway-control`, `airis-workspace`.
-- **COLD**: Docker Gateway backend servers — not listed directly; auto-discovered via tools index on first native tool call, enabled on-demand.
+- **HOT**: ProcessManager process servers (uvx/npx/airis) always listed in `tools/list` with full schema — pre-warmed at API startup, never idle-killed. Default HOT set: `context7`, `airis-mcp-gateway-control`, `airis-workspace`.
+- **COLD**: Docker Gateway backend servers — listed directly in `tools/list` with a lazy stub schema (`COLD_TOOLS_IN_LIST=true`, default) via each server's `tools_index`; auto-discovered and auto-enabled on first `tools/call`.
 
-In DYNAMIC_MCP mode, `tools/list` returns only meta-tools + currently active HOT server tools. Full tool discovery goes through `airis-find`.
+In DYNAMIC_MCP mode, `tools/list` returns meta-tools + HOT server tools (full schema) + discoverable COLD server tools (stub schema, `{"type":"object"}`). `airis-find` remains available for browsing servers/tools and `airis-schema` for full schemas on demand.
 
 The `airis` CLI itself is baked into the gateway image (see `Dockerfile`, fetched from the airis-workspace GitHub release pinned via `AIRIS_VERSION`), so `airis-workspace`'s 27 tools (`workspace_init`, `workspace_gen`, `workspace_doctor`, `workspace_status`, `manifest_validate`, `manifest_apply`, `migration_execute`, etc.) are available out of the box without host installation. The gateway container mounts `${HOST_WORKSPACE_DIR:-${HOME}/github}` at `/workspace` so those tools can operate on real projects.
 
@@ -81,7 +81,7 @@ Note on JSON-RPC tolerance: airis-workspace emits `"error": null` alongside succ
 
 ## Dynamic MCP
 
-`DYNAMIC_MCP=true` (default) exposes 4 meta-tools: `airis-find` (discover tools), `airis-schema` (get input schema), `airis-workflow` (fetch a task-specific procedure by `topic`), `airis-exec` (execute any tool — the router for COLD-server tools that are not in `tools/list`). `META_TOOLS_MODE=full` adds `airis-confidence`, `airis-repo-index`, `airis-suggest`, `airis-route`. COLD servers auto-discover and auto-enable on the first `airis-exec` call.
+`DYNAMIC_MCP=true` (default) exposes 4 meta-tools — `airis-find` (discover tools/servers), `airis-schema` (get a tool's full input schema), `airis-workflow` (fetch a task-specific procedure by `topic`), `airis-exec` (compat router: execute any tool by name/`server:tool`) — plus, when `COLD_TOOLS_IN_LIST=true` (default), every discoverable COLD server's `tools_index` entries with a lazy stub schema. The primary path for a COLD tool is now a direct `tools/call` with the name learned from `tools/list`; the server auto-discovers and auto-enables on that first call, same as before. `airis-exec` is kept for clients that can't act on a bare `tools/list` name. `META_TOOLS_MODE=full` adds `airis-confidence`, `airis-repo-index`, `airis-suggest`, `airis-route`.
 
 Instructions returned on `initialize` are compiled from the `compile_to: mcp_instructions` `workflows/*.yaml` — **edit the YAML, not the Python**. Each needs `name`, `compile_to`, `priority`, and a `text:` block. Missing `text` makes it emit literal `compile_to` values (bug: 2026-04-14).
 

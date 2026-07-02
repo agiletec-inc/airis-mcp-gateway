@@ -113,6 +113,13 @@ class Settings(BaseSettings):
     # Meta-Tools Mode: "core" (3 tools: find/exec/schema) or "full" (all 7 including confidence/suggest/route)
     META_TOOLS_MODE: str = os.getenv("META_TOOLS_MODE", "core")
 
+    # COLD Tools In List: when true (default), tools/list advertises every
+    # discoverable COLD server's tools_index entries with a lazy stub
+    # schema, so clients can call them directly in one hop (issue #198).
+    # Set to false to restore the previous meta-tool-only COLD behavior for
+    # context-constrained clients.
+    COLD_TOOLS_IN_LIST: bool = os.getenv("COLD_TOOLS_IN_LIST", "true").lower() in ("true", "1", "yes")
+
     # Tool Listing Mode: "full" (all tool names) or "compact" (top 3 per server + count)
     TOOL_LISTING_MODE: str = os.getenv("TOOL_LISTING_MODE", "compact")
 

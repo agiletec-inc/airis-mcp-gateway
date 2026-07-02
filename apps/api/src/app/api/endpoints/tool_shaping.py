@@ -206,6 +206,67 @@ async def apply_prompts_merging(data: Dict[str, Any]) -> Dict[str, Any]:
     return data
 
 
+def collect_cold_discoverable_tools(process_manager) -> list[dict]:
+    """Build ``tools/list`` stub entries for every discoverable COLD server's
+    ``tools_index``, so a client that only reads ``tools/list`` can call a
+    COLD tool directly in one hop (no ``airis-find``/``airis-exec`` needed).
+
+    Naming: entries use the bare tool name exactly as stored in
+    ``tools_index`` (``tool_entry["name"]``, never ``"server:tool"``) —
+    this is what ``DynamicMCP.get_server_for_tool_from_index`` /
+    ``auto_discover_and_execute`` match against, so a listed name resolves
+    to the same server a raw ``tools/call`` would auto-discover.
+
+    Excludes ``policy_disabled`` servers via ``is_discoverable`` (issue
+    #193). Includes ``enabled=False`` COLD servers on purpose — those
+    auto-enable transparently on first call, which is the entire point of
+    listing them.
+
+    Collisions: if two servers index the same bare tool name (or a name
+    already claimed by a meta-/HOT-tool), the first occurrence wins and the
+    collision is logged once — auto-discovery itself is ambiguous for that
+    name, so listing both would be misleading either way.
+    """
+    from ...core.mcp_config_loader import ServerMode, is_discoverable
+
+    entries: list[dict] = []
+    seen_names: set[str] = set()
+
+    for name in process_manager.get_server_names():
+        config = process_manager._server_configs.get(name)
+        if not config or config.mode != ServerMode.COLD:
+            continue
+        if not is_discoverable(config):
+            continue
+
+        for tool_entry in config.tools_index or []:
+            tool_name = tool_entry.get("name")
+            if not tool_name:
+                continue
+            if tool_name in seen_names:
+                logger.warning(
+                    f"tools_index name collision for '{tool_name}' "
+                    f"(server '{name}'): keeping first occurrence, "
+                    f"auto-discovery is ambiguous for this name"
+                )
+                continue
+            seen_names.add(tool_name)
+
+            raw_description = tool_entry.get("description") or (
+                f"「{name}」server tool (auto-enables on first call)"
+            )
+            description = summarize_description(
+                raw_description, mode=settings.DESCRIPTION_MODE
+            )
+
+            entry = {"name": tool_name, "inputSchema": {"type": "object"}}
+            if description:
+                entry["description"] = description
+            entries.append(entry)
+
+    return entries
+
+
 async def _refresh_dynamic_mcp_cache(process_manager, docker_tools: list) -> None:
     """Background refresh of the Dynamic MCP cache (non-blocking)."""
     try:
@@ -296,9 +357,26 @@ async def apply_schema_partitioning(data: Dict[str, Any]) -> Dict[str, Any]:
 
         tools.extend(hot_tools_list)
 
+        # COLD servers: advertise their indexed tools directly with lazy
+        # stub schemas, so a client that only reads tools/list can call
+        # them in one hop instead of routing through airis-find/airis-exec
+        # (issue #198). Skip names already claimed by a meta-/HOT-tool.
+        cold_count = 0
+        if settings.COLD_TOOLS_IN_LIST:
+            existing_names = {t.get("name") for t in tools}
+            cold_tools_list = [
+                t for t in collect_cold_discoverable_tools(process_manager)
+                if t["name"] not in existing_names
+            ]
+            tools.extend(cold_tools_list)
+            cold_count = len(cold_tools_list)
+
         data["result"]["tools"] = tools
-        hot_count = len(tools) - meta_count
-        logger.info(f"Returning {len(tools)} tools ({meta_count} meta + {hot_count} native)")
+        hot_count = len(tools) - meta_count - cold_count
+        logger.info(
+            f"Returning {len(tools)} tools "
+            f"({meta_count} meta + {hot_count} native HOT + {cold_count} COLD stubs)"
+        )
 
         # Schedule background cache refresh (non-blocking)
         asyncio.create_task(_refresh_dynamic_mcp_cache(process_manager, docker_tools))
