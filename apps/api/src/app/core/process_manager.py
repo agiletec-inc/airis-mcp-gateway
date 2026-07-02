@@ -201,6 +201,7 @@ class ProcessManager:
 
                 success, error = await runner.ensure_ready_with_error()
                 if success:
+                    self.record_health(name, "ok")
                     # Cache tool -> server mapping
                     for tool in runner.tools:
                         tool_name = tool.get("name", "")
@@ -208,6 +209,7 @@ class ProcessManager:
                             self._tool_to_server[tool_name] = name
                     logger.info(f"Pre-warmed {name}: {len(runner.tools)} tools")
                 else:
+                    self.record_health(name, "start_failed", error or "Unknown error")
                     logger.warning(f"Failed to pre-warm {name}: {error or 'Unknown error'}")
                 return (name, success)
             except Exception as e:
@@ -441,8 +443,10 @@ class ProcessManager:
         # Ensure process is running and initialized
         success, error = await runner.ensure_ready_with_error()
         if not success:
+            self.record_health(name, "start_failed", error or "Unknown error")
             logger.error(f"Failed to start server: {name} - {error or 'Unknown error'}")
             return []
+        self.record_health(name, "ok")
 
         # Cache prompt -> server mapping
         for prompt in runner.prompts:
