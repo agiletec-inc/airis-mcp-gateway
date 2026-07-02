@@ -58,8 +58,8 @@ auto-imports.d.ts
 # Auto-generated backups
 backups/
 *.egg-info/
-uv.lock
 apps/api/.coverage
+apps/api/requirements.lock.txt
 secrets.json
 
 # Local editor installation state

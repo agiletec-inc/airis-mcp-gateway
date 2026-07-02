@@ -146,10 +146,16 @@ RUN --mount=type=cache,target=/pnpm/store,sharing=locked \
 # Copy Python API source and install. `-e .` requires the source tree, so we
 # keep the single COPY; the uv cache mount still speeds up repeat builds by
 # reusing the downloaded wheels.
+#
+# Frozen, lockfile-driven install (issue #192): `uv export --frozen` refuses
+# to re-resolve and errors if uv.lock is stale relative to pyproject.toml, so
+# the image is built from exactly the versions pinned in uv.lock (including
+# the project itself, via `-e .`) instead of a fresh resolve on every build.
 COPY apps/api /app/api-src
 WORKDIR /app/api-src
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system -e .
+    uv export --frozen --no-hashes -o requirements.lock.txt \
+    && uv pip install --system -r requirements.lock.txt
 
 # Copy config files (can be overridden by volume mounts)
 COPY mcp-config.json.example /app/mcp-config.json
