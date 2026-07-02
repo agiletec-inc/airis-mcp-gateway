@@ -105,9 +105,16 @@ async def _precache_docker_gateway_tools():
     endpoint_url = None
     event_type = None
 
+    # Signaled by the outer SSE read loop below when the Gateway's initialize
+    # response (id=1) arrives, so send_requests() can wait for that real
+    # event instead of a fixed sleep (issue #194).
+    init_response_event = asyncio.Event()
+
     async def send_requests(client, endpoint):
         """Send MCP protocol requests."""
-        await asyncio.sleep(0.3)  # Wait for stream to establish
+        # No sleep needed here: `endpoint` is only known once the outer loop
+        # has already received the Gateway's "endpoint" SSE event, which by
+        # construction means the stream is established.
 
         # Initialize
         init_request = {
@@ -125,7 +132,16 @@ async def _precache_docker_gateway_tools():
             json=init_request,
             headers={"Content-Type": "application/json"}
         )
-        await asyncio.sleep(0.2)
+
+        # Wait for the actual initialize response (id=1) on the GET stream,
+        # instead of a fixed sleep that raced under load (issue #194).
+        try:
+            await asyncio.wait_for(init_response_event.wait(), timeout=10.0)
+        except asyncio.TimeoutError:
+            logger.warning(
+                "[Startup] Timed out waiting for initialize response; "
+                "sending initialized notification anyway"
+            )
 
         # Initialized notification
         await client.post(
@@ -133,6 +149,12 @@ async def _precache_docker_gateway_tools():
             json={"jsonrpc": "2.0", "method": "notifications/initialized"},
             headers={"Content-Type": "application/json"}
         )
+        # notifications/initialized has no JSON-RPC response by protocol
+        # design, so there is no-observable-event to await here: the Docker
+        # MCP Gateway processes it asynchronously after the HTTP POST
+        # completes (documented upstream limitation, see
+        # .github/ISSUE_TEMPLATE/mcp-init-race.md). Bounded last-resort wait
+        # kept per issue #194.
         await asyncio.sleep(0.2)
 
         # tools/list
@@ -184,6 +206,10 @@ async def _precache_docker_gateway_tools():
                                     e,
                                     data_str[:200],
                                 )
+                                continue
+
+                            if data.get("id") == 1 and ("result" in data or "error" in data):
+                                init_response_event.set()
                                 continue
 
                             if data.get("id") == 2 and "result" in data:

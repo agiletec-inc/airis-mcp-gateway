@@ -78,9 +78,36 @@ POOL_TIMEOUT = 10.0
 SSE_KEEPALIVE_INTERVAL = 30.0
 INIT_CLIENT_TIMEOUT = 30.0
 STREAM_BRIDGE_READY_DELAY = 0.3
+# Bounded wait for the Gateway's initialize response to arrive on the
+# session's SSE stream (see _get_initialize_event / issue #194). Generous
+# because it only fires on the misbehaving-client fallback path, not the
+# common case.
+INIT_HANDSHAKE_TIMEOUT = 10.0
 
 # Track initialized sessions for auto-init fallback
 _initialized_sessions: set[str] = set()
+
+# Signaled by proxy_sse_stream() when the Gateway's initialize response
+# arrives for a session (see `is_initialize_response` handling below).
+# Awaited by the auto-init fallback in _proxy_jsonrpc_request() instead of
+# a fixed sleep, since that fallback has no direct visibility into the
+# Gateway's async SSE response (issue #194).
+_session_initialize_events: dict[str, asyncio.Event] = {}
+
+
+def _get_initialize_event(session_id: str) -> asyncio.Event:
+    """Get or create the initialize-response event for a session."""
+    event = _session_initialize_events.get(session_id)
+    if event is None:
+        event = asyncio.Event()
+        _session_initialize_events[session_id] = event
+    return event
+
+
+async def _cleanup_session_state(session_id: str) -> None:
+    """Drop a session's response queue and initialize-wait event together."""
+    await remove_response_queue(session_id)
+    _session_initialize_events.pop(session_id, None)
 
 # SSE stream timeout - long read timeout for long-lived connections
 SSE_TIMEOUT = httpx.Timeout(
@@ -213,7 +240,7 @@ async def proxy_sse_stream(request: Request):
                                 gateway_stream_alive = False
                                 continue
                             if captured_session_id:
-                                await remove_response_queue(captured_session_id)
+                                await _cleanup_session_state(captured_session_id)
                             return
                         except (httpx.ReadError, httpx.RemoteProtocolError, httpx.ConnectError) as e:
                             if task is gateway_task:
@@ -224,7 +251,7 @@ async def proxy_sse_stream(request: Request):
                             # Client disconnected - this is normal, exit gracefully
                             logger.info(f"Client disconnected: {type(e).__name__}")
                             if captured_session_id:
-                                await remove_response_queue(captured_session_id)
+                                await _cleanup_session_state(captured_session_id)
                             return
                         except httpx.ReadTimeout:
                             if task is gateway_task:
@@ -234,7 +261,7 @@ async def proxy_sse_stream(request: Request):
                                 continue
                             logger.info(f"SSE read timeout (session={captured_session_id})")
                             if captured_session_id:
-                                await remove_response_queue(captured_session_id)
+                                await _cleanup_session_state(captured_session_id)
                             return
                         except httpx.TimeoutException as e:
                             if task is gateway_task:
@@ -245,7 +272,7 @@ async def proxy_sse_stream(request: Request):
                             # Other timeout (connect, pool, etc.)
                             logger.info(f"Timeout exception: {type(e).__name__}")
                             if captured_session_id:
-                                await remove_response_queue(captured_session_id)
+                                await _cleanup_session_state(captured_session_id)
                             return
 
                         if source == "tick":
@@ -336,6 +363,13 @@ async def proxy_sse_stream(request: Request):
                                     logger.info(f"Detected initialize response, sending initialized notification to Gateway")
                                     await protocol_logger.log_message("server→client", json_data, {"phase": "initialize"})
 
+                                    # Wake anyone awaiting this session's initialize
+                                    # response (e.g. the auto-init fallback in
+                                    # _proxy_jsonrpc_request()) instead of relying
+                                    # on a fixed sleep budget (issue #194).
+                                    if captured_session_id:
+                                        _get_initialize_event(captured_session_id).set()
+
                                     # POST notifications/initialized to Gateway
                                     initialized_notification = {
                                         "jsonrpc": "2.0",
@@ -374,7 +408,7 @@ async def proxy_sse_stream(request: Request):
                             pass
                 # Cleanup session queue
                 if captured_session_id:
-                    await remove_response_queue(captured_session_id)
+                    await _cleanup_session_state(captured_session_id)
                 logger.info(f"SSE stream cleanup complete (session={captured_session_id})")
 
 
@@ -722,9 +756,18 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
                 else:
                     logger.info(f"Initialize request accepted: {init_response.status_code}")
 
-                    # Wait for Gateway to process initialize request
-                    # This delay is critical - Gateway needs time to set up session state
-                    await asyncio.sleep(0.15)
+                    # Wait for the Gateway's actual initialize response instead
+                    # of a fixed sleep. proxy_sse_stream() — running concurrently
+                    # on the client's already-open GET /sse for this session —
+                    # sets this event the moment that response arrives (issue #194).
+                    init_event = _get_initialize_event(session_id)
+                    try:
+                        await asyncio.wait_for(init_event.wait(), timeout=INIT_HANDSHAKE_TIMEOUT)
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            f"Timed out waiting for initialize response for session {session_id}; "
+                            "proceeding with initialized notification anyway"
+                        )
 
                     # Step 2: Send notifications/initialized
                     # Per MCP spec, this should come after initialize response, but in SSE transport
@@ -740,7 +783,13 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
                     )
 
                     if notif_response.status_code in (200, 202):
-                        # Wait for Gateway to complete initialization before allowing tools/call
+                        # notifications/initialized is a JSON-RPC notification —
+                        # by protocol design it has no response, so there is
+                        # no-observable-event we can await here: the Docker MCP
+                        # Gateway processes it asynchronously after the HTTP
+                        # POST completes (documented upstream limitation, see
+                        # .github/ISSUE_TEMPLATE/mcp-init-race.md). Bounded
+                        # last-resort wait kept per issue #194.
                         await asyncio.sleep(0.10)
                         _initialized_sessions.add(session_id)
                         logger.info(f"Session {session_id} initialized successfully")
