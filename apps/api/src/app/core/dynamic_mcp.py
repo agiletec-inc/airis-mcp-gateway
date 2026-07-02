@@ -55,8 +55,6 @@ class DynamicMCP:
         self._tool_to_server: dict[str, str] = {}  # tool_name -> server_name
         self._toolsets: dict[str, ToolsetInfo] = {}  # toolset_ref -> ToolsetInfo
         self._tool_to_toolsets: dict[str, set[str]] = {}  # tool_name -> toolset refs
-        self._active_toolsets: set[str] = set()
-        self._active_tools: set[str] = set()
 
     async def refresh_cache(
         self,
@@ -625,72 +623,6 @@ class DynamicMCP:
         if not text or len(text) <= max_length:
             return text
         return text[:max_length - 1] + "…"
-
-    async def activate_toolset(self, toolset_ref: str, process_manager) -> dict[str, Any]:
-        """Activate a toolset and load its live tool definitions when possible."""
-        if not self._toolsets:
-            self.refresh_toolsets(process_manager)
-
-        selected: list[ToolsetInfo] = []
-        if toolset_ref in self._toolsets:
-            selected = [self._toolsets[toolset_ref]]
-        else:
-            by_server = [info for info in self._toolsets.values() if info.server == toolset_ref]
-            if by_server:
-                selected = by_server
-
-        if not selected:
-            return {"ok": False, "message": f"Unknown toolset: {toolset_ref}"}
-
-        activated_tools: list[str] = []
-        activated_toolsets: list[str] = []
-        activated_servers: list[str] = []
-
-        for toolset in selected:
-            config = process_manager._server_configs.get(toolset.server)
-            if config and not config.enabled:
-                await process_manager.enable_server(toolset.server)
-                activated_servers.append(toolset.server)
-
-            if process_manager.is_process_server(toolset.server):
-                await self.load_tools_for_server(toolset.server, process_manager, force_enable=True)
-
-            self._active_toolsets.add(toolset.ref)
-            activated_toolsets.append(toolset.ref)
-            for tool_name in toolset.tools:
-                self._active_tools.add(tool_name)
-                activated_tools.append(tool_name)
-
-        return {
-            "ok": True,
-            "toolsets": activated_toolsets,
-            "tools": sorted(set(activated_tools)),
-            "servers": sorted(set(activated_servers)),
-        }
-
-    def get_active_tool_definitions(
-        self,
-        excluded_servers: set[str] | None = None,
-        excluded_tool_names: set[str] | None = None,
-    ) -> list[dict[str, Any]]:
-        """Return tool definitions with lazy schemas for all activated tools."""
-        excluded_servers = excluded_servers or set()
-        excluded_tool_names = excluded_tool_names or set()
-        definitions: list[dict[str, Any]] = []
-
-        for tool_name in sorted(self._active_tools):
-            if tool_name in excluded_tool_names:
-                continue
-            info = self._tools.get(tool_name)
-            if not info or info.server in excluded_servers:
-                continue
-            # Lazy Schema Implementation: stub inputSchema to minimize context window impact
-            definitions.append({
-                "name": info.name,
-                "description": info.description or f"{info.server}:{info.name}",
-                "inputSchema": {"type": "object"},
-            })
-        return definitions
 
     def get_meta_tools(self, mode: str = "core") -> list[dict]:
         """

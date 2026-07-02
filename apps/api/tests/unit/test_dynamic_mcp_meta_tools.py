@@ -7,13 +7,11 @@ Guards:
   definition, making the file unparseable).
 - Core mode must yield four tools (airis-find, airis-schema, airis-workflow,
   airis-exec); full mode must add the four optional meta-tools.
-- Lazy Schema: active tool definitions must expose stub `{"type": "object"}`
-  inputSchemas so the client never ingests the backend's full JSON schema.
 """
 import ast
 from pathlib import Path
 
-from app.core.dynamic_mcp import DynamicMCP, ToolInfo
+from app.core.dynamic_mcp import DynamicMCP
 
 SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "app"
 DYNAMIC_MCP_PATH = SRC_ROOT / "core" / "dynamic_mcp.py"
@@ -83,32 +81,3 @@ def test_airis_exec_is_core_router():
     assert "airis-exec" in core, "airis-exec must be advertised so clients can call COLD tools"
     assert core["airis-exec"]["inputSchema"]["required"] == ["tool"]
     assert "airis-activate" not in core, "airis-activate is not re-exposed (airis-exec suffices)"
-
-
-def test_active_tool_definitions_use_lazy_schema():
-    """Active tool definitions must expose stub schemas, not the backend's full schema.
-
-    This is the core Lazy Schema invariant: clients see names only, the full
-    schema is only retrieved via airis-schema or as an error payload on -32602.
-    """
-    mcp = DynamicMCP()
-    mcp._tools["stripe:create_customer"] = ToolInfo(
-        name="stripe:create_customer",
-        server="stripe",
-        description="Create a customer",
-        input_schema={
-            "type": "object",
-            "properties": {"email": {"type": "string"}, "name": {"type": "string"}},
-            "required": ["email"],
-        },
-        source="process",
-    )
-    mcp._active_tools.add("stripe:create_customer")
-
-    defs = mcp.get_active_tool_definitions()
-    assert len(defs) == 1
-    assert defs[0]["name"] == "stripe:create_customer"
-    assert defs[0]["inputSchema"] == {"type": "object"}, (
-        "Active tool inputSchema must be stubbed to {'type':'object'} to keep "
-        "the client context small; the full schema is served via airis-schema."
-    )

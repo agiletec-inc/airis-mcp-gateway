@@ -113,7 +113,6 @@ services:
     environment:
       - MCP_GATEWAY_URL=http://docker-mcp-gateway:9390
       - MCP_CONFIG_PATH=/app/mcp-config.json
-      - GATEWAY_CONFIG_PATH=/app/config/gateway-config.yaml
       # Dynamic MCP: exposes only meta-tools instead of all tools
       # reduces context token usage by ~98%. Set to "false" to expose all tools directly
       - DYNAMIC_MCP=${DYNAMIC_MCP:-true}
@@ -147,7 +146,6 @@ services:
       - ./mcp-config.json:/app/mcp-config.json:ro
       - ./routing-table.json:/app/routing-table.json:ro
       - ./workflows:/app/workflows:ro
-      - ./config/gateway-config.yaml:/app/config/gateway-config.yaml:ro
       - ./profiles:/app/profiles:rw
       # Host workspace for airis-workspace tools (workspace_init / workspace_status etc.).
       # Same convention as the docker-mcp-gateway service above.

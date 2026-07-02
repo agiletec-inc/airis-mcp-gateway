@@ -7,8 +7,8 @@ must never route agents to a server that doesn't exist in the registry, or
 that exists but is `enabled: false` there (unless the text explicitly warns
 that the server is disabled).
 
-Scope note: `config/gateway-config.yaml` is intentionally EXCLUDED from this
-scan. It is slated for removal in issue #196 and is out of scope here.
+Scope note: `config/gateway-config.yaml` was removed in issue #196 (dead
+config, nothing in `apps/api/src` ever read it); no longer relevant here.
 """
 from __future__ import annotations
 
