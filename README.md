@@ -165,7 +165,7 @@ Claude / Gemini / Cursor / Windsurf
 | **airis-workspace** | Docker-first workspace lifecycle (`manifest.toml` → `airis gen` → `airis up/test/...`) |
 | **airis-mcp-gateway-control** | Manage this gateway (servers, config, health) from inside the agent |
 
-### Enabled COLD — start on first tool call, auto-terminate when idle
+### COLD — listed in `tools/list` (lazy stub schema), start on first tool call, auto-terminate when idle
 
 | Server | Description |
 |--------|-------------|
@@ -183,19 +183,19 @@ Claude / Gemini / Cursor / Windsurf
 | **serena** | Semantic code retrieval and editing |
 | **morphllm** | Code editing with warpgrep |
 | **sequential-thinking** | Step-by-step reasoning |
-
-### Disabled — not registered, no advertised tools
-
-| Server | Description |
-|--------|-------------|
 | **postgres** | Direct PostgreSQL access |
-| **supabase** | Supabase database management — disabled, never authorized for this deployment |
-| **mindbase** | Local memory substrate (pgvector + Ollama) — disabled, never authorized for this deployment |
 | **filesystem** | File system operations |
 | **git** | Git operations |
 | **time** | Time utilities |
 
-Source of truth: [`mcp-config.json`](./mcp-config.json). HOT servers are always listed in `tools/list`; COLD servers are discovered via `airis-find` and called through `airis-exec`, which auto-enables the server on first call — no manual setup needed.
+### Policy-disabled — never advertised, never run
+
+| Server | Description |
+|--------|-------------|
+| **supabase** | Supabase database management — disabled, never authorized for this deployment |
+| **mindbase** | Local memory substrate (pgvector + Ollama) — disabled, never authorized for this deployment |
+
+Source of truth: [`mcp-config.json`](./mcp-config.json). HOT servers are always listed in `tools/list` with full schema. COLD servers are also listed directly, with a lazy stub schema (`{"type":"object"}`) — a client can call one by name straight from `tools/list` and it auto-enables on first call, no `airis-find`/`airis-exec` hop needed. `airis-find`/`airis-schema` remain available for browsing servers and fetching full schemas; `airis-exec` remains as a compat router for clients that can't act on a bare `tools/list` name.
 
 </details>
 
