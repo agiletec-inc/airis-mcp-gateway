@@ -12,6 +12,7 @@
         "MINDBASE_URL": "${MINDBASE_URL:-http://localhost:18003}"
       },
       "enabled": true,
+      "policy_disabled": true,
       "mode": "hot",
       "description": "Long-term memory with semantic search"
     },
@@ -112,6 +113,7 @@
       "args": ["-y", "mcp-remote", "https://mcp.supabase.com/mcp"],
       "env": {},
       "enabled": false,
+      "policy_disabled": true,
       "mode": "cold",
       "description": "Supabase: database, migrations, Edge Functions (OAuth)"
     }

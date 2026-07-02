@@ -88,8 +88,8 @@ tool's argument schema before calling `airis-exec`.
 | State | Behavior | Examples |
 |-------|----------|----------|
 | **HOT** | Pre-warmed at startup, always listed in `tools/list`, never idle-killed | `context7`, `airis-mcp-gateway-control`, `airis-workspace` |
-| **COLD** | Started on first tool call, stopped after idle timeout, restarted transparently | Stripe, Supabase, Tavily, Cloudflare, browser automation |
-| **Disabled** | Gated by policy or absent credentials | dangerous write/admin integrations, niche providers |
+| **COLD** | Started on first tool call, stopped after idle timeout, restarted transparently | Stripe, Tavily, browser automation |
+| **Disabled** | Gated by policy or absent credentials | Supabase (never authorized), dangerous write/admin integrations, niche providers |
 
 ```
 Claude Code
@@ -159,10 +159,10 @@ Rather than exposing every tool from a large server up front, expose a small num
 coherent capability slices:
 
 - `stripe.customers`, `stripe.payments`, `stripe.billing`
-- `supabase.sql`, `supabase.auth`, `supabase.storage`
+- `github.issues`, `github.prs`, `github.repos`
 
 Tools remain the actual call boundary (`stripe:create_customer`,
-`supabase:execute_sql`) — toolsets are only the exposure boundary. This preserves
+`github:create_issue`) — toolsets are only the exposure boundary. This preserves
 precision while avoiding the cost of showing every tool at startup.
 
 ### Target request flow

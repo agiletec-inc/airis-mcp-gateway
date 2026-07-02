@@ -51,7 +51,7 @@ from ...core.behavior_compiler import compile_instructions
 from ...core.config import settings
 from ...core.dynamic_mcp import get_dynamic_mcp, inject_schema_on_validation_error
 from ...core.logging import get_logger
-from ...core.mcp_config_loader import ServerMode
+from ...core.mcp_config_loader import ServerMode, is_discoverable
 from ...core.process_manager import get_process_manager
 from ...core.protocol_logger import protocol_logger
 from ...core.schema_partitioning import schema_partitioner
@@ -1075,7 +1075,11 @@ async def handle_airis_find(rpc_request: Dict[str, Any], session_id: Optional[st
     has_process_servers = any(s.source == "process" for s in dynamic_mcp._servers.values())
     if not has_process_servers:
         logger.info("Server cache empty, refreshing...")
-        # Cache server info for ALL servers (including COLD and disabled)
+        # Cache server info for ALL servers (including COLD and disabled).
+        # Tool discovery below is narrower: policy_disabled servers (e.g.
+        # supabase, mindbase) are excluded so airis-find never advertises
+        # tools that must never run. Plain enabled=False COLD servers (e.g.
+        # stripe) still surface — they auto-enable on first call.
         index_count = 0
         for name in process_manager.get_server_names():
             status = process_manager.get_server_status(name)
@@ -1086,9 +1090,9 @@ async def handle_airis_find(rpc_request: Dict[str, Any], session_id: Optional[st
                 tools_count=status.get("tools_count", 0),
                 source="process"
             )
-            # Also cache tools_index entries for COLD/disabled servers
+            # Also cache tools_index entries for discoverable COLD/disabled servers
             config = process_manager._server_configs.get(name)
-            if config and config.tools_index:
+            if config and is_discoverable(config) and config.tools_index:
                 for tool_entry in config.tools_index:
                     tool_name = tool_entry.get("name", "")
                     if tool_name and tool_name not in dynamic_mcp._tools:
@@ -1382,6 +1386,23 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
         )
     if process_manager.is_process_server(server_name):
         config = process_manager._server_configs.get(server_name)
+
+        # Policy-disabled servers (e.g. supabase, mindbase) must never run,
+        # even via COLD auto-enable — refuse before touching the process.
+        if config and getattr(config, "policy_disabled", False):
+            logger.warning(f"Refused auto-enable of policy-disabled server for airis-exec: {server_name}")
+            return Response(
+                content=json.dumps({
+                    "jsonrpc": "2.0",
+                    "id": rpc_request.get("id"),
+                    "error": {
+                        "code": -32001,
+                        "message": f"server '{server_name}' is policy-disabled and cannot be auto-enabled"
+                    }
+                }),
+                status_code=200,
+                media_type="application/json"
+            )
 
         # Auto-enable COLD mode servers on first airis-exec call
         if config and config.mode == ServerMode.COLD and not config.enabled:

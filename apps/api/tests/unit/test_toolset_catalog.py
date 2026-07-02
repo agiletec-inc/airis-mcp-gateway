@@ -11,6 +11,8 @@ from app.core.toolset_catalog import build_toolset_index
 @dataclass
 class _FakeConfig:
     tools_index: list[dict]
+    enabled: bool = True
+    policy_disabled: bool = False
 
 
 def _stub_seed_catalog(seed: dict | None = None):
@@ -120,6 +122,47 @@ def test_tools_outside_indexed_list_are_ignored_from_seed():
         result = build_toolset_index(configs)
 
     assert result["stripe.payments"].tools == ["create_payment"]
+
+
+def test_policy_disabled_server_is_excluded_from_toolset_index():
+    """Policy-disabled servers must never surface tools in the discoverable
+    catalog (issue #193 review: airis-find was advertising tools of
+    policy_disabled servers like supabase/mindbase)."""
+    configs = {
+        "supabase": _FakeConfig(
+            enabled=False,
+            policy_disabled=True,
+            tools_index=[{"name": "query"}, {"name": "list_tables"}],
+        ),
+        "github": _FakeConfig(
+            enabled=True,
+            tools_index=[{"name": "get_issue"}],
+        ),
+    }
+    with _stub_seed_catalog({}):
+        result = build_toolset_index(configs)
+
+    assert list(result.keys()) == ["github.default"]
+    assert "supabase.default" not in result
+
+
+def test_cold_lazy_server_disabled_but_not_policy_disabled_is_included():
+    """Regression guard for the PR #201 revert: COLD servers that are
+    `enabled: false` at rest but auto-enable transparently on first
+    airis-exec call (e.g. stripe) must still surface in the discoverable
+    toolset index — hiding them would break discover-then-auto-start."""
+    configs = {
+        "stripe": _FakeConfig(
+            enabled=False,
+            policy_disabled=False,
+            tools_index=[{"name": "create_payment"}],
+        ),
+    }
+    with _stub_seed_catalog({}):
+        result = build_toolset_index(configs)
+
+    assert "stripe.default" in result
+    assert result["stripe.default"].tools == ["create_payment"]
 
 
 def test_toolsets_with_no_matching_tools_are_skipped():

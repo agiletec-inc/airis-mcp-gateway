@@ -82,22 +82,6 @@
       }
     }
   },
-  "cloudflare": {
-    "toolsets": {
-      "kv": {
-        "summary": "Cloudflare KV operations",
-        "tools": ["cloudflare_kv_get", "cloudflare_kv_put"]
-      },
-      "workers": {
-        "summary": "Cloudflare Workers inspection",
-        "tools": ["cloudflare_workers_list"]
-      },
-      "dns": {
-        "summary": "Cloudflare DNS inspection",
-        "tools": ["cloudflare_dns_records_list"]
-      }
-    }
-  },
   "github": {
     "toolsets": {
       "issues": {

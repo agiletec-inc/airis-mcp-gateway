@@ -60,6 +60,11 @@ class McpServerConfig:
     args: list[str]
     env: dict[str, str]
     enabled: bool
+    # Hard policy gate: True means the server must NEVER run, even via COLD
+    # auto-enable (e.g. supabase, mindbase). Distinct from `enabled=False`,
+    # which just means "not started yet" for COLD/lazy servers (e.g. stripe)
+    # that auto-enable transparently on first tool call.
+    policy_disabled: bool = False
     mode: ServerMode = ServerMode.COLD  # Default to cold
     cwd: Optional[str] = None
     runner: Optional[str] = None  # "local" or "remote" for profile-based servers
@@ -96,6 +101,19 @@ class McpServerConfig:
         if self.adaptive_ttl_enabled is not None:
             config.adaptive_ttl_enabled = self.adaptive_ttl_enabled
         return config
+
+
+def is_discoverable(config) -> bool:
+    """
+    Whether a server's tools may surface in discovery indexes (airis-find,
+    toolset catalog, airis-exec listing).
+
+    Only `policy_disabled` servers (never authorized to run, e.g. supabase,
+    mindbase) are excluded. Plain `enabled=False` COLD/lazy servers (e.g.
+    stripe) remain discoverable — they auto-enable transparently on first
+    call, so hiding them from discovery would break that flow.
+    """
+    return not getattr(config, "policy_disabled", False)
 
 
 def classify_server_type(command: str) -> ServerType:
@@ -160,6 +178,7 @@ def load_mcp_config(config_path: Optional[str] = None) -> dict[str, McpServerCon
     for name, server_def in mcp_servers.items():
         env = server_def.get("env", {})
         enabled = server_def.get("enabled", False)
+        policy_disabled = server_def.get("policy_disabled", False)
         mode_str = server_def.get("mode", "cold")
 
         # Check for profile-based configuration
@@ -225,6 +244,7 @@ def load_mcp_config(config_path: Optional[str] = None) -> dict[str, McpServerCon
             args=expanded_args,
             env=expanded_env,
             enabled=enabled,
+            policy_disabled=policy_disabled,
             mode=mode,
             runner=runner,
             idle_timeout=idle_timeout,

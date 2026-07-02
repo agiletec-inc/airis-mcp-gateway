@@ -6,5 +6,6 @@ servers:
 
 text: |
   ### Database Operations
-  WHEN querying, modifying, or analyzing database data:
-  1. Call supabase:query with the appropriate SQL statement
+  The supabase MCP server is disabled by default (not authorized for this
+  deployment). Do not call supabase:query or any supabase:* tool unless a
+  human has explicitly enabled it in mcp-config.json for this environment.

@@ -20,7 +20,8 @@ from app.core.mcp_config_loader import McpServerConfig, ServerMode
 
 
 def _make_config(name: str, *, enabled: bool = True, mode=ServerMode.COLD,
-                 tools_index: list[dict] | None = None) -> McpServerConfig:
+                 tools_index: list[dict] | None = None,
+                 policy_disabled: bool = False) -> McpServerConfig:
     return McpServerConfig(
         name=name,
         server_type="process",
@@ -28,6 +29,7 @@ def _make_config(name: str, *, enabled: bool = True, mode=ServerMode.COLD,
         args=["test-server"],
         env={},
         enabled=enabled,
+        policy_disabled=policy_disabled,
         mode=mode,
         tools_index=tools_index or [],
     )
@@ -267,6 +269,52 @@ def test_unknown_tool_falls_through_to_gateway(monkeypatch):
     )
     assert resp.status_code == 503
     assert len(fallthrough_called) == 1, "Expected fallthrough to stream bridge"
+
+
+def test_policy_disabled_server_refuses_auto_enable(monkeypatch):
+    """A tools/call for a tool on a policy_disabled server (e.g. supabase,
+    mindbase) must be refused with a JSON-RPC error and must NOT actually
+    enable/start the server (issue #193 review finding 1)."""
+    pm = ProcessManager()
+    pm._initialized = True
+    pm._server_configs["supabase"] = _make_config(
+        "supabase", mode=ServerMode.COLD, enabled=False, policy_disabled=True,
+        tools_index=[{"name": "query", "description": "Execute a SQL query"}],
+    )
+    _wire_process_manager(pm)
+
+    call_log = []
+
+    async def fake_enable_server(name):
+        call_log.append(f"enable:{name}")
+
+    async def fake_call_tool_on_server(server_name, tool_name, arguments):
+        call_log.append(f"call:{server_name}:{tool_name}")
+        return {"result": {"content": [{"type": "text", "text": "should not be reached"}]}}
+
+    monkeypatch.setattr(pm, "enable_server", fake_enable_server)
+    monkeypatch.setattr(pm, "call_tool_on_server", fake_call_tool_on_server)
+
+    dmcp = DynamicMCP()
+
+    tc = _make_client(pm, dmcp, monkeypatch)
+
+    resp = tc.post(
+        "/mcp/",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "query", "arguments": {}},
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "error" in body
+    assert "policy-disabled" in body["error"]["message"]
+    assert "supabase" in body["error"]["message"]
+    assert call_log == [], "server must never be enabled or called when policy_disabled"
+    assert pm._server_configs["supabase"].enabled is False
 
 
 def test_auto_discovery_error_handling(monkeypatch):
