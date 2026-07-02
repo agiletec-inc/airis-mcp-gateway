@@ -97,11 +97,13 @@ jobs:
 
       - name: Run tests with coverage
         # --cov-fail-under is a regression ratchet, not the end goal. It must
-        # never be lowered — raise it as coverage improves. Target is 70%
-        # (issue #85); bump this number in the same PR that adds the tests.
+        # never be lowered — raise it as coverage improves. Do not chase a
+        # fixed target with filler tests; bump this number in the same PR
+        # that legitimately adds coverage (issue #195: raised from 48 to 52,
+        # actual measured coverage was 54.15% at the time).
         run: |
           cd apps/api
-          python -m pytest tests/unit -v --tb=short --cov=src --cov-report=xml --cov-report=term-missing --cov-fail-under=48
+          python -m pytest tests/unit -v --tb=short --cov=src --cov-report=xml --cov-report=term-missing --cov-fail-under=52
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6

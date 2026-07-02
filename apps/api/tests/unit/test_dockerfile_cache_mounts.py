@@ -27,13 +27,18 @@ TS_APPS = ["gateway-control", "airis-commands"]
 
 # CI runs pytest from a full repo checkout; inside the api container only
 # apps/api/src is available, so the Dockerfile path does not resolve. Skip
-# the module so the Docker-internal smoke run stays green; CI is the
+# the module there so the Docker-internal smoke run stays green; CI is the
 # authoritative gate.
-if not DOCKERFILE.exists():
+#
+# The skip condition checks `.git` (an environment signal independent of the
+# guarded file), NOT `DOCKERFILE.exists()` itself. If it checked the guarded
+# file directly, a real regression (Dockerfile deleted/moved in a full
+# checkout) would silently skip instead of failing (issue #195).
+if not (REPO_ROOT / ".git").exists():
     pytest.skip(
-        f"Dockerfile not reachable from {DOCKERFILE} — likely running inside "
-        "the api container, skipping. CI on a full repo checkout provides "
-        "the real gate.",
+        f"{REPO_ROOT} is not a full repo checkout (no .git) — likely running "
+        "inside the api container, skipping. CI on a full repo checkout "
+        "provides the real gate.",
         allow_module_level=True,
     )
 

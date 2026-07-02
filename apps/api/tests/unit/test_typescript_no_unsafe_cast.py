@@ -31,7 +31,12 @@ TS_APPS = [
 # Inside the api container only apps/api is COPYed, so the TS sources are
 # unreachable. CI checks out the full repo, where these paths resolve; that
 # is the authoritative gate.
-if not all(p.exists() for p in TS_APPS):
+#
+# The skip condition checks `.git` (an environment signal independent of the
+# guarded files), NOT the TS_APPS paths themselves. If it checked the
+# guarded files directly, a real regression (a TS app moved/deleted in a
+# full checkout) would silently skip instead of failing (issue #195).
+if not (REPO_ROOT / ".git").exists():
     pytest.skip(
         "TypeScript app sources not reachable — likely running inside the "
         "api container, skipping. CI on a full repo checkout provides the "
