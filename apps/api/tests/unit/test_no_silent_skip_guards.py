@@ -31,7 +31,9 @@ THIS_FILE = Path(__file__).resolve()
 # Substrings that, if present in the unparsed `.exists()`-checked expression,
 # mark the skip as a legitimate environment-signal check rather than a
 # guarded-artifact check.
-ALLOWED_SIGNAL_MARKERS = (".git",)
+# Quoted literals so `.github`/`.gitignore` (guarded artifacts, not
+# environment signals) can never substring-match the allowlist.
+ALLOWED_SIGNAL_MARKERS = ('".git"', "'.git'")
 
 
 def _is_exists_check(node: ast.expr) -> bool:
