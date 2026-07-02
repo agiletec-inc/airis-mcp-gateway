@@ -103,6 +103,7 @@ class DynamicMCP:
                         new_tool_to_server[tool_name] = name
             except Exception as e:
                 logger.error(f"Failed to cache tools for {name}: {e}")
+                process_manager.record_health(name, "list_failed", str(e))
 
         # Cache Docker MCP Gateway tools
         docker_server_tools: dict[str, int] = {}  # server_name -> tools_count
@@ -195,6 +196,7 @@ class DynamicMCP:
                             new_tool_to_server[tool_name] = name
                 except Exception as e:
                     logger.error(f"Failed to cache HOT tools for {name}: {e}")
+                    process_manager.record_health(name, "list_failed", str(e))
 
         # Cache Docker MCP Gateway tools
         docker_server_tools: dict[str, int] = {}
@@ -375,6 +377,7 @@ class DynamicMCP:
             return tools
         except Exception as e:
             logger.error(f"Failed to load tools from {server_name}: {e}")
+            process_manager.record_health(server_name, "list_failed", str(e))
             return []
 
     def _infer_server_name(self, tool_name: str) -> str:
@@ -405,7 +408,8 @@ class DynamicMCP:
         self,
         query: Optional[str] = None,
         server: Optional[str] = None,
-        limit: int = 20
+        limit: int = 20,
+        process_manager=None,
     ) -> dict[str, Any]:
         """
         Search for tools and servers.
@@ -414,6 +418,10 @@ class DynamicMCP:
             query: Search query (matches tool name, description, server name)
             server: Filter by server name
             limit: Max results to return
+            process_manager: If given, matched tools whose server is in a
+                failure health state get a "server_status"/"server_error"
+                annotation so the caller sees "found but currently broken"
+                instead of the tool silently vanishing.
 
         Returns:
             Dict with matched servers and tools
@@ -492,11 +500,18 @@ class DynamicMCP:
                 if not (substring_match or keyword_match):
                     continue
 
-            matched_tools.append({
+            tool_result = {
                 "name": info.name,
                 "server": info.server,
                 "description": self._truncate(info.description, 100),
-            })
+            }
+            if process_manager is not None:
+                health = process_manager.get_server_health(info.server)
+                if health.status not in ("ok", "not_started"):
+                    tool_result["server_status"] = health.status
+                    if health.last_error:
+                        tool_result["server_error"] = self._truncate(health.last_error, 200)
+            matched_tools.append(tool_result)
 
             if len(matched_tools) >= limit:
                 break

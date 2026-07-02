@@ -517,6 +517,32 @@ async def health():
     return {"status": "healthy"}
 
 
+@app.get("/health/servers")
+async def health_servers():
+    """
+    Per-server health map — surfaces upstream failures that otherwise only
+    show up as a log line while the server silently vanishes from
+    tools/list / airis-find (issue #197).
+
+    Read-only, no auth change (matches /health, /ready — localhost-only gateway).
+    """
+    manager = get_process_manager()
+    servers = {}
+    for name in manager.get_server_names():
+        config = manager._server_configs.get(name)
+        health_record = manager.get_server_health(name)
+        servers[name] = {
+            "name": name,
+            "mode": config.mode.value if config else None,
+            "enabled": config.enabled if config else False,
+            "policy_disabled": getattr(config, "policy_disabled", False) if config else False,
+            "status": health_record.status,
+            "last_error": health_record.last_error,
+            "last_checked": health_record.last_checked,
+        }
+    return {"servers": servers}
+
+
 @app.get("/ready")
 async def ready():
     """

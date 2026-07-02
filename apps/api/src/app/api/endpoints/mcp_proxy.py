@@ -1216,7 +1216,7 @@ async def handle_airis_find(rpc_request: Dict[str, Any], session_id: Optional[st
                 dynamic_mcp._servers[server].tools_count = len(server_tools)
             logger.info(f"Loaded {len(server_tools)} tools from '{server}'")
 
-    results = dynamic_mcp.find(query=query, server=server)
+    results = dynamic_mcp.find(query=query, server=server, process_manager=process_manager)
 
     # Format results as text for LLM consumption
     lines = []
@@ -1238,7 +1238,10 @@ async def handle_airis_find(rpc_request: Dict[str, Any], session_id: Optional[st
     if results['tools']:
         lines.append("## Tools")
         for t in results['tools']:
-            lines.append(f"- **{t['server']}:{t['name']}** - {t['description']}")
+            line = f"- **{t['server']}:{t['name']}** - {t['description']}"
+            if t.get("server_status"):
+                line += f" [⚠ {t['server_status']}: {t.get('server_error', 'no details')}]"
+            lines.append(line)
 
     if not results['tools'] and not results['servers'] and not results.get('toolsets'):
         lines.append("No matches found. Try a different query or use airis-find without arguments to list all.")
@@ -1373,6 +1376,17 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
             inner_error = result.get("error") if isinstance(result, dict) else None
             if inner_error is not None:
                 error_msg = inner_error.get("message", "")
+                # Enrich with the recorded health cause when the server itself
+                # couldn't be reached (e.g. missing API key, dead command),
+                # instead of surfacing a bare "failed to initialize".
+                health = process_manager.get_server_health(server_name)
+                if health.status in ("start_failed", "list_failed") and health.last_error:
+                    error_msg = (
+                        f"{error_msg}\n\nServer '{server_name}' health: {health.status} "
+                        f"— {health.last_error}\nHint: check the server's command/env "
+                        f"configuration in mcp-config.json."
+                    )
+                    inner_error["message"] = error_msg
                 # Attach schema hint so LLM can retry with correct arguments
                 schema_hint = None
                 tool_info = dynamic_mcp._tools.get(tool_name)

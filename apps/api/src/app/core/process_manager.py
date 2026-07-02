@@ -10,6 +10,8 @@ Provides:
 """
 
 import asyncio
+import time
+from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Optional
 
 from .process_runner import ProcessRunner, ProcessConfig, ProcessState
@@ -32,6 +34,22 @@ STATE_CHANGE_DISABLED = "disabled"
 STATE_CHANGE_IDLE_KILLED = "idle_killed"
 
 StateChangeListener = Callable[[str, str], Awaitable[None]]
+
+# Stored error strings are truncated to this length to avoid unbounded
+# memory growth if an upstream server repeatedly fails with a large payload.
+_HEALTH_ERROR_MAX_LEN = 300
+
+
+@dataclass
+class ServerHealth:
+    """Per-server health record surfaced via /health/servers and airis-find.
+
+    status: "ok" | "start_failed" | "list_failed" | "policy_disabled" |
+            "disabled" | "not_started"
+    """
+    status: str = "not_started"
+    last_error: Optional[str] = None
+    last_checked: Optional[float] = None
 
 
 class ProcessManager:
@@ -60,6 +78,7 @@ class ProcessManager:
         self._tool_to_server: dict[str, str] = {}  # tool_name -> server_name
         self._prompt_to_server: dict[str, str] = {}  # prompt_name -> server_name
         self._server_locks: dict[str, asyncio.Lock] = {}  # per-server locks
+        self._health: dict[str, ServerHealth] = {}  # server_name -> ServerHealth
         self._initialized = False
         # Listeners for HOT-set membership changes. Invoked whenever a server
         # is enabled, disabled, or idle-killed so the proxy layer can emit
@@ -84,6 +103,27 @@ class ProcessManager:
                     f"state-change listener failed ({event} on {server_name}): {exc}"
                 )
 
+    def record_health(self, name: str, status: str, error: Optional[str] = None) -> None:
+        """Record a server's health status.
+
+        Called wherever an upstream failure (or its recovery) is observed —
+        start failures, tool-listing exceptions, policy/enable state changes.
+        Error text is truncated to avoid unbounded memory from repeated
+        large failure payloads.
+        """
+        truncated = error[:_HEALTH_ERROR_MAX_LEN] if error else None
+        self._health[name] = ServerHealth(
+            status=status, last_error=truncated, last_checked=time.time()
+        )
+
+    def get_server_health(self, name: str) -> ServerHealth:
+        """Get the health record for a server (defaults to not_started)."""
+        return self._health.get(name, ServerHealth())
+
+    def get_all_health(self) -> dict[str, ServerHealth]:
+        """Get the full per-server health map."""
+        return dict(self._health)
+
     async def initialize(self):
         """Load config and prepare runners (but don't start processes yet)."""
         if self._initialized:
@@ -101,6 +141,9 @@ class ProcessManager:
                 on_idle_kill=self._handle_idle_kill,
             )
             self._runners[name] = runner
+
+            if getattr(server_config, "policy_disabled", False):
+                self.record_health(name, "policy_disabled")
 
             logger.info(f"Registered server: {name} (enabled={server_config.enabled})")
 
@@ -158,6 +201,7 @@ class ProcessManager:
 
                 success, error = await runner.ensure_ready_with_error()
                 if success:
+                    self.record_health(name, "ok")
                     # Cache tool -> server mapping
                     for tool in runner.tools:
                         tool_name = tool.get("name", "")
@@ -165,6 +209,7 @@ class ProcessManager:
                             self._tool_to_server[tool_name] = name
                     logger.info(f"Pre-warmed {name}: {len(runner.tools)} tools")
                 else:
+                    self.record_health(name, "start_failed", error or "Unknown error")
                     logger.warning(f"Failed to pre-warm {name}: {error or 'Unknown error'}")
                 return (name, success)
             except Exception as e:
@@ -207,6 +252,10 @@ class ProcessManager:
         self._server_configs[name].enabled = True
         logger.info(f"Enabled server: {name}")
         if not already_enabled:
+            # A server just re-enabled from "disabled" gets a clean slate —
+            # the next listing attempt will re-establish real health.
+            if self._health.get(name, ServerHealth()).status == "disabled":
+                self.record_health(name, "not_started")
             await self._fire_state_change(STATE_CHANGE_ENABLED, name)
         return True
 
@@ -229,6 +278,7 @@ class ProcessManager:
         }
 
         logger.info(f"Disabled server: {name}")
+        self.record_health(name, "disabled")
         if was_enabled:
             await self._fire_state_change(STATE_CHANGE_DISABLED, name)
         return True
@@ -304,6 +354,7 @@ class ProcessManager:
             success, error = await runner.ensure_ready_with_error()
             if not success:
                 logger.error(f"Failed to start server: {name} - {error or 'Unknown error'}")
+                self.record_health(name, "start_failed", error)
                 return []
 
             # Cache tool -> server mapping
@@ -312,6 +363,7 @@ class ProcessManager:
                 if tool_name:
                     self._tool_to_server[tool_name] = name
 
+            self.record_health(name, "ok")
             return runner.tools
 
     def list_cached_tools(self, mode: Optional[str] = None) -> list[dict[str, Any]]:
@@ -391,8 +443,10 @@ class ProcessManager:
         # Ensure process is running and initialized
         success, error = await runner.ensure_ready_with_error()
         if not success:
+            self.record_health(name, "start_failed", error or "Unknown error")
             logger.error(f"Failed to start server: {name} - {error or 'Unknown error'}")
             return []
+        self.record_health(name, "ok")
 
         # Cache prompt -> server mapping
         for prompt in runner.prompts:
@@ -532,7 +586,17 @@ class ProcessManager:
                 }
             }
 
-        return await runner.call_tool(tool_name, arguments)
+        result = await runner.call_tool(tool_name, arguments)
+
+        # A call failure while the process never reached READY is a start
+        # failure, not a business error from the remote tool — record it so
+        # airis-exec can enrich the JSON-RPC error with the real cause.
+        if isinstance(result, dict) and result.get("error") and runner.state != ProcessState.READY:
+            self.record_health(server_name, "start_failed", runner._last_error)
+        elif isinstance(result, dict) and not result.get("error"):
+            self.record_health(server_name, "ok")
+
+        return result
 
     async def send_request(
         self,
