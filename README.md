@@ -170,7 +170,6 @@ Claude / Gemini / Cursor / Windsurf
 | Server | Description |
 |--------|-------------|
 | **airis-commands** | Slash-command toolkit shipped with the gateway |
-| **airis-legal** | Japanese court document automation (証拠説明書 / 準備書面) |
 | **fetch** | Fetch a URL and return it as markdown |
 | **tavily** | Web search via Tavily API |
 | **stripe** | Stripe payments API |

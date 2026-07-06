@@ -1,5 +1,4 @@
 { "routes": [
-  {"pattern": "証拠説明書|準備書面|号証|甲号証|乙号証|訴訟|court document|legal case", "chain": ["airis-legal:*"], "hint": "Japanese legal document automation"},
   {"pattern": "research|investigate|search web", "chain": ["tavily:search"], "hint": "Web research"},
   {"pattern": "implement|build|code", "chain": ["airis-confidence","context7:get-library-docs"], "hint": "Implementation"},
   {"pattern": "database|sql|query", "chain": ["supabase:query"], "hint": "Database"},
