@@ -33,6 +33,24 @@ RATE_LIMIT_WINDOW = 60  # seconds (fixed at 1 minute)
 # Paths excluded from rate limiting (monitoring endpoints)
 EXCLUDED_PATHS = frozenset({"/health", "/ready", "/metrics"})
 
+# MCP Streamable HTTP transport paths (see main.py's `include_router(mcp_proxy.router,
+# prefix="/mcp")` and `mcp_proxy.py`'s `/.well-known/{path:path}` route). GET/HEAD on
+# these paths are NOT per-request traffic: per the MCP Streamable HTTP spec
+# (2025-11-25), GET opens a long-lived server->client SSE stream (and resumes it after
+# a disconnect via `Last-Event-ID`), and `/.well-known/*` is a one-shot discovery
+# probe. A single MCP client can hold one GET stream open for hours and reconnect
+# many times; counting each of those against the fixed-window counter would exhaust
+# the budget fast. Because this gateway binds to localhost, every local MCP client
+# (Claude Code, Cursor, Codex, ...) shares the same 127.0.0.1 IP key, so counting
+# GET/HEAD here would lock out ALL of them from a single client's reconnect storm.
+# POST (JSON-RPC calls) and DELETE (session termination) are genuine per-request
+# traffic and stay rate-limited below.
+# This exemption is only safe because the gateway is localhost/trusted-proxy bound;
+# a public-facing deployment should instead cap concurrent SSE connections per key
+# rather than exempting GET/HEAD outright.
+MCP_TRANSPORT_READ_PATHS = frozenset({"/mcp", "/mcp/"})
+MCP_WELL_KNOWN_PREFIX = "/.well-known/"
+
 # Trusted proxy CIDRs — only trust X-Forwarded-For from these sources.
 # Default: Docker bridge + loopback. Override via TRUSTED_PROXIES env var
 # (comma-separated CIDRs, e.g. "10.0.0.0/8,172.16.0.0/12").
@@ -167,6 +185,19 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Skip rate limiting for monitoring endpoints
         if request.url.path in EXCLUDED_PATHS:
             return await call_next(request)
+
+        # Skip rate limiting for read-only MCP transport traffic (long-lived SSE
+        # streams, resumption reconnects, discovery probes). See
+        # MCP_TRANSPORT_READ_PATHS above for why these are exempt.
+        if request.method in {"GET", "HEAD"}:
+            path = request.url.path
+            normalized_path = path.rstrip("/") or "/"
+            if (
+                normalized_path in MCP_TRANSPORT_READ_PATHS
+                or path.startswith(MCP_WELL_KNOWN_PREFIX)
+                or f"/mcp{MCP_WELL_KNOWN_PREFIX}" in path
+            ):
+                return await call_next(request)
 
         # Determine key and limit
         key, limit = self._get_key_and_limit(request)
