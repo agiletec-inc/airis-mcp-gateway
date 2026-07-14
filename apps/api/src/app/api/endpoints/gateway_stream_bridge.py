@@ -449,6 +449,13 @@ async def send_via_stream_bridge(
                 headers={stream_session_header_name(): session.public_session_id},
             )
 
+        # Response for a different concurrent call on the same session
+        # (e.g. two overlapping tools/call requests sharing one
+        # Mcp-Session-Id). Re-queue it so the caller actually waiting on
+        # that id can pick it up, instead of silently dropping it here.
+        await session.response_queue.put(payload)
+        continue
+
 
 async def cleanup_stale_stream_bridges() -> int:
     """Tear down StreamBridgeSession entries that have been idle for too long.
