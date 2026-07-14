@@ -85,31 +85,46 @@ async def test_concurrent_calls_each_get_their_own_response(monkeypatch):
     """Two concurrent tools/call requests on ONE shared session must each
     receive their own matching JSON-RPC response — not a 504 timeout and
     not the other call's payload — even when the Gateway answers out of
-    order (id=2's answer lands on the shared queue before id=1's)."""
-    # Keep the timeout short: this test asserts what happens once both
-    # answers are already sitting in the queue, so a slow real Gateway is
-    # not involved. If the bug is present, the affected call will genuinely
-    # block for the full timeout before returning 504.
+    order (id=2's answer lands on the shared queue before id=1's).
+
+    In production, a response can only reach the shared queue after a real
+    Gateway round trip (this call's own POST lands, the Gateway processes
+    it, its SSE reader forwards the answer) — which always takes longer
+    than the synchronous work needed to register as a waiter. So the
+    responses are injected here only once BOTH callers have registered
+    (visible via `session.pending_response_ids`), matching that ordering
+    instead of racing it against a zero-latency fake POST."""
     monkeypatch.setattr(settings, "TOOL_CALL_TIMEOUT", 1.0)
 
     session = _make_session("airis-demux-test")
     gateway_stream_bridge._stream_bridge_sessions[session.public_session_id] = session
 
-    # Simulate the Gateway answering call B (id=2) before call A (id=1),
-    # e.g. because B's tool happened to resolve faster server-side.
+    request = _FakeRequest(session.public_session_id)
+
+    task_a = asyncio.create_task(
+        gateway_stream_bridge.send_via_stream_bridge(
+            request, {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "a"}}
+        )
+    )
+    task_b = asyncio.create_task(
+        gateway_stream_bridge.send_via_stream_bridge(
+            request, {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "b"}}
+        )
+    )
+
+    for _ in range(200):
+        if {1, 2} <= session.pending_response_ids:
+            break
+        await asyncio.sleep(0)
+    else:
+        pytest.fail("both callers never registered as live waiters")
+
+    # Now simulate the Gateway answering call B (id=2) before call A
+    # (id=1), e.g. because B's tool happened to resolve faster server-side.
     await session.response_queue.put({"jsonrpc": "2.0", "id": 2, "result": {"for": "B"}})
     await session.response_queue.put({"jsonrpc": "2.0", "id": 1, "result": {"for": "A"}})
 
-    request = _FakeRequest(session.public_session_id)
-
-    call_a = gateway_stream_bridge.send_via_stream_bridge(
-        request, {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "a"}}
-    )
-    call_b = gateway_stream_bridge.send_via_stream_bridge(
-        request, {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "b"}}
-    )
-
-    response_a, response_b = await asyncio.gather(call_a, call_b)
+    response_a, response_b = await asyncio.gather(task_a, task_b)
 
     body_a = json.loads(response_a.body)
     body_b = json.loads(response_b.body)
@@ -130,20 +145,20 @@ async def test_concurrent_calls_each_get_their_own_response(monkeypatch):
 async def test_orphaned_response_is_dropped_not_requeued_forever(monkeypatch):
     """A response for an id nobody is waiting for anymore (its own caller
     already timed out / disconnected before the Gateway's late answer
-    arrived) must eventually be dropped, not requeued forever. With no
-    other reader ever going to claim it, an unbounded requeue-and-redraw
-    would spin synchronously forever (pinning the event loop) instead of
-    the caller's own wait_for() timeout ever firing. This test has no live
-    claimant for id=999 at all — the call under test (id=1) must still
-    reach its own 504 timeout promptly, proving the orphan gets dropped
-    after a bounded number of requeues rather than spun on forever."""
+    arrived) must be dropped, not requeued forever — requeuing it back
+    onto the same queue that the sole remaining reader is draining, with
+    no live owner ever going to claim it, would spin that reader in a
+    synchronous busy loop instead of letting its own wait_for() timeout
+    ever fire. This test has no live claimant for id=999 at all — the call
+    under test (id=1) must still reach its own 504 timeout promptly."""
     monkeypatch.setattr(settings, "TOOL_CALL_TIMEOUT", 1.0)
 
     session = _make_session("airis-demux-orphan-test")
     gateway_stream_bridge._stream_bridge_sessions[session.public_session_id] = session
 
     # id=999 belongs to a call that is no longer live (e.g. already timed
-    # out or disconnected) — nobody is or ever will be waiting for it.
+    # out or disconnected) — nobody is or ever will be waiting for it, so
+    # it's never in session.pending_response_ids.
     await session.response_queue.put({"jsonrpc": "2.0", "id": 999, "result": {"for": "ghost"}})
 
     request = _FakeRequest(session.public_session_id)
@@ -161,9 +176,61 @@ async def test_orphaned_response_is_dropped_not_requeued_forever(monkeypatch):
 
     body_a = json.loads(response_a.body)
     assert response_a.status_code == 504, (
-        f"expected a prompt timeout once the orphan's bounded requeues are "
-        f"exhausted, got status={response_a.status_code} body={body_a}"
+        f"expected a prompt timeout once the orphan is dropped, "
+        f"got status={response_a.status_code} body={body_a}"
     )
-    # The orphan must have been dropped (bounded retries exhausted), not
-    # left sitting in the queue forever.
+    # The orphan must have been dropped, not left sitting in the queue forever.
     assert session.response_queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_many_concurrent_callers_all_get_correct_responses(monkeypatch):
+    """Regression guard for a fixed-retry-count design that was tried and
+    rejected during #210's review: bouncing a foreign-id payload only a
+    fixed number of times (e.g. 5) before dropping it works for a couple
+    of concurrent callers, but incorrectly drops a still-live sibling's
+    response as "orphaned" once there are more concurrent callers than the
+    threshold — because a fixed count can't distinguish "several live
+    bystanders churning the queue" from "no owner left." The actual fix
+    checks live-waiter membership instead, so this must hold for an
+    arbitrarily large number of concurrent callers, not just two."""
+    monkeypatch.setattr(settings, "TOOL_CALL_TIMEOUT", 2.0)
+
+    session = _make_session("airis-demux-many-callers-test")
+    gateway_stream_bridge._stream_bridge_sessions[session.public_session_id] = session
+
+    request = _FakeRequest(session.public_session_id)
+
+    ids = list(range(1, 9))  # 8 concurrent callers — more than any small fixed retry bound
+    tasks = {
+        i: asyncio.create_task(
+            gateway_stream_bridge.send_via_stream_bridge(
+                request,
+                {"jsonrpc": "2.0", "id": i, "method": "tools/call", "params": {"name": f"call-{i}"}},
+            )
+        )
+        for i in ids
+    }
+
+    for _ in range(200):
+        if set(ids) <= session.pending_response_ids:
+            break
+        await asyncio.sleep(0)
+    else:
+        pytest.fail("not all callers registered as live waiters")
+
+    # Deliver every answer in reverse id order — maximally out-of-order —
+    # so each caller has to bounce through several foreign ids before its
+    # own arrives.
+    for i in reversed(ids):
+        await session.response_queue.put({"jsonrpc": "2.0", "id": i, "result": {"for": i}})
+
+    responses = await asyncio.gather(*(tasks[i] for i in ids))
+
+    for i, response in zip(ids, responses):
+        body = json.loads(response.body)
+        assert response.status_code == 200, (
+            f"caller id={i} did not get its response: status={response.status_code} body={body}"
+        )
+        assert body.get("id") == i
+        assert body.get("result") == {"for": i}

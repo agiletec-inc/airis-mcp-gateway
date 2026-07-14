@@ -88,6 +88,12 @@ class StreamBridgeSession:
     response_queue: asyncio.Queue = field(default_factory=asyncio.Queue)
     closed: bool = False
     reader_task: Optional[asyncio.Task] = None
+    # ids currently owned by a live send_via_stream_bridge() waiter on this
+    # session. Lets a concurrent caller distinguish "still owned by a live
+    # sibling — keep requeuing" from "orphaned, nobody left to claim it —
+    # drop it" without a magic retry-count heuristic (a fixed count can't
+    # tell "several live bystanders" from "no owner left" — see #210 review).
+    pending_response_ids: set = field(default_factory=set)
     created_at: float = field(default_factory=_time_module.monotonic)
     last_activity: float = field(default_factory=_time_module.monotonic)
 
@@ -333,86 +339,26 @@ async def send_via_stream_bridge(
         f"{settings.MCP_GATEWAY_URL.rstrip('/')}/sse?sessionid={session.backend_session_id}"
     )
     expected_id = get_response_message_id(rpc_request)
+    # Register this call as a live waiter for expected_id BEFORE dispatching
+    # the POST — not after it returns — so that by the time any response
+    # could possibly reach the shared queue (which requires a real Gateway
+    # round trip: this POST lands, the Gateway processes it, and its SSE
+    # reader forwards the answer), this id is already known to be live. A
+    # concurrent sibling call's requeue decision below can then trust
+    # membership in this set instead of a magic retry count, which can't
+    # tell "several live bystanders" from "no owner left" (see #210 review).
+    if expected_id is not None:
+        session.pending_response_ids.add(expected_id)
 
     try:
-        response = await session.client.post(
-            target_url,
-            json=rpc_request,
-            headers={"Content-Type": "application/json"},
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.error("Failed to send bridged request to Gateway: %s", exc)
-        return Response(
-            content=json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "id": rpc_request.get("id"),
-                    "error": {
-                        "code": -32000,
-                        "message": f"Failed to reach Gateway session: {exc}",
-                    },
-                }
-            ),
-            status_code=502,
-            media_type="application/json",
-            headers={stream_session_header_name(): session.public_session_id},
-        )
-    if response.status_code not in (200, 202):
-        return Response(
-            content=response.text,
-            status_code=response.status_code,
-            media_type=response.headers.get("content-type"),
-        )
-
-    if "id" not in rpc_request:
-        return Response(
-            status_code=202,
-            headers={stream_session_header_name(): session.public_session_id},
-        )
-
-    # Buffer server-to-client notifications that arrive before the matching
-    # response. The MCP Streamable HTTP spec lets the server answer a single
-    # POST with either a JSON body or an SSE event stream; we use the SSE
-    # path only when there's at least one notification to deliver, so the
-    # fast path for routine tool calls stays plain JSON.
-    pending_notifications: list[dict] = []
-    # Bounds how many times THIS call will bounce a given foreign id back
-    # onto the queue before giving up on it. A live sibling waiting on that
-    # id reclaims it within one or two bounces (asyncio.Queue getters are
-    # FIFO-fair); an id with no live owner left (its call already timed out
-    # or disconnected) would otherwise requeue-and-redraw forever with no
-    # other reader to ever claim it — a synchronous busy loop pinning the
-    # event loop, not a bounded wait (see #210 review finding).
-    MAX_FOREIGN_ID_REQUEUES = 5
-    foreign_id_requeue_counts: dict = {}
-
-    while True:
         try:
-            payload = await asyncio.wait_for(
-                session.response_queue.get(),
-                timeout=settings.TOOL_CALL_TIMEOUT,
+            response = await session.client.post(
+                target_url,
+                json=rpc_request,
+                headers={"Content-Type": "application/json"},
             )
-        except asyncio.TimeoutError:
-            return Response(
-                content=json.dumps(
-                    {
-                        "jsonrpc": "2.0",
-                        "id": rpc_request.get("id"),
-                        "error": {
-                            "code": -32001,
-                            "message": "Timed out waiting for Gateway response",
-                        },
-                    }
-                ),
-                status_code=504,
-                media_type="application/json",
-                headers={stream_session_header_name(): session.public_session_id},
-            )
-        if (
-            isinstance(payload, dict)
-            and payload.get("error", {}).get("message") == "Gateway SSE bridge disconnected"
-        ):
-            await close_stream_bridge_session(session.public_session_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Failed to send bridged request to Gateway: %s", exc)
             return Response(
                 content=json.dumps(
                     {
@@ -420,66 +366,124 @@ async def send_via_stream_bridge(
                         "id": rpc_request.get("id"),
                         "error": {
                             "code": -32000,
-                            "message": "Gateway session disconnected",
+                            "message": f"Failed to reach Gateway session: {exc}",
                         },
                     }
                 ),
                 status_code=502,
                 media_type="application/json",
+                headers={stream_session_header_name(): session.public_session_id},
+            )
+        if response.status_code not in (200, 202):
+            return Response(
+                content=response.text,
+                status_code=response.status_code,
+                media_type=response.headers.get("content-type"),
             )
 
-        if (
-            isinstance(payload, dict)
-            and "method" in payload
-            and "id" not in payload
-            and get_response_message_id(payload) != expected_id
-        ):
-            # Server-to-client notification that is not the synthetic
-            # `notifications/initialized` bridge marker — buffer for SSE delivery.
-            pending_notifications.append(payload)
-            continue
-
-        if expected_id is None or get_response_message_id(payload) == expected_id:
-            if pending_notifications:
-                body_parts = [
-                    format_sse_event(n) for n in pending_notifications
-                ]
-                body_parts.append(format_sse_event(payload))
-                return Response(
-                    content=b"".join(body_parts),
-                    status_code=200,
-                    media_type="text/event-stream",
-                    headers={stream_session_header_name(): session.public_session_id},
-                )
+        if "id" not in rpc_request:
             return Response(
-                content=json.dumps(payload),
-                status_code=200,
-                media_type="application/json",
+                status_code=202,
                 headers={stream_session_header_name(): session.public_session_id},
             )
 
-        # Response for a different concurrent call on the same session
-        # (e.g. two overlapping tools/call requests sharing one
-        # Mcp-Session-Id). Re-queue it so the caller actually waiting on
-        # that id can pick it up — but only a bounded number of times per
-        # id: if nobody ever claims it (its own call already timed out or
-        # disconnected before this arrived), stop bouncing it and drop it
-        # instead of spinning forever with no other reader left to claim it.
-        payload_id = get_response_message_id(payload)
-        requeue_count = foreign_id_requeue_counts.get(payload_id, 0) + 1
-        if requeue_count > MAX_FOREIGN_ID_REQUEUES:
-            logger.warning(
-                "Dropping orphaned Gateway response for session %s: id=%r was "
-                "requeued %d times with no caller claiming it",
-                session.public_session_id,
-                payload_id,
-                requeue_count - 1,
-            )
-            foreign_id_requeue_counts.pop(payload_id, None)
+        # Buffer server-to-client notifications that arrive before the matching
+        # response. The MCP Streamable HTTP spec lets the server answer a single
+        # POST with either a JSON body or an SSE event stream; we use the SSE
+        # path only when there's at least one notification to deliver, so the
+        # fast path for routine tool calls stays plain JSON.
+        pending_notifications: list[dict] = []
+
+        while True:
+            try:
+                payload = await asyncio.wait_for(
+                    session.response_queue.get(),
+                    timeout=settings.TOOL_CALL_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                return Response(
+                    content=json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": rpc_request.get("id"),
+                            "error": {
+                                "code": -32001,
+                                "message": "Timed out waiting for Gateway response",
+                            },
+                        }
+                    ),
+                    status_code=504,
+                    media_type="application/json",
+                    headers={stream_session_header_name(): session.public_session_id},
+                )
+            if (
+                isinstance(payload, dict)
+                and payload.get("error", {}).get("message") == "Gateway SSE bridge disconnected"
+            ):
+                await close_stream_bridge_session(session.public_session_id)
+                return Response(
+                    content=json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": rpc_request.get("id"),
+                            "error": {
+                                "code": -32000,
+                                "message": "Gateway session disconnected",
+                            },
+                        }
+                    ),
+                    status_code=502,
+                    media_type="application/json",
+                )
+
+            if (
+                isinstance(payload, dict)
+                and "method" in payload
+                and "id" not in payload
+                and get_response_message_id(payload) != expected_id
+            ):
+                # Server-to-client notification that is not the synthetic
+                # `notifications/initialized` bridge marker — buffer for SSE delivery.
+                pending_notifications.append(payload)
+                continue
+
+            if expected_id is None or get_response_message_id(payload) == expected_id:
+                if pending_notifications:
+                    body_parts = [
+                        format_sse_event(n) for n in pending_notifications
+                    ]
+                    body_parts.append(format_sse_event(payload))
+                    return Response(
+                        content=b"".join(body_parts),
+                        status_code=200,
+                        media_type="text/event-stream",
+                        headers={stream_session_header_name(): session.public_session_id},
+                    )
+                return Response(
+                    content=json.dumps(payload),
+                    status_code=200,
+                    media_type="application/json",
+                    headers={stream_session_header_name(): session.public_session_id},
+                )
+
+            # Response for a different concurrent call on the same session
+            # (e.g. two overlapping tools/call requests sharing one
+            # Mcp-Session-Id). Re-queue it only if that id is still owned by
+            # a live waiter — otherwise its owner already timed out or
+            # disconnected and requeuing would spin forever with no other
+            # reader ever going to claim it.
+            payload_id = get_response_message_id(payload)
+            if payload_id in session.pending_response_ids:
+                await session.response_queue.put(payload)
+            else:
+                logger.warning(
+                    "Dropping orphaned Gateway response for session %s: id=%r has no live waiter",
+                    session.public_session_id,
+                    payload_id,
+                )
             continue
-        foreign_id_requeue_counts[payload_id] = requeue_count
-        await session.response_queue.put(payload)
-        continue
+    finally:
+        session.pending_response_ids.discard(expected_id)
 
 
 async def cleanup_stale_stream_bridges() -> int:
