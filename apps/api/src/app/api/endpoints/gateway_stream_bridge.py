@@ -376,6 +376,15 @@ async def send_via_stream_bridge(
     # path only when there's at least one notification to deliver, so the
     # fast path for routine tool calls stays plain JSON.
     pending_notifications: list[dict] = []
+    # Bounds how many times THIS call will bounce a given foreign id back
+    # onto the queue before giving up on it. A live sibling waiting on that
+    # id reclaims it within one or two bounces (asyncio.Queue getters are
+    # FIFO-fair); an id with no live owner left (its call already timed out
+    # or disconnected) would otherwise requeue-and-redraw forever with no
+    # other reader to ever claim it — a synchronous busy loop pinning the
+    # event loop, not a bounded wait (see #210 review finding).
+    MAX_FOREIGN_ID_REQUEUES = 5
+    foreign_id_requeue_counts: dict = {}
 
     while True:
         try:
@@ -452,7 +461,23 @@ async def send_via_stream_bridge(
         # Response for a different concurrent call on the same session
         # (e.g. two overlapping tools/call requests sharing one
         # Mcp-Session-Id). Re-queue it so the caller actually waiting on
-        # that id can pick it up, instead of silently dropping it here.
+        # that id can pick it up — but only a bounded number of times per
+        # id: if nobody ever claims it (its own call already timed out or
+        # disconnected before this arrived), stop bouncing it and drop it
+        # instead of spinning forever with no other reader left to claim it.
+        payload_id = get_response_message_id(payload)
+        requeue_count = foreign_id_requeue_counts.get(payload_id, 0) + 1
+        if requeue_count > MAX_FOREIGN_ID_REQUEUES:
+            logger.warning(
+                "Dropping orphaned Gateway response for session %s: id=%r was "
+                "requeued %d times with no caller claiming it",
+                session.public_session_id,
+                payload_id,
+                requeue_count - 1,
+            )
+            foreign_id_requeue_counts.pop(payload_id, None)
+            continue
+        foreign_id_requeue_counts[payload_id] = requeue_count
         await session.response_queue.put(payload)
         continue
 

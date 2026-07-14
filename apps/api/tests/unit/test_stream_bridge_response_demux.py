@@ -124,3 +124,46 @@ async def test_concurrent_calls_each_get_their_own_response(monkeypatch):
     assert body_a.get("result") == {"for": "A"}
     assert body_b.get("id") == 2
     assert body_b.get("result") == {"for": "B"}
+
+
+@pytest.mark.asyncio
+async def test_orphaned_response_is_dropped_not_requeued_forever(monkeypatch):
+    """A response for an id nobody is waiting for anymore (its own caller
+    already timed out / disconnected before the Gateway's late answer
+    arrived) must eventually be dropped, not requeued forever. With no
+    other reader ever going to claim it, an unbounded requeue-and-redraw
+    would spin synchronously forever (pinning the event loop) instead of
+    the caller's own wait_for() timeout ever firing. This test has no live
+    claimant for id=999 at all — the call under test (id=1) must still
+    reach its own 504 timeout promptly, proving the orphan gets dropped
+    after a bounded number of requeues rather than spun on forever."""
+    monkeypatch.setattr(settings, "TOOL_CALL_TIMEOUT", 1.0)
+
+    session = _make_session("airis-demux-orphan-test")
+    gateway_stream_bridge._stream_bridge_sessions[session.public_session_id] = session
+
+    # id=999 belongs to a call that is no longer live (e.g. already timed
+    # out or disconnected) — nobody is or ever will be waiting for it.
+    await session.response_queue.put({"jsonrpc": "2.0", "id": 999, "result": {"for": "ghost"}})
+
+    request = _FakeRequest(session.public_session_id)
+
+    # If the orphan were requeued unconditionally, this would hang forever
+    # (a synchronous get/put spin with no other reader). The outer
+    # asyncio.wait_for is a test-level safety net, not the mechanism under
+    # test — the real assertion is the prompt 504 below.
+    response_a = await asyncio.wait_for(
+        gateway_stream_bridge.send_via_stream_bridge(
+            request, {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "a"}}
+        ),
+        timeout=5.0,
+    )
+
+    body_a = json.loads(response_a.body)
+    assert response_a.status_code == 504, (
+        f"expected a prompt timeout once the orphan's bounded requeues are "
+        f"exhausted, got status={response_a.status_code} body={body_a}"
+    )
+    # The orphan must have been dropped (bounded retries exhausted), not
+    # left sitting in the queue forever.
+    assert session.response_queue.empty()
