@@ -141,8 +141,9 @@ Dynamic MCP exposes a small control plane instead of a giant flat catalog.
 
 ## Target direction
 
-> **Status:** direction, not yet shipped. The current control plane uses
-> `airis-find` / `airis-schema`; the toolset/`airis-activate` model below is the
+> **Status:** direction, not yet shipped. The current control plane is the 4-meta-tool
+> + direct-COLD-exposure model described above (`airis-find` / `airis-schema` /
+> `airis-workflow` / `airis-exec`); the toolset/`airis-activate` model below is the
 > target. See [toolset-roadmap.md](./toolset-roadmap.md) for the phased plan.
 
 AIRIS should evolve from a **server-centric Dynamic MCP** into a **toolset-centric
@@ -197,7 +198,7 @@ resources, project skills, hooks, or repo docs — not in tool descriptions.
 |--------|----------|---------------------|--------------------|
 | Initial tool surface | Huge | Small | Small |
 | Primary execution path | Native tools | Native tools (auto-enable) | Native tools (toolset-activated) |
-| Discovery style | Implicit | meta-tool (`airis-find`) | activation-first |
+| Discovery style | Implicit | direct `tools/list` (stub schema) + meta-tool aid | activation-first |
 | Large-provider handling | Poor | Better | Better and simpler |
 
 ---
@@ -214,7 +215,9 @@ resources, project skills, hooks, or repo docs — not in tool descriptions.
 ### Non-goals
 
 - one OS process per individual tool
-- exposing every provider tool directly in `tools/list`
+- exposing every provider tool with a full schema directly in `tools/list` (the
+  shipped lazy stub-schema COLD listing avoids this cost; full schemas are still
+  fetched on demand via `airis-schema`/`expandSchema`)
 - storing workflow knowledge only inside tool descriptions
 - using MCP for host-local deterministic workflows better served by CLI or skills
 - making a proxy meta-tool (`airis-exec`) the long-term primary interface
