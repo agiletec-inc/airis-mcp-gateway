@@ -28,7 +28,6 @@ Good fits:
 
 - Stripe
 - Supabase
-- Cloudflare
 - GitHub API
 - Tavily
 

@@ -55,9 +55,12 @@ DISQUALIFIERS = (
 SCAN_FILES = [
     "README.md",
     "CLAUDE.md",
-    "docs/architecture.md",
     "config/toolsets.json",
     "catalogs/airis-catalog.yaml",
+    # All of docs/*.md, not just architecture.md — issue #212 found
+    # gateway-vs-plugins.md silently advertising a FORBIDDEN_SERVERS entry
+    # because it was outside this list's scope.
+    *sorted(str(p.relative_to(REPO_ROOT)) for p in (REPO_ROOT / "docs").glob("*.md")),
     *sorted(str(p.relative_to(REPO_ROOT)) for p in (REPO_ROOT / "workflows").glob("*.yaml")),
 ]
 
