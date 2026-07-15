@@ -156,10 +156,12 @@ capability gateway**, keeping these boundaries:
 
 ### Why the current design is not enough
 
-The current design is directionally correct (avoid exposing every tool, keep rarely
-used servers cold, route through a few meta-tools), but it still has a scaling problem:
+The current design is directionally correct (avoid exposing every tool with a full
+schema, keep rarely used servers cold, list COLD tools with a lazy stub schema plus a
+few meta-tools for discovery), but it still has a scaling problem:
 
-- broad meta-tool descriptions still leak too much capability metadata into the initial context
+- listing every discoverable COLD server's tools still leaks a name + stub entry per
+  tool into the initial `tools/list`, even before any schema is fetched
 - server-level exposure is too coarse for providers with dozens of tools
 
 ### Exposure at the toolset layer
