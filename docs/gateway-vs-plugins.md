@@ -37,7 +37,6 @@ Plugins (host-dependent):     MCP Gateway (Docker-isolated):
 ├── superpowers (workflow)    ├── tavily (cold)
 └── playwright-cli (browser)  ├── supabase (cold)
                               ├── stripe (cold)
-                              ├── cloudflare (cold)
                               └── ... (20+ more, zero cost when cold)
 ```
 
