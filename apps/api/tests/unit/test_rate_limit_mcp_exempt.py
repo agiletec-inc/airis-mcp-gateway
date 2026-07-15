@@ -23,6 +23,8 @@ def _build_client() -> TestClient:
         routes=[
             Route("/mcp", _ok, methods=["GET", "HEAD"]),
             Route("/mcp/", _ok, methods=["GET", "HEAD"]),
+            Route("/mcp/sse", _ok, methods=["GET", "HEAD"]),
+            Route("/sse", _ok, methods=["GET", "HEAD"]),
             Route("/api/v1/data", _ok, methods=["POST"]),
         ]
     )
@@ -50,6 +52,29 @@ def test_head_mcp_beyond_limit_is_exempt():
 
     for _ in range(150):
         response = client.head("/mcp")
+        assert response.status_code == 200
+
+
+def test_get_mcp_sse_stream_beyond_limit_is_exempt():
+    """Regression test for #211: the Streamable HTTP resumable GET stream at
+    `/mcp/sse` — the long-lived route the exemption comment actually
+    describes — was missing from MCP_TRANSPORT_READ_PATHS, so a reconnect
+    storm on this exact path could still 429-lock out every local client."""
+    client = _build_client()
+
+    for _ in range(150):
+        response = client.get("/mcp/sse")
+        assert response.status_code == 200
+
+
+def test_get_classic_sse_beyond_limit_is_exempt():
+    """Regression test for #211: the classic SSE transport at `/sse`
+    (Gemini CLI / Cursor / Windsurf per this repo's CLAUDE.md) was also
+    missing from the exemption."""
+    client = _build_client()
+
+    for _ in range(150):
+        response = client.get("/sse")
         assert response.status_code == 200
 
 

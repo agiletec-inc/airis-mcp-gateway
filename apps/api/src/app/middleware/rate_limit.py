@@ -33,22 +33,31 @@ RATE_LIMIT_WINDOW = 60  # seconds (fixed at 1 minute)
 # Paths excluded from rate limiting (monitoring endpoints)
 EXCLUDED_PATHS = frozenset({"/health", "/ready", "/metrics"})
 
-# MCP Streamable HTTP transport paths (see main.py's `include_router(mcp_proxy.router,
-# prefix="/mcp")` and `mcp_proxy.py`'s `/.well-known/{path:path}` route). GET/HEAD on
-# these paths are NOT per-request traffic: per the MCP Streamable HTTP spec
-# (2025-11-25), GET opens a long-lived server->client SSE stream (and resumes it after
-# a disconnect via `Last-Event-ID`), and `/.well-known/*` is a one-shot discovery
-# probe. A single MCP client can hold one GET stream open for hours and reconnect
-# many times; counting each of those against the fixed-window counter would exhaust
-# the budget fast. Because this gateway binds to localhost, every local MCP client
-# (Claude Code, Cursor, Codex, ...) shares the same 127.0.0.1 IP key, so counting
-# GET/HEAD here would lock out ALL of them from a single client's reconnect storm.
-# POST (JSON-RPC calls) and DELETE (session termination) are genuine per-request
-# traffic and stay rate-limited below.
-# This exemption is only safe because the gateway is localhost/trusted-proxy bound;
-# a public-facing deployment should instead cap concurrent SSE connections per key
-# rather than exempting GET/HEAD outright.
-MCP_TRANSPORT_READ_PATHS = frozenset({"/mcp", "/mcp/"})
+# MCP Streamable HTTP / SSE transport paths. GET/HEAD on these paths are NOT
+# per-request traffic: per the MCP Streamable HTTP spec (2025-11-25), GET opens
+# a long-lived server->client SSE stream (and resumes it after a disconnect via
+# `Last-Event-ID`), and `/.well-known/*` is a one-shot discovery probe. A single
+# MCP client can hold one GET stream open for hours and reconnect many times;
+# counting each of those against the fixed-window counter would exhaust the
+# budget fast. Because this gateway binds to localhost, every local MCP client
+# (Claude Code, Cursor, Codex, ...) shares the same 127.0.0.1 IP key, so
+# counting GET/HEAD here would lock out ALL of them from a single client's
+# reconnect storm. POST (JSON-RPC calls) and DELETE (session termination) are
+# genuine per-request traffic and stay rate-limited below.
+#
+# Covers every actual long-lived GET route, not just the instant health-check
+# ping at the bare "/mcp" path (see main.py's `include_router(mcp_proxy.router,
+# prefix="/mcp")`):
+#   - "/mcp", "/mcp/"  -> mcp_proxy.py's `@router.get("")`/`@router.get("/")`
+#     health-check GET (instant, not a stream, but harmless to also exempt).
+#   - "/mcp/sse"       -> mcp_proxy.py's `@router.get("/sse")`, the Streamable
+#     HTTP resumable GET stream (issue #211 — this one was missing).
+#   - "/sse"           -> main.py's `@app.get("/sse")`, the classic SSE
+#     transport used by Gemini CLI / Cursor / Windsurf (also missing).
+# This exemption is only safe because the gateway is localhost/trusted-proxy
+# bound; a public-facing deployment should instead cap concurrent SSE
+# connections per key rather than exempting GET/HEAD outright.
+MCP_TRANSPORT_READ_PATHS = frozenset({"/mcp", "/mcp/", "/mcp/sse", "/sse"})
 MCP_WELL_KNOWN_PREFIX = "/.well-known/"
 
 # Trusted proxy CIDRs — only trust X-Forwarded-For from these sources.
