@@ -88,12 +88,17 @@ class StreamBridgeSession:
     response_queue: asyncio.Queue = field(default_factory=asyncio.Queue)
     closed: bool = False
     reader_task: Optional[asyncio.Task] = None
-    # ids currently owned by a live send_via_stream_bridge() waiter on this
+    # Refcount of live send_via_stream_bridge() waiters per id on this
     # session. Lets a concurrent caller distinguish "still owned by a live
     # sibling — keep requeuing" from "orphaned, nobody left to claim it —
     # drop it" without a magic retry-count heuristic (a fixed count can't
     # tell "several live bystanders" from "no owner left" — see #210 review).
-    pending_response_ids: set = field(default_factory=set)
+    # A dict, not a set: two callers can register the SAME id (a JSON-RPC
+    # id-uniqueness violation by the client, or coincidental reuse across
+    # overlapping in-flight requests) — a set would let the first of those
+    # callers to exit remove the id entirely, dropping the second caller's
+    # still-live response as "orphaned" (see #215).
+    pending_response_ids: dict = field(default_factory=dict)
     created_at: float = field(default_factory=_time_module.monotonic)
     last_activity: float = field(default_factory=_time_module.monotonic)
 
@@ -345,10 +350,14 @@ async def send_via_stream_bridge(
     # round trip: this POST lands, the Gateway processes it, and its SSE
     # reader forwards the answer), this id is already known to be live. A
     # concurrent sibling call's requeue decision below can then trust
-    # membership in this set instead of a magic retry count, which can't
-    # tell "several live bystanders" from "no owner left" (see #210 review).
+    # membership in this refcount dict instead of a magic retry count, which
+    # can't tell "several live bystanders" from "no owner left" (#210), and
+    # a refcount instead of a set so a duplicate-id caller doesn't get its
+    # registration wiped out by another caller sharing the same id (#215).
     if expected_id is not None:
-        session.pending_response_ids.add(expected_id)
+        session.pending_response_ids[expected_id] = (
+            session.pending_response_ids.get(expected_id, 0) + 1
+        )
 
     try:
         try:
@@ -483,7 +492,12 @@ async def send_via_stream_bridge(
                 )
             continue
     finally:
-        session.pending_response_ids.discard(expected_id)
+        if expected_id is not None:
+            remaining = session.pending_response_ids.get(expected_id, 0) - 1
+            if remaining > 0:
+                session.pending_response_ids[expected_id] = remaining
+            else:
+                session.pending_response_ids.pop(expected_id, None)
 
 
 async def cleanup_stale_stream_bridges() -> int:
