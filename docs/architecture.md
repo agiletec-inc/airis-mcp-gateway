@@ -61,35 +61,43 @@ another server's responses.
 ## Current architecture
 
 Dynamic MCP keeps the initial tool surface small while still allowing direct calls to
-native MCP tools. As shipped today the control plane exposes **two meta-tools**:
+native MCP tools. As shipped today (`DYNAMIC_MCP=true`, the default) the control plane
+exposes **4 meta-tools**, plus — when `COLD_TOOLS_IN_LIST=true` (also the default) —
+every discoverable COLD server's indexed tools with a lazy stub schema
+(`{"type":"object"}`) sitting directly in `tools/list`, instead of only the older
+meta-tool-only surface:
 
 | Tool | Purpose |
 |------|---------|
-| `airis-find` | Discover tools across server/tool metadata |
-| `airis-schema` | Get the input schema for a native tool when arguments are unclear |
+| `airis-find` | Discover tools across server/tool metadata (optional discovery aid) |
+| `airis-schema` | Get a tool's full input schema on demand |
+| `airis-workflow` | Fetch a task-specific procedure by `topic` (on-demand `workflows/*.yaml` recipes) |
+| `airis-exec` | Compat router: execute any tool by name/`server:tool`, for clients that can't act on a bare `tools/list` name |
 
 `META_TOOLS_MODE=full` adds `airis-confidence`, `airis-repo-index`, `airis-suggest`,
-`airis-route`.
+`airis-route`. Set `COLD_TOOLS_IN_LIST=false` to fall back to the old meta-tool-only
+listing for context-constrained clients.
 
 ### Request flow
 
-1. `tools/list` returns the meta-tools plus any already-active HOT server tools
-2. The model uses `airis-find` to locate the capability it needs
-3. The model calls the COLD tool through `airis-exec` (`tool="server:tool"`, `arguments={…}`)
-4. `airis-exec` auto-discovers and auto-enables the COLD server on first call, then runs the tool
-
-`airis-exec` is the router for COLD tools: they are not in `tools/list`, and
-`tools/list`-only clients (Claude Code, Codex) can only call advertised tools, so a
-single always-advertised router is required to reach them. Use `airis-schema` to get a
-tool's argument schema before calling `airis-exec`.
+1. `tools/list` returns the meta-tools, any already-active HOT server tools (full
+   schema), and every discoverable COLD server's tools (lazy stub schema) — all listed
+   directly, no meta-tool round trip needed to see them.
+2. The model calls a COLD tool by the name it already saw in `tools/list`
+   (`tools/call`) — one hop. The server auto-discovers and auto-enables that COLD
+   server on this first call, then runs the tool.
+3. `airis-find`/`airis-schema` remain available for browsing servers and fetching full
+   schemas when the stub schema isn't enough to know what to pass. `airis-workflow`
+   fetches a task-specific procedure by topic. `airis-exec` remains as a compat router
+   for clients that can't call a bare `tools/list` name directly.
 
 ### Hot / cold / disabled
 
 | State | Behavior | Examples |
 |-------|----------|----------|
-| **HOT** | Pre-warmed at startup, always listed in `tools/list`, never idle-killed | `context7`, `airis-mcp-gateway-control`, `airis-workspace` |
-| **COLD** | Started on first tool call, stopped after idle timeout, restarted transparently | Stripe, Tavily, browser automation |
-| **Disabled** | Gated by policy or absent credentials | Supabase (never authorized), dangerous write/admin integrations, niche providers |
+| **HOT** | Pre-warmed at startup, always listed in `tools/list` with full schema, never idle-killed | `context7`, `airis-mcp-gateway-control`, `airis-workspace` |
+| **COLD** | Listed directly in `tools/list` with a lazy stub schema; starts on first tool call, stops after idle timeout, restarts transparently | Stripe, Tavily, browser automation |
+| **Disabled** | Gated by policy or absent credentials — never advertised, never run | Supabase (never authorized), dangerous write/admin integrations, niche providers |
 
 ```
 Claude Code
@@ -97,11 +105,11 @@ Claude Code
     v
 airis-mcp-gateway (port 9400)
     |
-    +-- Dynamic MCP control plane (airis-find, airis-schema)
+    +-- Dynamic MCP control plane (airis-find, airis-schema, airis-workflow, airis-exec)
     |
     +-- Native helpers (airis-confidence, airis-repo-index, airis-suggest, airis-route)
     |
-    +-- MCP proxy --> Docker MCP Gateway --> mindbase, time, etc.
+    +-- MCP proxy --> Docker MCP Gateway --> mindbase, time, etc. (COLD, direct tools/list exposure)
     |
     +-- Process mgmt --> context7, stripe, playwright, etc.
 ```
