@@ -113,7 +113,7 @@ async def test_concurrent_calls_each_get_their_own_response(monkeypatch):
     )
 
     for _ in range(200):
-        if {1, 2} <= session.pending_response_ids:
+        if {1, 2} <= session.pending_response_ids.keys():
             break
         await asyncio.sleep(0)
     else:
@@ -213,7 +213,7 @@ async def test_many_concurrent_callers_all_get_correct_responses(monkeypatch):
     }
 
     for _ in range(200):
-        if set(ids) <= session.pending_response_ids:
+        if set(ids) <= session.pending_response_ids.keys():
             break
         await asyncio.sleep(0)
     else:
@@ -234,3 +234,114 @@ async def test_many_concurrent_callers_all_get_correct_responses(monkeypatch):
         )
         assert body.get("id") == i
         assert body.get("result") == {"for": i}
+
+
+@pytest.mark.asyncio
+async def test_duplicate_id_caller_not_dropped_when_sibling_with_same_id_exits(monkeypatch):
+    """Regression test for #215: `pending_response_ids` must be a refcount,
+    not a plain set. If two concurrent callers on one session register the
+    SAME id (a JSON-RPC id-uniqueness violation by the client, or
+    coincidental id reuse across overlapping in-flight requests), the
+    first of those callers to exit must NOT wipe the id's liveness out
+    from under the second, still-waiting one — otherwise a bystander call
+    dequeuing a foreign response for that id would misjudge it as
+    orphaned and drop it, even though the second duplicate-id caller is
+    still alive and will now spuriously time out despite the Gateway
+    having answered.
+
+    Sequence, with callers started in this exact order so asyncio.Queue's
+    FIFO getter ordering is deterministic:
+      1. caller_a (id=5) and caller_b (id=5) both register — refcount[5] == 2.
+      2. caller_c (id=9, bystander) registers.
+      3. First id=5 payload goes to caller_a (oldest waiter) -> it exits,
+         refcount[5] 2 -> 1 (NOT removed, because caller_b is still live).
+      4. Second id=5 payload goes to the next oldest waiter, caller_c
+         (bystander) -> sees a foreign id, checks liveness, finds id=5
+         still registered (thanks to caller_b) -> requeues instead of
+         dropping. Under the old set-based design this membership check
+         would have failed (caller_a's exit would have removed id 5
+         entirely), and caller_b would then time out (504) despite the
+         Gateway having answered.
+      5. The requeued payload reaches caller_b (the only remaining id=5
+         waiter) -> it exits with 200.
+      6. caller_c's own id=9 payload arrives -> it exits with 200.
+    """
+    monkeypatch.setattr(settings, "TOOL_CALL_TIMEOUT", 2.0)
+
+    session = _make_session("airis-demux-duplicate-id-test")
+    gateway_stream_bridge._stream_bridge_sessions[session.public_session_id] = session
+
+    request = _FakeRequest(session.public_session_id)
+
+    def _call(call_id: int, tag: str):
+        return asyncio.create_task(
+            gateway_stream_bridge.send_via_stream_bridge(
+                request,
+                {"jsonrpc": "2.0", "id": call_id, "method": "tools/call", "params": {"name": tag}},
+            )
+        )
+
+    # Start strictly in this order and let each fully register before the
+    # next starts, so the queue's FIFO getter order matches this order.
+    task_a = _call(5, "a")
+    for _ in range(200):
+        if session.pending_response_ids.get(5) == 1:
+            break
+        await asyncio.sleep(0)
+    else:
+        pytest.fail("caller_a never registered")
+
+    task_b = _call(5, "b")
+    for _ in range(200):
+        if session.pending_response_ids.get(5) == 2:
+            break
+        await asyncio.sleep(0)
+    else:
+        pytest.fail("caller_b never registered (duplicate id refcount didn't reach 2)")
+
+    task_c = _call(9, "c")
+    for _ in range(200):
+        if 9 in session.pending_response_ids:
+            break
+        await asyncio.sleep(0)
+    else:
+        pytest.fail("caller_c never registered")
+
+    # First id=5 answer -> consumed by the oldest waiter, caller_a.
+    await session.response_queue.put({"jsonrpc": "2.0", "id": 5, "result": {"for": "a"}})
+    done, _pending = await asyncio.wait({task_a}, timeout=5.0)
+    assert task_a in done, "caller_a never completed"
+    response_a = task_a.result()
+    assert response_a.status_code == 200
+    assert json.loads(response_a.body).get("result") == {"for": "a"}
+
+    # The critical assertion: id=5 must still be registered (caller_b is
+    # still live) — this is exactly what a set-based discard() would break.
+    assert session.pending_response_ids.get(5) == 1, (
+        "id=5 liveness was wiped out by caller_a's exit even though "
+        "caller_b (same id) is still waiting"
+    )
+
+    # Second id=5 answer -> the next oldest waiter is caller_c (a
+    # bystander expecting id=9). It must requeue this, not drop it.
+    await session.response_queue.put({"jsonrpc": "2.0", "id": 5, "result": {"for": "b"}})
+    done, _pending = await asyncio.wait({task_b}, timeout=5.0)
+    assert task_b in done, (
+        "caller_b never completed — its response was likely dropped as "
+        "'orphaned' by bystander caller_c, exactly the #215 regression"
+    )
+    response_b = task_b.result()
+    assert response_b.status_code == 200, (
+        f"caller_b (duplicate id=5) did not get its response: "
+        f"status={response_b.status_code} body={json.loads(response_b.body)}"
+    )
+    assert json.loads(response_b.body).get("result") == {"for": "b"}
+
+    # Finally, caller_c's own answer.
+    await session.response_queue.put({"jsonrpc": "2.0", "id": 9, "result": {"for": "c"}})
+    response_c = await asyncio.wait_for(task_c, timeout=5.0)
+    assert response_c.status_code == 200
+    assert json.loads(response_c.body).get("result") == {"for": "c"}
+
+    assert 5 not in session.pending_response_ids
+    assert 9 not in session.pending_response_ids
