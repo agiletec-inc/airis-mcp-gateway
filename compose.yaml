@@ -147,8 +147,7 @@ services:
       - ./routing-table.json:/app/routing-table.json:ro
       - ./workflows:/app/workflows:ro
       - ./profiles:/app/profiles:rw
-      # Host workspace for airis-workspace tools (workspace_init / workspace_status etc.).
-      # Same convention as the docker-mcp-gateway service above.
+      # Host workspace for repository-aware gateway operations.
       - ${HOST_WORKSPACE_DIR:-${HOME}/github}:/workspace:rw
       # Persistent data volumes (appuser home directory)
       - cache-uv:/home/appuser/.cache/uv   # uvx package cache (faster restarts)

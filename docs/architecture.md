@@ -95,7 +95,7 @@ listing for context-constrained clients.
 
 | State | Behavior | Examples |
 |-------|----------|----------|
-| **HOT** | Pre-warmed at startup, always listed in `tools/list` with full schema, never idle-killed | `context7`, `airis-mcp-gateway-control`, `airis-workspace` |
+| **HOT** | Pre-warmed at startup, always listed in `tools/list` with full schema, never idle-killed | `context7`, `airis-mcp-gateway-control` |
 | **COLD** | Listed directly in `tools/list` with a lazy stub schema; starts on first tool call, stops after idle timeout, restarts transparently | Stripe, Tavily, browser automation |
 | **Disabled** | Gated by policy or absent credentials — never advertised, never run | Supabase (never authorized), dangerous write/admin integrations, niche providers |
 

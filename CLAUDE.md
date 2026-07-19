@@ -20,7 +20,7 @@ Source of truth for server config: `mcp-config.json` (runtime) and `workflows/*.
 - `mcp-config.json` — runtime server registry (HOT/COLD, tools index, behavior).
 - `workflows/*.yaml` — behavior recipes. `compile_to: mcp_instructions` → baked into `initialize`; `compile_to: airis_workflow` (named `airis-workflow-<topic>.yaml`) → served on-demand via the `airis-workflow` meta-tool.
 - `docs/architecture.md` — current + target architecture (the old root `ARCHITECTURE.md` was moved here).
-- `manifest.toml` + `airis gen` produce `package.json` etc. Do not hand-edit files that carry a `DO NOT EDIT` header.
+- Native project files are hand-maintained; do not add generated-file markers to them.
 
 ## Commands
 
@@ -36,15 +36,6 @@ Test layout under `apps/api/tests/`:
 - `e2e/` — boots the full Docker stack and hits `localhost:9400`. Driven by `task test:e2e`.
 
 Python tests locally without Docker: `cd apps/api && uv pip install -e ".[test]" && uv run python -m pytest tests/unit -v`. Run a single test with `uv run python -m pytest tests/unit/test_foo.py::test_bar -v`.
-
-## Updating bundled `airis` CLI
-
-The gateway image bakes a specific `airis-workspace` release. To bump it:
-
-1. Edit `AIRIS_VERSION` in `Dockerfile` (single source of truth — the version is pulled at build time from the airis-workspace GitHub release).
-2. `task docker:build` (or `docker compose build api`) — verify the Dockerfile download step succeeds.
-3. `task docker:up` and confirm `airis-workspace` tools resolve via `airis-find`.
-4. Commit `Dockerfile` only — there is no `package.json` pin to keep in sync.
 
 ## Architecture
 
@@ -62,14 +53,12 @@ The API in `apps/api/src/app/api/endpoints/` is split into focused modules:
 
 ### HOT/COLD server split
 
-- **HOT**: ProcessManager process servers (uvx/npx/airis) always listed in `tools/list` with full schema — pre-warmed at API startup, never idle-killed. Default HOT set: `context7`, `airis-mcp-gateway-control`, `airis-workspace`.
+- **HOT**: ProcessManager process servers (uvx/npx) always listed in `tools/list` with full schema — pre-warmed at API startup, never idle-killed. Default HOT set: `context7`, `airis-mcp-gateway-control`.
 - **COLD**: Docker Gateway backend servers — listed directly in `tools/list` with a lazy stub schema (`COLD_TOOLS_IN_LIST=true`, default) via each server's `tools_index`; auto-discovered and auto-enabled on first `tools/call`.
 
 In DYNAMIC_MCP mode, `tools/list` returns meta-tools + HOT server tools (full schema) + discoverable COLD server tools (stub schema, `{"type":"object"}`). `airis-find` remains available for browsing servers/tools and `airis-schema` for full schemas on demand.
 
-The `airis` CLI itself is baked into the gateway image (see `Dockerfile`, fetched from the airis-workspace GitHub release pinned via `AIRIS_VERSION`), so `airis-workspace`'s 27 tools (`workspace_init`, `workspace_gen`, `workspace_doctor`, `workspace_status`, `manifest_validate`, `manifest_apply`, `migration_execute`, etc.) are available out of the box without host installation. The gateway container mounts `${HOST_WORKSPACE_DIR:-${HOME}/github}` at `/workspace` so those tools can operate on real projects.
-
-Note on JSON-RPC tolerance: airis-workspace emits `"error": null` alongside successful results. The gateway treats that as "no error" (see `process_runner._initialize` and the `tools/call` paths in `mcp_proxy.py` / `process_mcp.py`). New servers with the same quirk will work transparently.
+The gateway container mounts `${HOST_WORKSPACE_DIR:-${HOME}/github}` at `/workspace` for repository-aware gateway operations.
 
 ### Schema partitioning
 

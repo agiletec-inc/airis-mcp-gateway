@@ -156,16 +156,6 @@ def upgrade() -> None:
             'description': 'AIRIS agent for autonomous task execution',
             'category': 'UVX Server'
         },
-        {
-            'name': 'airis-workspace',
-            'enabled': False,
-            'command': 'uvx',
-            'args': ['--from', 'git+https://github.com/agiletec-inc/airis-agent', 'airis-workspace-mcp'],
-            'env': None,
-            'description': 'Workspace management (init, validate, sync)',
-            'category': 'UVX Server'
-        },
-
         # === DISABLED SERVERS (auth required - enable via UI) ===
 
         # AI SEARCH & RESEARCH

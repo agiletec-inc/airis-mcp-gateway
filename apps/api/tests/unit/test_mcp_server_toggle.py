@@ -161,8 +161,7 @@ async def test_default_enabled_servers():
         "fetch",
         "git",
         "sequential-thinking",
-        "airis-agent",
-        "airis-workspace"
+        "airis-agent"
     ]
 
     # Verify default configuration is correct
