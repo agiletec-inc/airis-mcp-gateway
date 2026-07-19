@@ -162,7 +162,6 @@ Claude / Gemini / Cursor / Windsurf
 | Server | Description |
 |--------|-------------|
 | **context7** | Library documentation lookup |
-| **airis-workspace** | Docker-first workspace lifecycle (`manifest.toml` → `airis gen` → `airis up/test/...`) |
 | **airis-mcp-gateway-control** | Manage this gateway (servers, config, health) from inside the agent |
 
 ### COLD — listed in `tools/list` (lazy stub schema), start on first tool call, auto-terminate when idle

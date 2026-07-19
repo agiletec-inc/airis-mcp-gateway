@@ -144,34 +144,7 @@ install() {
         fi
     fi
 
-    # Install airis-workspace binary (optional)
-    local workspace_installed=false
-    if [ "${INSTALL_WORKSPACE:-true}" = "true" ]; then
-        if command -v airis >/dev/null 2>&1; then
-            workspace_installed=true
-        else
-            local os=$(uname -s | tr '[:upper:]' '[:lower:]')
-            local arch=$(uname -m)
-            local target=""
-            case "$os-$arch" in
-                darwin-arm64)  target="aarch64-apple-darwin" ;;
-                darwin-x86_64) target="x86_64-apple-darwin" ;;
-                linux-x86_64)  target="x86_64-unknown-linux-gnu" ;;
-                linux-aarch64) target="aarch64-unknown-linux-gnu" ;;
-            esac
-            if [ -n "$target" ]; then
-                local ws_latest=$(curl -fsSL https://api.github.com/repos/agiletec-inc/airis-workspace/releases/latest 2>/dev/null | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
-                if [ -n "$ws_latest" ]; then
-                    local url="https://github.com/agiletec-inc/airis-workspace/releases/download/v${ws_latest}/airis-${ws_latest}-${target}.tar.gz"
-                    if curl -fsSL "$url" 2>/dev/null | tar -xz -C "$BIN_DIR" 2>/dev/null; then
-                        chmod +x "$BIN_DIR/airis"
-                        workspace_installed=true
-                    fi
-                fi
-            fi
-        fi
-    fi
-
+    # Gateway installation does not install repository tooling.
     # Summary
     echo ""
     if $api_ok; then
@@ -215,10 +188,6 @@ install() {
     fi
     echo "  Claude Desktop: unmanaged (AIRIS does not modify its MCP config automatically)"
     echo ""
-
-    if $workspace_installed; then
-        echo -e "  airis-workspace: ${GREEN}Installed${NC}"
-    fi
 
     # Next steps
     echo -e "  ${BOLD}Next steps:${NC}"
@@ -301,9 +270,8 @@ case "${1:-install}" in
         echo "  install.sh --help       Show this help"
         echo ""
         echo "Environment variables:"
-        echo "  AIRIS_VERSION      Version to install (default: latest, e.g. v1.2.3)"
+        echo "  AIRIS_VERSION      Gateway version to install (default: latest, e.g. v1.2.3)"
         echo "  AIRIS_MCP_DIR      Install directory (default: ~/.local/share/airis-mcp-gateway)"
-        echo "  INSTALL_WORKSPACE  Install airis-workspace CLI (default: true)"
         ;;
     *)
         install

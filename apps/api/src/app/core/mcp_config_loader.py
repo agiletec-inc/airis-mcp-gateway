@@ -39,7 +39,6 @@ PROCESS_COMMANDS = {
     "deno",
     "bun",
     "sh",  # sh -c "docker run..." still uses StdIO JSON-RPC
-    "airis",  # airis-workspace ships its own stdio MCP server (`airis mcp`)
 }
 
 

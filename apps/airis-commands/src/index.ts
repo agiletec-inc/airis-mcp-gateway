@@ -350,25 +350,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           // No requirements.txt
         }
 
-        // Scan manifest.toml (Airis workspace)
-        try {
-          const manifestPath = path.join(repoPath, "manifest.toml");
-          await fs.access(manifestPath);
-          const airisMapping = MCP_MAPPINGS["airis-workspace"];
-          if (!detected.find(d => d.name === "airis-workspace")) {
-            detected.push({
-              name: "airis-workspace",
-              reason: "Found manifest.toml",
-              mcp: airisMapping.mcp,
-              description: airisMapping.description,
-              envRequired: airisMapping.envRequired,
-              alreadyExists: !!config.mcpServers["airis-workspace"],
-            });
-          }
-        } catch {
-          // No manifest.toml
-        }
-
         if (detected.length === 0) {
           return {
             content: [{

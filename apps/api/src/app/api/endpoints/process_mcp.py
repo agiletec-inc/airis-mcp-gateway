@@ -157,7 +157,7 @@ async def call_tool(request: ToolCallRequest):
         if result is not None:
             response = result
 
-    # `"error": null` is "no error" — some servers (e.g. airis-workspace) emit
+    # `"error": null` is "no error" for tolerant MCP servers; they emit
     # it alongside a successful result.
     # Validation error: inject full schema so the caller can self-heal on retry.
     from ...core.dynamic_mcp import inject_schema_on_validation_error

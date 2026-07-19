@@ -1,46 +1,5 @@
 {
   "mcpServers": {
-    "airis-workspace": {
-      "command": "airis",
-      "args": ["mcp"],
-      "env": {},
-      "enabled": true,
-      "mode": "hot",
-      "tools_index": [
-        {"name": "workspace_init", "description": "Scan the repo and propose a manifest.toml covering apps/libs/compose/catalog"},
-        {"name": "workspace_discover", "description": "Raw discovery facts as JSON (inputs used by workspace_init)"},
-        {"name": "workspace_cleanup", "description": "List legacy compose files and orphan backups that should be removed"},
-        {"name": "workspace_gen", "description": "Regenerate workspace files (package.json, pnpm-workspace.yaml, CI, compose.yaml) from manifest.toml"},
-        {"name": "workspace_validate_all", "description": "Run manifest / ports / networks / env / dependency-architecture validation"},
-        {"name": "workspace_doctor", "description": "Diagnose environment drift and suggest fixes (read-only)"},
-        {"name": "workspace_verify", "description": "Execute manifest [rule.verify] commands inside the Docker workspace"},
-        {"name": "workspace_status", "description": "Show running Docker services (docker compose ps)"},
-        {"name": "workspace_up", "description": "Start all Docker services in the workspace"},
-        {"name": "workspace_down", "description": "Stop all Docker services in the workspace"},
-        {"name": "workspace_restart", "description": "Restart one or all Docker services"},
-        {"name": "workspace_logs", "description": "Fetch Docker service logs (optionally filtered by service name and tail count)"},
-        {"name": "workspace_install", "description": "Install dependencies inside the Docker workspace"},
-        {"name": "workspace_run", "description": "Run a task defined in manifest.toml [commands] or delegate to Docker"},
-        {"name": "workspace_exec", "description": "Execute an arbitrary command inside the Docker workspace container"},
-        {"name": "workspace_test", "description": "Run the test suite inside Docker"},
-        {"name": "workspace_build", "description": "Build one or all projects inside Docker"},
-        {"name": "workspace_lint", "description": "Run linting inside Docker"},
-        {"name": "workspace_typecheck", "description": "Run type checking inside Docker"},
-        {"name": "workspace_clean", "description": "Remove build artifacts (dry-run by default; force=true to delete)"},
-        {"name": "workspace_affected", "description": "List packages affected by changes relative to a base ref"},
-        {"name": "manifest_validate", "description": "Validate a proposed manifest.toml string without writing"},
-        {"name": "manifest_apply", "description": "Persist a manifest.toml string and optionally run airis gen"},
-        {"name": "migration_execute", "description": "Run a batch of file migration steps proposed by workspace_init"},
-        {"name": "guards_install", "description": "Install airis command shims (global=true for ~/.airis/bin shims)"},
-        {"name": "guards_status", "description": "Show current airis guard shim status"},
-        {"name": "guards_uninstall", "description": "Remove airis guard shims"}
-      ],
-      "behavior": {
-        "triggers": ["manifest.toml", "airis workspace", "workspace_init", "/airis:init", "scaffold monorepo", "bootstrap workspace", "airis up", "airis down", "airis run", "airis exec", "airis test", "airis build"],
-        "instruction": "Use airis-workspace tools for all Docker-first workspace operations: bootstrap (workspace_init → manifest_apply → workspace_gen), lifecycle (workspace_up/down/restart), development (workspace_run/exec/test/build/lint/typecheck), and maintenance (workspace_clean/doctor/verify).",
-        "priority": "high"
-      }
-    },
     "context7": {
       "command": "npx",
       "args": [

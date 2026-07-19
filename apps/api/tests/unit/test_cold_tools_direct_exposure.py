@@ -127,22 +127,6 @@ async def test_policy_disabled_server_tools_are_not_listed(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_hot_mode_server_tools_index_is_not_duplicated_via_cold_path(monkeypatch):
-    """A HOT server's tools_index must not be re-listed through the COLD
-    stub path (it already gets full exposure via get_hot_servers/list_tools)."""
-    pm = _build_pm(monkeypatch)
-    pm._server_configs["airis-workspace"] = _make_config(
-        "airis-workspace",
-        mode=ServerMode.HOT,
-        enabled=True,
-        tools_index=[{"name": "workspace_init", "description": "Scan the repo"}],
-    )
-
-    tools = {t["name"] for t in await _list_tools(pm)}
-    assert "workspace_init" not in tools
-
-
-@pytest.mark.asyncio
 async def test_cold_tools_in_list_false_restores_old_meta_tool_only_listing(monkeypatch):
     pm = _build_pm(monkeypatch)
     monkeypatch.setattr(settings, "COLD_TOOLS_IN_LIST", False)
