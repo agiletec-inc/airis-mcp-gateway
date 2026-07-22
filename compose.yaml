@@ -1,55 +1,10 @@
 name: airis-mcp-gateway
 
 services:
-  # PostgreSQL for mindbase (with pgvector extension)
-  # Required by mindbase MCP server for memory/graph storage
-  mindbase-postgres-dev:
-    container_name: mindbase-postgres-dev
-    image: pgvector/pgvector:pg16
-    environment:
-      - POSTGRES_USER=mindbase
-      - POSTGRES_PASSWORD=mindbase
-      - POSTGRES_DB=mindbase
-    volumes:
-      - mindbase-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mindbase -d mindbase"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  # Note: mindbase is now managed by Docker MCP Gateway via airis-catalog.yaml
-  # The gateway handles stdio-to-SSE conversion automatically
-
-  # Serena MCP Server (internal, port 8000)
-  # Semantic code retrieval and editing capabilities
-  serena:
-    container_name: airis-serena
-    image: ghcr.io/oraios/serena:latest
-    command:
-      - serena
-      - start-mcp-server
-      - --transport
-      - sse
-      - --port
-      - "8000"
-      - --context
-      - ide-assistant
-    expose:
-      - "8000"
-    volumes:
-      - ${HOST_WORKSPACE_DIR:-${HOME}/github}:/workspaces/projects:rw
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf --max-time 3 http://localhost:8000/sse -o /dev/null -w '%{http_code}' | grep -q 200"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    restart: unless-stopped
 
   # Docker MCP Gateway (internal, port 9390)
-  # Manages MCP servers from Docker catalog (time, mindbase via stdio)
+  # Provides the internal SSE transport. Only its built-in time server runs;
+  # client-visible capabilities are defined by mcp-config.json.
   docker-mcp-gateway:
     container_name: airis-docker-mcp-gateway
     # Pinned by digest — docker/mcp-gateway does not publish versioned tags (issue #77).
@@ -59,8 +14,7 @@ services:
       - --transport=sse
       - --port=9390
       - --watch
-      - --additional-catalog=/catalogs/airis-catalog.yaml
-      - --servers=time,mindbase
+      - --servers=time
     environment:
       # Clear OrbStack-injected proxy vars. docker/mcp-gateway fetches its
       # catalog over HTTPS; the injected proxy host (proxyproxy.orb.internal)
@@ -78,8 +32,6 @@ services:
       - "9390"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${HOST_WORKSPACE_DIR:-${HOME}/github}:/workspace:rw
-      - ./catalogs:/catalogs:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO /dev/null http://$(hostname -i):9390/health"]
       interval: 10s
@@ -120,18 +72,6 @@ services:
       - META_TOOLS_MODE=${META_TOOLS_MODE:-core}
       # Tool listing: "compact" (top 3 per server) or "full" (all tool names)
       - TOOL_LISTING_MODE=${TOOL_LISTING_MODE:-compact}
-      # External API keys (optional)
-      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
-      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
-      - TWILIO_API_KEY=${TWILIO_API_KEY:-}
-      - TWILIO_API_SECRET=${TWILIO_API_SECRET:-}
-      - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-}
-      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
-      - FIGMA_API_KEY=${FIGMA_API_KEY:-}
-      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
-      - MAGIC_API_KEY=${MAGIC_API_KEY:-}
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
-      - SUPABASE_ACCESS_TOKEN=${SUPABASE_ACCESS_TOKEN:-}
       # Clear OrbStack-injected proxy vars: NO_PROXY contains IPv6 CIDRs that
       # httpx cannot parse as URL patterns, causing /ready to 500.
       - HTTP_PROXY=
@@ -144,22 +84,12 @@ services:
       - no_proxy=
     volumes:
       - ./mcp-config.json:/app/mcp-config.json:ro
-      - ./routing-table.json:/app/routing-table.json:ro
-      - ./workflows:/app/workflows:ro
-      - ./profiles:/app/profiles:rw
-      # Host workspace for repository-aware gateway operations.
-      - ${HOST_WORKSPACE_DIR:-${HOME}/github}:/workspace:rw
       # Persistent data volumes (appuser home directory)
       - cache-uv:/home/appuser/.cache/uv   # uvx package cache (faster restarts)
       - cache-npm:/home/appuser/.npm       # npm package cache (faster restarts)
-      - memory-data:/app/data              # Knowledge graph persistence
-      # Host Claude Code config for airis-commands rules/settings management
-      - ${HOME}/.claude:/host-claude:rw
     depends_on:
       docker-mcp-gateway:
         condition: service_healthy
-      serena:
-        condition: service_started
     healthcheck:
       # Use /ready instead of /health to ensure HOT servers are initialized
       # before accepting connections (fixes Claude Code slash command visibility)
@@ -171,7 +101,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  mindbase-data:    # PostgreSQL data for pgvector
   cache-uv:         # uvx package cache (persists uvx packages)
   cache-npm:        # npm package cache (persists npx server packages)
-  memory-data:      # Knowledge graph JSON file

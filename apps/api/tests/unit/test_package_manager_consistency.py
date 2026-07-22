@@ -10,7 +10,7 @@ static guards keep the repo from drifting back into a pnpm/npm mix:
 - the pnpm workspace scaffolding exists (pnpm-workspace.yaml, root package.json,
   pnpm-lock.yaml)
 - no npm lockfiles anywhere
-- the Dockerfile builds with pnpm, not `npm ci`
+- the Dockerfile does not build the unused pnpm workspace or use `npm ci`
 - the per-app package.json files do not pin npm as packageManager
 """
 
@@ -73,11 +73,10 @@ def test_no_npm_lockfiles():
         )
 
 
-def test_dockerfile_builds_with_pnpm_not_npm():
+def test_dockerfile_does_not_build_unused_javascript_servers():
     text = DOCKERFILE.read_text(encoding="utf-8")
-    assert "pnpm install --frozen-lockfile" in text, (
-        "Dockerfile does not run `pnpm install --frozen-lockfile` — the TS "
-        "build must use the pnpm workspace (issue #81)."
+    assert "pnpm install --frozen-lockfile" not in text, (
+        "Dockerfile still builds the removed TypeScript MCP servers"
     )
     assert "npm ci" not in text, (
         "Dockerfile still runs `npm ci` — the TS apps build with pnpm (issue #81)."

@@ -80,7 +80,7 @@ sleep 1
 run_scenario \
     "Scenario 2: Knowledge Graph (memory)" \
     "Save a project note" \
-    "Use airis-exec to call memory:create_entities with entities=[{\"name\":\"airis-gateway\",\"entityType\":\"project\",\"observations\":[\"MCP multiplexer with 60+ tools\"]}]. Just call the tool, show result briefly."
+    "Use airis-exec to call memory:create_entities with entities=[{\"name\":\"airis-mcp-gateway\",\"entityType\":\"project\",\"observations\":[\"MCP multiplexer with 60+ tools\"]}]. Just call the tool, show result briefly."
 
 sleep 1
 
@@ -93,7 +93,7 @@ run_scenario \
 sleep 1
 
 # Cleanup
-claude -p --dangerously-skip-permissions --model haiku --output-format stream-json "Use airis-exec to call memory:delete_entities with entityNames=[\"airis-gateway\"]. Just do it." 2>/dev/null > /dev/null
+claude -p --dangerously-skip-permissions --model haiku --output-format stream-json "Use airis-exec to call memory:delete_entities with entityNames=[\"airis-mcp-gateway\"]. Just do it." 2>/dev/null > /dev/null
 
 # Footer
 printf "\n${C_GREEN}━━━ 60+ tools. 1 gateway. 1 call each. ━━━${C_RESET}\n"

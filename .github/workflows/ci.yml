@@ -50,9 +50,9 @@ jobs:
               - 'pnpm-lock.yaml'
               - '.npmrc'
             shell:
-              - 'scripts/airis-gateway'
+              - 'scripts/airis-mcp-gateway'
               - 'scripts/quick-install.sh'
-              - 'scripts/test-airis-gateway-smoke.sh'
+              - 'scripts/test-airis-mcp-gateway-smoke.sh'
               - 'scripts/test-compose-references.sh'
               - 'install.sh'
               - '.tasks.d/test.yml'
@@ -164,8 +164,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Run airis-gateway smoke tests
-        run: bash scripts/test-airis-gateway-smoke.sh
+      - name: Run airis-mcp-gateway smoke tests
+        run: bash scripts/test-airis-mcp-gateway-smoke.sh
 
       - name: Run compose reference tests
         run: bash scripts/test-compose-references.sh

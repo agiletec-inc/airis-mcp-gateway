@@ -96,6 +96,8 @@ sync_codex_registration() {
         return 1
     fi
 
+    # Remove the legacy registration before installing the canonical name.
+    codex mcp remove airis-gateway >/dev/null 2>&1 || true
     codex mcp remove airis-mcp-gateway >/dev/null 2>&1 || true
     codex mcp add airis-mcp-gateway --url "$GATEWAY_HTTP_URL" >/dev/null 2>&1
 }
@@ -159,7 +161,7 @@ cmd_down() {
         docker compose down "$@"
         log_info "Gateway stopped."
     else
-        log_warn "Gateway not installed. Run 'airis-gateway up' first."
+        log_warn "Gateway not installed. Run 'airis-mcp-gateway up' first."
     fi
 }
 
@@ -195,14 +197,14 @@ cmd_config() {
     if [ -f "$DIR/mcp-config.json" ]; then
         ${EDITOR:-vim} "$DIR/mcp-config.json"
     else
-        log_error "Config not found. Run 'airis-gateway up' first."
+        log_error "Config not found. Run 'airis-mcp-gateway up' first."
         exit 1
     fi
 }
 
 cmd_servers() {
     if [ ! -f "$DIR/mcp-config.json" ]; then
-        log_error "Config not found. Run 'airis-gateway up' first."
+        log_error "Config not found. Run 'airis-mcp-gateway up' first."
         exit 1
     fi
 
@@ -248,12 +250,12 @@ except Exception as e:
 cmd_enable() {
     local server="$1"
     if [ -z "$server" ]; then
-        log_error "Usage: airis-gateway enable <server_name>"
+        log_error "Usage: airis-mcp-gateway enable <server_name>"
         exit 1
     fi
 
     if [ ! -f "$DIR/mcp-config.json" ]; then
-        log_error "Config not found. Run 'airis-gateway up' first."
+        log_error "Config not found. Run 'airis-mcp-gateway up' first."
         exit 1
     fi
 
@@ -290,18 +292,18 @@ else:
         print(f'  - {clean_name}', file=sys.stderr)
     sys.exit(1)
 "
-    log_info "Restart gateway to apply: airis-gateway restart"
+    log_info "Restart gateway to apply: airis-mcp-gateway restart"
 }
 
 cmd_disable() {
     local server="$1"
     if [ -z "$server" ]; then
-        log_error "Usage: airis-gateway disable <server_name>"
+        log_error "Usage: airis-mcp-gateway disable <server_name>"
         exit 1
     fi
 
     if [ ! -f "$DIR/mcp-config.json" ]; then
-        log_error "Config not found. Run 'airis-gateway up' first."
+        log_error "Config not found. Run 'airis-mcp-gateway up' first."
         exit 1
     fi
 
@@ -326,7 +328,7 @@ else:
     print(f'Server not found: {server}', file=sys.stderr)
     sys.exit(1)
 "
-    log_info "Restart gateway to apply: airis-gateway restart"
+    log_info "Restart gateway to apply: airis-mcp-gateway restart"
 }
 
 cmd_init() {
@@ -611,7 +613,7 @@ cmd_help() {
     cat <<EOF
 AIRIS MCP Gateway - Unified MCP server management
 
-Usage: airis-gateway <command> [options]
+Usage: airis-mcp-gateway <command> [options]
 
 Commands:
   up [--profile ui]   Start gateway (pulls latest version)
@@ -648,15 +650,15 @@ Ports:
   5273  Settings UI (with --profile ui)
 
 Examples:
-  airis-gateway up                    # Start gateway
-  airis-gateway up --profile ui       # Start with Settings UI
-  airis-gateway servers               # List MCP servers
-  airis-gateway enable puppeteer      # Enable puppeteer server
-  airis-gateway disable serena        # Disable serena server
-  airis-gateway restart               # Apply changes
-  airis-gateway init ~/github         # Show bootstrap plan
-  airis-gateway init ~/github --apply # Import, clean, and deploy AIRIS assets
-  airis-gateway doctor ~/github
+  airis-mcp-gateway up                    # Start gateway
+  airis-mcp-gateway up --profile ui       # Start with Settings UI
+  airis-mcp-gateway servers               # List MCP servers
+  airis-mcp-gateway enable puppeteer      # Enable puppeteer server
+  airis-mcp-gateway disable serena        # Disable serena server
+  airis-mcp-gateway restart               # Apply changes
+  airis-mcp-gateway init ~/github         # Show bootstrap plan
+  airis-mcp-gateway init ~/github --apply # Import, clean, and deploy AIRIS assets
+  airis-mcp-gateway doctor ~/github
 EOF
 }
 
@@ -683,7 +685,7 @@ case "${1:-help}" in
             cd "$DIR" && docker compose down -v 2>/dev/null || true
         fi
         [ -d "$DIR" ] && rm -rf "$DIR" && log_info "Removed $DIR"
-        [ -f "$HOME/.local/bin/airis-gateway" ] && rm -f "$HOME/.local/bin/airis-gateway" && log_info "Removed CLI"
+        [ -f "$HOME/.local/bin/airis-mcp-gateway" ] && rm -f "$HOME/.local/bin/airis-mcp-gateway" && log_info "Removed CLI"
         log_info "Uninstall complete."
         ;;
     help|--help|-h) cmd_help ;;

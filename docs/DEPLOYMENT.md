@@ -22,7 +22,7 @@ export AIRIS_API_KEY=$(openssl rand -hex 32)
 docker compose up -d
 
 # Initialize the global AIRIS registry
-./scripts/airis-gateway init
+./scripts/airis-mcp-gateway init
 
 # Register with Claude Code if needed
 claude mcp add --scope user --transport sse airis-mcp-gateway http://localhost:9400/sse
@@ -31,9 +31,9 @@ claude mcp add --scope user --transport sse airis-mcp-gateway http://localhost:9
 If you are migrating existing repositories, import and remove any repo-local `mcp.json` files:
 
 ```bash
-./scripts/airis-gateway import ~/github --apply
-./scripts/airis-gateway clean ~/github
-./scripts/airis-gateway doctor ~/github
+./scripts/airis-mcp-gateway import ~/github --apply
+./scripts/airis-mcp-gateway clean ~/github
+./scripts/airis-mcp-gateway doctor ~/github
 ```
 
 ## Environment Variables

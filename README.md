@@ -18,7 +18,7 @@
 
 ## 🛠️ Install
 
-Two steps: **(1)** start the gateway itself, **(2)** connect each AI client to it.
+Start the gateway, then call it only from the on-demand client skill.
 
 ### Step 1 — Start the Gateway
 
@@ -30,7 +30,7 @@ Pick whichever fits you.
 curl -fsSL https://raw.githubusercontent.com/agiletec-inc/airis-mcp-gateway/main/install.sh | bash
 ```
 
-Uses pre-built images from GHCR. Installs to `~/.local/share/airis-mcp-gateway/`, sets up the `airis-gateway` CLI, and initializes the registry. Remove anytime with `airis-gateway --uninstall`.
+Uses pre-built images from GHCR. Installs to `~/.local/share/airis-mcp-gateway/`, sets up the `airis-mcp-gateway` CLI, and initializes the registry. Remove anytime with `airis-mcp-gateway --uninstall`.
 
 **Option B — From source** (developers)
 
@@ -54,24 +54,20 @@ docker compose logs -f api
 
 Once it is up, the gateway listens on port `9400` — verify with `curl http://localhost:9400/health`.
 
-### Step 2 — Connect Your AI Client
+> [!IMPORTANT]
+> The gateway container does not run provider-owned coding agents such as
+> `codex mcp-server` or `claude mcp serve`. Those processes must run on the
+> host where the user's provider login is available. A future AIRIS local
+> provider bridge may connect those host processes to this gateway over a
+> local-only transport; provider credentials must never be mounted into the
+> gateway container or returned through MCP responses.
 
-Register the gateway **once per client** as a user-scoped MCP server. One connection exposes every backend MCP server (Stripe, Supabase, GitHub, …).
+### Step 2 — Call It On Demand
 
-| Client | Connection Command / Setup |
-| :--- | :--- |
-| **Claude Code** | `claude mcp add --transport http --scope user airis-gateway http://localhost:9400/mcp/` |
-| **Codex** | `codex mcp add airis-gateway --url http://localhost:9400/mcp` |
-| **Gemini CLI** | `gemini mcp add --transport sse airis-gateway http://localhost:9400/sse` |
-| **Cursor** | Settings > Features > MCP > **Add New MCP Server**<br>Name: `airis-gateway`, Type: `SSE`, URL: `http://localhost:9400/sse` |
-| **Windsurf** | Add SSE URL `http://localhost:9400/sse` to `~/.codeium/config.json` |
-
-Codex and Claude Code use Streamable HTTP at `http://localhost:9400/mcp/`. SSE clients (Gemini CLI, Cursor, Windsurf) use `http://localhost:9400/sse`.
-
-> [!NOTE]
-> Registering the gateway as a user-scoped MCP server (the commands above) is the **only** install method — one registration is shared across all your projects. There is no separate plugin to install.
-
-> **Tip:** To skip per-tool permission prompts in Claude Code, add `"mcp__airis-gateway__*"` to the `permissions.allow` list in `~/.claude/settings.json`.
+Do not register the gateway as a global MCP server. For Codex, use the
+`airis-mcp-gateway` skill, which opens a short-lived Streamable HTTP session
+to `http://localhost:9400/mcp/` only for the retained Context7 documentation
+lookup service.
 
 ---
 
@@ -86,26 +82,14 @@ Stop guessing if your toolset is actually helping. Airis tracks and visualizes r
 ### 2. Intelligent Noise Reduction
 Even with large context windows, exposing 100+ tools simultaneously leads to "tool selection hallucinations." Airis keeps the initial capability surface small, activates toolsets on demand, and lets models call native tools directly once the right capability slice is exposed.
 
-### 3. Single Source of Truth
-No more repeating API keys and server configs across different projects or AI tools. Gateway server definitions live in one global registry, and the gateway runtime reads a single `mcp-config.json`.
+### 3. Small, Explicit Surface
+`mcp-config.json` contains only Context7. Local file, Git, browser, web, and
+external write operations stay with their native tools or purpose-specific skills.
 
 ## Configuration Policy
 
-AIRIS uses a single global registry at `~/.airis/mcp/registry.json`.
-
-- Repository-local `mcp.json` files are not supported.
-- Existing `mcp.json` files should be imported into the global registry, backed up, and removed.
-- `airis-gateway init --apply` also deploys AIRIS best-practice assets to Codex, Claude Code, and Gemini.
-- Codex and Gemini can be managed automatically by AIRIS.
-- Claude Desktop is detected, but its MCP config is not modified automatically.
-
-Use:
-
-```bash
-airis-gateway init ~/github
-airis-gateway init ~/github --apply
-airis-gateway doctor ~/github
-```
+The tracked registry mirror is `mcp-config.json.example`; the local runtime
+copy is `mcp-config.json`. Neither file installs a global MCP registration.
 
 ## AIRIS Best Practices
 
@@ -119,17 +103,15 @@ AIRIS is not only a central MCP registry. It also distributes operating guidance
 
 ## How It Works
 
-Airis aggregates the MCP servers registered in [`mcp-config.json`](./mcp-config.json) (~24 entries, roughly half enabled by default) behind a single endpoint — Streamable HTTP at `/mcp/` for Codex / Claude Code, and SSE at `/sse` for Gemini CLI, Cursor, and Windsurf. Your AI agent connects once and gets access to everything that's enabled.
+AIRIS exposes Context7 through a local Streamable HTTP endpoint. The client
+skill calls it only for exact, current library or framework documentation.
 
 ```
-Without Gateway:                          With Gateway:
-  claude mcp add stripe ...                 claude mcp add airis ...
-  claude mcp add tavily ...                 # Done. Every enabled tool available.
-  claude mcp add github ...                 # Shared across Gemini, Cursor, etc.
-  ... Manage each server individually ...
+Ordinary work: native tools and skills
+Exact library docs: AIRIS skill → Context7
 ```
 
-Servers start on-demand when a tool is called and auto-terminate when idle. No resources wasted.
+Context7 starts on demand when the skill calls it.
 
 ## Architecture
 
@@ -151,6 +133,19 @@ Claude / Gemini / Cursor / Windsurf
     Stripe, Supabase,     Mindbase, Tavily,   Custom APIs
     GitHub, etc.          etc.
 ```
+
+Provider-owned coding agents are intentionally outside this container boundary:
+
+```text
+Codex CLI / Claude Code (host, authenticated)
+                 │ local-only provider bridge
+                 ▼
+          AIRIS MCP Gateway (Docker)
+```
+
+The bridge is a separate integration boundary, not another credential store in
+`mcp-config.json`. Mounting `~/.codex`, `~/.claude`, or equivalent provider
+credential directories into the gateway container is unsupported.
 
 > See [docs/architecture.md](./docs/architecture.md) for the full system design.
 
