@@ -11,6 +11,7 @@ retry" contract silently did nothing for actual clients.
 
 These tests pin the contract on the Streamable HTTP (no-sessionid) path.
 """
+
 import json
 
 import pytest
@@ -47,9 +48,7 @@ def wired(monkeypatch):
     pm = ProcessManager()
     pm._initialized = True
     pm._tool_to_server = {"resolve-library-id": "context7"}
-    monkeypatch.setattr(
-        "app.api.endpoints.mcp_proxy.get_process_manager", lambda: pm
-    )
+    monkeypatch.setattr("app.api.endpoints.mcp_proxy.get_process_manager", lambda: pm)
 
     dmcp = DynamicMCP()
     dmcp._tools["resolve-library-id"] = ToolInfo(
@@ -61,12 +60,8 @@ def wired(monkeypatch):
     )
     # mcp_proxy.get_dynamic_mcp is used on the auto-discovery path; the shared
     # inject_schema_on_validation_error helper reads app.core.dynamic_mcp's.
-    monkeypatch.setattr(
-        "app.api.endpoints.mcp_proxy.get_dynamic_mcp", lambda: dmcp
-    )
-    monkeypatch.setattr(
-        "app.core.dynamic_mcp.get_dynamic_mcp", lambda: dmcp
-    )
+    monkeypatch.setattr("app.api.endpoints.mcp_proxy.get_dynamic_mcp", lambda: dmcp)
+    monkeypatch.setattr("app.core.dynamic_mcp.get_dynamic_mcp", lambda: dmcp)
     return pm
 
 
@@ -141,7 +136,9 @@ async def test_streamable_http_success_is_untouched(wired, monkeypatch):
     monkeypatch.setattr(pm, "call_tool", fake_call_tool)
 
     resp = await mcp_proxy._proxy_jsonrpc_request(
-        FakeRequest(_tools_call("resolve-library-id", {"query": "x", "libraryName": "x"}))
+        FakeRequest(
+            _tools_call("resolve-library-id", {"query": "x", "libraryName": "x"})
+        )
     )
 
     body = json.loads(resp.body)

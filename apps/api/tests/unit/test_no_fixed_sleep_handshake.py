@@ -20,6 +20,7 @@ Any other fixed sleep in these functions must be replaced with an explicit
 await on the real condition (a queued response, an asyncio.Event, etc.)
 bounded by asyncio.wait_for(..., timeout=...).
 """
+
 from __future__ import annotations
 
 import ast
@@ -36,11 +37,16 @@ TARGETS: dict[str, list[str]] = {
 NO_OBSERVABLE_EVENT_MARKER = "no-observable-event"
 
 
-def _find_named_functions(tree: ast.Module, names: set[str]) -> list[ast.AsyncFunctionDef]:
+def _find_named_functions(
+    tree: ast.Module, names: set[str]
+) -> list[ast.AsyncFunctionDef]:
     """Find top-level (or nested) function defs matching the given names."""
     found = []
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names:
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name in names
+        ):
             found.append(node)
     return found
 
@@ -62,7 +68,9 @@ def _numeric_literal(node: ast.AST):
     return None
 
 
-def _has_marker_nearby(lines: list[str], lineno: int, marker: str, lookback: int = 12) -> bool:
+def _has_marker_nearby(
+    lines: list[str], lineno: int, marker: str, lookback: int = 12
+) -> bool:
     """Check the call's own line and up to `lookback` preceding lines for marker."""
     start = max(0, lineno - 1 - lookback)
     end = lineno  # lineno is 1-indexed; lines[lineno-1] is the call's own line
@@ -70,7 +78,9 @@ def _has_marker_nearby(lines: list[str], lineno: int, marker: str, lookback: int
     return marker in window
 
 
-def _violations_in_function(fn: ast.AsyncFunctionDef | ast.FunctionDef, lines: list[str]) -> list[str]:
+def _violations_in_function(
+    fn: ast.AsyncFunctionDef | ast.FunctionDef, lines: list[str]
+) -> list[str]:
     violations = []
     for node in ast.walk(fn):
         if not _is_asyncio_sleep_call(node):
@@ -112,4 +122,6 @@ def test_handshake_and_startup_functions_have_no_fixed_sleeps():
                 f"{rel_path}: {v}" for v in _violations_in_function(fn, lines)
             )
 
-    assert not all_violations, "Fixed-sleep handshake races found:\n" + "\n".join(all_violations)
+    assert not all_violations, "Fixed-sleep handshake races found:\n" + "\n".join(
+        all_violations
+    )

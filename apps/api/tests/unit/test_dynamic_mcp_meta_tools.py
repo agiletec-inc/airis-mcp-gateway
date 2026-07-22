@@ -8,6 +8,7 @@ Guards:
 - Core mode must yield four tools (airis-find, airis-schema, airis-workflow,
   airis-exec); full mode must add the four optional meta-tools.
 """
+
 import ast
 from pathlib import Path
 
@@ -65,7 +66,12 @@ def test_full_meta_tools_adds_optional_tools():
     mcp = DynamicMCP()
     tools = mcp.get_meta_tools(mode="full")
     names = {t["name"] for t in tools}
-    assert {"airis-confidence", "airis-repo-index", "airis-suggest", "airis-route"} <= names
+    assert {
+        "airis-confidence",
+        "airis-repo-index",
+        "airis-suggest",
+        "airis-route",
+    } <= names
 
 
 def test_airis_exec_is_core_router():
@@ -78,6 +84,10 @@ def test_airis_exec_is_core_router():
     """
     mcp = DynamicMCP()
     core = {t["name"]: t for t in mcp.get_meta_tools(mode="core")}
-    assert "airis-exec" in core, "airis-exec must be advertised so clients can call COLD tools"
+    assert "airis-exec" in core, (
+        "airis-exec must be advertised so clients can call COLD tools"
+    )
     assert core["airis-exec"]["inputSchema"]["required"] == ["tool"]
-    assert "airis-activate" not in core, "airis-activate is not re-exposed (airis-exec suffices)"
+    assert "airis-activate" not in core, (
+        "airis-activate is not re-exposed (airis-exec suffices)"
+    )

@@ -14,12 +14,11 @@ import time
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Optional
 
-from .process_runner import ProcessRunner, ProcessConfig, ProcessState
+from .process_runner import ProcessRunner, ProcessState
 from .mcp_config_loader import (
     load_mcp_config,
     get_process_servers,
     McpServerConfig,
-    ServerType,
     ServerMode,
 )
 from .logging import get_logger
@@ -47,6 +46,7 @@ class ServerHealth:
     status: "ok" | "start_failed" | "list_failed" | "policy_disabled" |
             "disabled" | "not_started"
     """
+
     status: str = "not_started"
     last_error: Optional[str] = None
     last_checked: Optional[float] = None
@@ -103,7 +103,9 @@ class ProcessManager:
                     f"state-change listener failed ({event} on {server_name}): {exc}"
                 )
 
-    def record_health(self, name: str, status: str, error: Optional[str] = None) -> None:
+    def record_health(
+        self, name: str, status: str, error: Optional[str] = None
+    ) -> None:
         """Record a server's health status.
 
         Called wherever an upstream failure (or its recovery) is observed —
@@ -156,22 +158,21 @@ class ProcessManager:
 
     def get_enabled_servers(self) -> list[str]:
         """Get enabled server names."""
-        return [
-            name for name, config in self._server_configs.items()
-            if config.enabled
-        ]
+        return [name for name, config in self._server_configs.items() if config.enabled]
 
     def get_hot_servers(self) -> list[str]:
         """Get HOT mode server names (enabled + hot)."""
         return [
-            name for name, config in self._server_configs.items()
+            name
+            for name, config in self._server_configs.items()
             if config.enabled and config.mode == ServerMode.HOT
         ]
 
     def get_cold_servers(self) -> list[str]:
         """Get COLD mode server names (enabled + cold)."""
         return [
-            name for name, config in self._server_configs.items()
+            name
+            for name, config in self._server_configs.items()
             if config.enabled and config.mode == ServerMode.COLD
         ]
 
@@ -210,7 +211,9 @@ class ProcessManager:
                     logger.info(f"Pre-warmed {name}: {len(runner.tools)} tools")
                 else:
                     self.record_health(name, "start_failed", error or "Unknown error")
-                    logger.warning(f"Failed to pre-warm {name}: {error or 'Unknown error'}")
+                    logger.warning(
+                        f"Failed to pre-warm {name}: {error or 'Unknown error'}"
+                    )
                 return (name, success)
             except Exception as e:
                 logger.error(f"Error pre-warming {name}: {e}")
@@ -218,8 +221,7 @@ class ProcessManager:
 
         # Start all HOT servers in parallel
         results = await asyncio.gather(
-            *[warm_server(name) for name in hot_servers],
-            return_exceptions=True
+            *[warm_server(name) for name in hot_servers], return_exceptions=True
         )
 
         # Build results dict
@@ -233,7 +235,9 @@ class ProcessManager:
                 logger.info(f"Pre-warm exception: {result}")
 
         ready_count = sum(1 for v in status.values() if v)
-        logger.info(f"Pre-warm complete: {ready_count}/{len(hot_servers)} servers ready")
+        logger.info(
+            f"Pre-warm complete: {ready_count}/{len(hot_servers)} servers ready"
+        )
         return status
 
     def is_process_server(self, name: str) -> bool:
@@ -273,7 +277,8 @@ class ProcessManager:
 
         # Remove tools from mapping
         self._tool_to_server = {
-            tool: server for tool, server in self._tool_to_server.items()
+            tool: server
+            for tool, server in self._tool_to_server.items()
             if server != name
         }
 
@@ -288,11 +293,13 @@ class ProcessManager:
         # Drop cached tool/prompt routing so the next tools/list response
         # reflects the new smaller HOT set.
         self._tool_to_server = {
-            tool: server for tool, server in self._tool_to_server.items()
+            tool: server
+            for tool, server in self._tool_to_server.items()
             if server != name
         }
         self._prompt_to_server = {
-            prompt: server for prompt, server in self._prompt_to_server.items()
+            prompt: server
+            for prompt, server in self._prompt_to_server.items()
             if server != name
         }
         await self._fire_state_change(STATE_CHANGE_IDLE_KILLED, name)
@@ -353,7 +360,9 @@ class ProcessManager:
             # Ensure process is running and initialized
             success, error = await runner.ensure_ready_with_error()
             if not success:
-                logger.error(f"Failed to start server: {name} - {error or 'Unknown error'}")
+                logger.error(
+                    f"Failed to start server: {name} - {error or 'Unknown error'}"
+                )
                 self.record_health(name, "start_failed", error)
                 return []
 
@@ -456,7 +465,9 @@ class ProcessManager:
 
         return runner.prompts
 
-    async def get_prompt(self, prompt_name: str, arguments: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    async def get_prompt(
+        self, prompt_name: str, arguments: Optional[dict[str, Any]] = None
+    ) -> dict[str, Any]:
         """
         Get a prompt, auto-routing to the correct server.
 
@@ -486,8 +497,8 @@ class ProcessManager:
                 "jsonrpc": "2.0",
                 "error": {
                     "code": -32601,
-                    "message": f"Prompt not found: {prompt_name}"
-                }
+                    "message": f"Prompt not found: {prompt_name}",
+                },
             }
 
         runner = self._runners.get(server_name)
@@ -496,13 +507,15 @@ class ProcessManager:
                 "jsonrpc": "2.0",
                 "error": {
                     "code": -32603,
-                    "message": f"Server not available: {server_name}"
-                }
+                    "message": f"Server not available: {server_name}",
+                },
             }
 
         return await runner.get_prompt(prompt_name, arguments)
 
-    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    async def call_tool(
+        self, tool_name: str, arguments: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Call a tool, auto-routing to the correct server.
 
@@ -531,10 +544,7 @@ class ProcessManager:
         if not server_name:
             return {
                 "jsonrpc": "2.0",
-                "error": {
-                    "code": -32601,
-                    "message": f"Tool not found: {tool_name}"
-                }
+                "error": {"code": -32601, "message": f"Tool not found: {tool_name}"},
             }
 
         runner = self._runners.get(server_name)
@@ -543,17 +553,14 @@ class ProcessManager:
                 "jsonrpc": "2.0",
                 "error": {
                     "code": -32603,
-                    "message": f"Server not available: {server_name}"
-                }
+                    "message": f"Server not available: {server_name}",
+                },
             }
 
         return await runner.call_tool(tool_name, arguments)
 
     async def call_tool_on_server(
-        self,
-        server_name: str,
-        tool_name: str,
-        arguments: dict[str, Any]
+        self, server_name: str, tool_name: str, arguments: dict[str, Any]
     ) -> dict[str, Any]:
         """
         Call a tool on a specific server.
@@ -572,8 +579,8 @@ class ProcessManager:
                 "jsonrpc": "2.0",
                 "error": {
                     "code": -32603,
-                    "message": f"Server not found: {server_name}"
-                }
+                    "message": f"Server not found: {server_name}",
+                },
             }
 
         config = self._server_configs.get(server_name)
@@ -582,8 +589,8 @@ class ProcessManager:
                 "jsonrpc": "2.0",
                 "error": {
                     "code": -32603,
-                    "message": f"Server not enabled: {server_name}"
-                }
+                    "message": f"Server not enabled: {server_name}",
+                },
             }
 
         result = await runner.call_tool(tool_name, arguments)
@@ -591,7 +598,11 @@ class ProcessManager:
         # A call failure while the process never reached READY is a start
         # failure, not a business error from the remote tool — record it so
         # airis-exec can enrich the JSON-RPC error with the real cause.
-        if isinstance(result, dict) and result.get("error") and runner.state != ProcessState.READY:
+        if (
+            isinstance(result, dict)
+            and result.get("error")
+            and runner.state != ProcessState.READY
+        ):
             self.record_health(server_name, "start_failed", runner._last_error)
         elif isinstance(result, dict) and not result.get("error"):
             self.record_health(server_name, "ok")
@@ -599,9 +610,7 @@ class ProcessManager:
         return result
 
     async def send_request(
-        self,
-        server_name: str,
-        request: dict[str, Any]
+        self, server_name: str, request: dict[str, Any]
     ) -> dict[str, Any]:
         """
         Send a raw JSON-RPC request to a specific server.
@@ -620,13 +629,15 @@ class ProcessManager:
                 "id": request.get("id"),
                 "error": {
                     "code": -32603,
-                    "message": f"Server not found: {server_name}"
-                }
+                    "message": f"Server not found: {server_name}",
+                },
             }
 
         return await runner.send_raw_request(request)
 
-    def get_server_status(self, name: str, include_metrics: bool = False) -> dict[str, Any]:
+    def get_server_status(
+        self, name: str, include_metrics: bool = False
+    ) -> dict[str, Any]:
         """Get status of a specific server."""
         runner = self._runners.get(name)
         config = self._server_configs.get(name)

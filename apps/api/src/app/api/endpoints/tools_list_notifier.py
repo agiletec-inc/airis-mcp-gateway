@@ -23,6 +23,7 @@ it still sits in the queue and will be delivered on the next POST —
 the client therefore never misses a list change, only its arrival
 may be deferred a moment.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -73,9 +74,7 @@ async def fan_out_tools_list_changed(event: str, server_name: str) -> None:
         try:
             queue.put_nowait(TOOLS_LIST_CHANGED_NOTIFICATION)
         except asyncio.QueueFull:
-            logger.warning(
-                "session queue full while fanning out tools/list_changed"
-            )
+            logger.warning("session queue full while fanning out tools/list_changed")
 
 
 def install_tools_list_changed_fanout() -> None:

@@ -13,6 +13,7 @@ static guards keep the repo from drifting back into a pnpm/npm mix:
 - the Dockerfile builds with pnpm, not `npm ci`
 - the per-app package.json files do not pin npm as packageManager
 """
+
 from __future__ import annotations
 
 import json
@@ -63,8 +64,7 @@ def test_pnpm_workspace_scaffolding_exists():
 
 def test_no_npm_lockfiles():
     assert not (REPO_ROOT / "package-lock.json").exists(), (
-        "package-lock.json at repo root — the repo standardised on pnpm "
-        "(issue #81)."
+        "package-lock.json at repo root — the repo standardised on pnpm (issue #81)."
     )
     for app in TS_APPS:
         assert not (REPO_ROOT / "apps" / app / "package-lock.json").exists(), (
@@ -80,8 +80,7 @@ def test_dockerfile_builds_with_pnpm_not_npm():
         "build must use the pnpm workspace (issue #81)."
     )
     assert "npm ci" not in text, (
-        "Dockerfile still runs `npm ci` — the TS apps build with pnpm "
-        "(issue #81)."
+        "Dockerfile still runs `npm ci` — the TS apps build with pnpm (issue #81)."
     )
 
 

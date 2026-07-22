@@ -8,7 +8,7 @@ Tests cover:
 - Exponential backoff
 - State transitions
 """
-import pytest
+
 import time
 from unittest.mock import patch
 
@@ -122,7 +122,7 @@ class TestCircuitFailure:
         # (accounting for jitter)
         assert second_retry > first_retry
 
-    @patch('random.randint', return_value=0)  # No jitter
+    @patch("random.randint", return_value=0)  # No jitter
     def test_backoff_capped_at_max(self, mock_random):
         """Test backoff is capped at max_ms."""
         circuit = Circuit(base_ms=1000, max_ms=5000)

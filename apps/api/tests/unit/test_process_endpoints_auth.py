@@ -5,6 +5,7 @@ The /process/* router exposes high-impact admin/mutation endpoints
 pin the `verify_api_key` dependency contract and prove the dependency is
 actually wired onto the router.
 """
+
 from __future__ import annotations
 
 import pytest

@@ -17,6 +17,7 @@ MCP handshake (PR #202 — no fixed sleeps), and executed a tool call.
 Runs in the `test-python` CI job (tests/unit), no Docker required — the
 "server" is just `python tests/fixtures/mini_mcp_server.py`.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -40,7 +41,9 @@ STARTUP_TIMEOUT = 30.0
 
 
 def _make_cold_config(name: str = "mini-mcp") -> McpServerConfig:
-    assert FIXTURE_SERVER.is_file(), f"mini MCP server fixture missing: {FIXTURE_SERVER}"
+    assert FIXTURE_SERVER.is_file(), (
+        f"mini MCP server fixture missing: {FIXTURE_SERVER}"
+    )
     return McpServerConfig(
         name=name,
         server_type="process",
@@ -89,14 +92,18 @@ async def test_cold_auto_enable_spawns_real_subprocess_and_executes_tool(cold_ma
     pm, server_name = cold_manager
     dmcp = DynamicMCP()
 
-    assert pm._server_configs[server_name].enabled is False, "server must start COLD/disabled"
+    assert pm._server_configs[server_name].enabled is False, (
+        "server must start COLD/disabled"
+    )
 
     result = await asyncio.wait_for(
         dmcp.auto_discover_and_execute("echo", {"message": "hello"}, pm),
         timeout=STARTUP_TIMEOUT,
     )
 
-    assert result is not None, "auto_discover_and_execute returned None — tool/server lookup failed"
+    assert result is not None, (
+        "auto_discover_and_execute returned None — tool/server lookup failed"
+    )
     assert "error" not in result, f"tool call returned an error: {result.get('error')}"
     assert result["result"]["content"][0]["text"] == "echo: hello"
 
@@ -110,7 +117,9 @@ async def test_cold_auto_enable_spawns_real_subprocess_and_executes_tool(cold_ma
     assert runner._proc is not None
     assert runner._proc.pid is not None
     assert runner._proc.returncode is None, "subprocess exited instead of staying up"
-    assert any(t.get("name") == "echo" for t in runner.tools), "tools/list did not return the echo tool"
+    assert any(t.get("name") == "echo" for t in runner.tools), (
+        "tools/list did not return the echo tool"
+    )
 
 
 @pytest.mark.asyncio
@@ -133,4 +142,6 @@ async def test_cold_server_already_enabled_reuses_running_process(cold_manager):
 
     assert first["result"]["content"][0]["text"] == "echo: one"
     assert second["result"]["content"][0]["text"] == "echo: two"
-    assert runner._proc.pid == first_pid, "second call spawned a new subprocess instead of reusing it"
+    assert runner._proc.pid == first_pid, (
+        "second call spawned a new subprocess instead of reusing it"
+    )

@@ -24,11 +24,14 @@ logger = get_logger(__name__)
 
 # Buffer limit for stdout (default 65KB is too small for large MCP responses)
 # Can be configured via environment variable
-STDOUT_BUFFER_LIMIT = int(os.getenv("MCP_STDOUT_BUFFER_LIMIT", 1024 * 1024))  # 1MB default
+STDOUT_BUFFER_LIMIT = int(
+    os.getenv("MCP_STDOUT_BUFFER_LIMIT", 1024 * 1024)
+)  # 1MB default
 
 # For memory/CPU metrics
 try:
     import psutil
+
     HAS_PSUTIL = True
 except ImportError:
     HAS_PSUTIL = False
@@ -46,6 +49,7 @@ class ProcessState(Enum):
 @dataclass
 class ProcessConfig:
     """Configuration for a process-based MCP server."""
+
     name: str
     command: str
     args: list[str] = field(default_factory=list)
@@ -113,7 +117,9 @@ class ProcessRunner:
         self._total_calls = 0
 
         # Adaptive TTL tracking
-        self._call_timestamps: deque[float] = deque(maxlen=1000)  # Recent call timestamps
+        self._call_timestamps: deque[float] = deque(
+            maxlen=1000
+        )  # Recent call timestamps
         self._current_ttl: float = config.idle_timeout  # Start with base TTL
         self._cold_start_time: Optional[float] = None  # Track cold start duration
 
@@ -184,7 +190,9 @@ class ProcessRunner:
         else:
             # Linear interpolation
             ratio = calls_per_minute / 10
-            base_ttl = self.config.min_ttl + ratio * (self.config.max_ttl - self.config.min_ttl)
+            base_ttl = self.config.min_ttl + ratio * (
+                self.config.max_ttl - self.config.min_ttl
+            )
 
         # Cold start penalty: if cold start was slow, extend TTL
         if self._cold_start_time and self._cold_start_time > 5.0:
@@ -209,10 +217,14 @@ class ProcessRunner:
     def _update_ttl(self):
         """Update current TTL based on usage patterns with hysteresis."""
         new_ttl = self._calculate_adaptive_ttl()
-        if new_ttl != self._current_ttl and self._should_adjust_ttl(self._current_ttl, new_ttl):
+        if new_ttl != self._current_ttl and self._should_adjust_ttl(
+            self._current_ttl, new_ttl
+        ):
             old_ttl = self._current_ttl
             self._current_ttl = new_ttl
-            logger.info(f"{self.config.name} TTL adjusted: {old_ttl:.0f}s -> {new_ttl:.0f}s")
+            logger.info(
+                f"{self.config.name} TTL adjusted: {old_ttl:.0f}s -> {new_ttl:.0f}s"
+            )
 
     def _record_call(self):
         """Record a tool call for TTL calculation."""
@@ -222,7 +234,9 @@ class ProcessRunner:
     def _default_stderr_handler(self, server_name: str, line: str):
         logger.warning(f"[{server_name}][stderr] {line}")
 
-    async def ensure_ready_with_error(self, timeout: float = 30.0) -> tuple[bool, Optional[str]]:
+    async def ensure_ready_with_error(
+        self, timeout: float = 30.0
+    ) -> tuple[bool, Optional[str]]:
         """
         Ensure the process is started and initialized.
         Returns (True, None) if ready, (False, error_message) if failed.
@@ -329,40 +343,37 @@ class ProcessRunner:
             "method": "initialize",
             "params": {
                 "protocolVersion": "2024-11-05",
-                "capabilities": {
-                    "roots": {"listChanged": True},
-                    "sampling": {}
-                },
-                "clientInfo": {
-                    "name": "airis-mcp-gateway",
-                    "version": "1.0.0"
-                }
-            }
+                "capabilities": {"roots": {"listChanged": True}, "sampling": {}},
+                "clientInfo": {"name": "airis-mcp-gateway", "version": "1.0.0"},
+            },
         }
 
         try:
             # Use configurable timeout for servers that download dependencies on startup
-            response = await self._send_request(init_request, timeout=settings.TOOL_CALL_TIMEOUT)
+            response = await self._send_request(
+                init_request, timeout=settings.TOOL_CALL_TIMEOUT
+            )
 
             # Some MCP servers emit `"error": null` alongside
             # a successful `result`. JSON-RPC 2.0 §5 says responses MUST contain
             # either `result` or `error`, but `null` is JSON-valid and we should
             # treat it as "no error" rather than rejecting the handshake.
             if response.get("error") is not None:
-                error_msg = str(response['error'])
+                error_msg = str(response["error"])
                 logger.error(f"{self.config.name} initialize failed: {error_msg}")
                 self._last_error = error_msg
                 await self._set_state(ProcessState.STOPPED)
                 return
 
             self._server_info = response.get("result", {})
-            logger.info(f"{self.config.name} initialized: {self._server_info.get('serverInfo', {})}")
+            logger.info(
+                f"{self.config.name} initialized: {self._server_info.get('serverInfo', {})}"
+            )
 
             # Send notifications/initialized
-            await self._send_notification({
-                "jsonrpc": "2.0",
-                "method": "notifications/initialized"
-            })
+            await self._send_notification(
+                {"jsonrpc": "2.0", "method": "notifications/initialized"}
+            )
 
             # Fetch tools list
             await self._fetch_tools()
@@ -375,7 +386,9 @@ class ProcessRunner:
             self._update_ttl()
 
             await self._set_state(ProcessState.READY)
-            logger.info(f"{self.config.name} is READY with {len(self._tools)} tools, {len(self._prompts)} prompts (cold start: {self._cold_start_time:.1f}s, TTL: {self._current_ttl:.0f}s)")
+            logger.info(
+                f"{self.config.name} is READY with {len(self._tools)} tools, {len(self._prompts)} prompts (cold start: {self._cold_start_time:.1f}s, TTL: {self._current_ttl:.0f}s)"
+            )
 
         except Exception as e:
             logger.error(f"{self.config.name} initialize error: {e}")
@@ -388,7 +401,7 @@ class ProcessRunner:
             "jsonrpc": "2.0",
             "id": self._next_id(),
             "method": "tools/list",
-            "params": {}
+            "params": {},
         }
 
         try:
@@ -411,7 +424,7 @@ class ProcessRunner:
             "jsonrpc": "2.0",
             "id": self._next_id(),
             "method": "prompts/list",
-            "params": {}
+            "params": {},
         }
 
         try:
@@ -421,9 +434,13 @@ class ProcessRunner:
                 logger.info(f"{self.config.name} has {len(self._prompts)} prompts")
         except Exception as e:
             # Not all servers support prompts - this is OK
-            logger.debug(f"{self.config.name} prompts/list failed (may not be supported): {e}")
+            logger.debug(
+                f"{self.config.name} prompts/list failed (may not be supported): {e}"
+            )
 
-    async def get_prompt(self, prompt_name: str, arguments: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    async def get_prompt(
+        self, prompt_name: str, arguments: Optional[dict[str, Any]] = None
+    ) -> dict[str, Any]:
         """
         Get a prompt from this MCP server.
 
@@ -434,18 +451,15 @@ class ProcessRunner:
                 "jsonrpc": "2.0",
                 "error": {
                     "code": -32603,
-                    "message": f"Server {self.config.name} failed to initialize"
-                }
+                    "message": f"Server {self.config.name} failed to initialize",
+                },
             }
 
         request = {
             "jsonrpc": "2.0",
             "id": self._next_id(),
             "method": "prompts/get",
-            "params": {
-                "name": prompt_name,
-                "arguments": arguments or {}
-            }
+            "params": {"name": prompt_name, "arguments": arguments or {}},
         }
 
         try:
@@ -454,13 +468,12 @@ class ProcessRunner:
             return {
                 "jsonrpc": "2.0",
                 "id": request.get("id"),
-                "error": {
-                    "code": -32603,
-                    "message": f"prompts/get failed: {e}"
-                }
+                "error": {"code": -32603, "message": f"prompts/get failed: {e}"},
             }
 
-    async def call_tool(self, tool_name: str, arguments: dict[str, Any], max_retries: int = 2) -> dict[str, Any]:
+    async def call_tool(
+        self, tool_name: str, arguments: dict[str, Any], max_retries: int = 2
+    ) -> dict[str, Any]:
         """
         Call a tool on this MCP server with automatic retry on failure.
 
@@ -478,32 +491,30 @@ class ProcessRunner:
             if not await self.ensure_ready():
                 last_error = f"Server {self.config.name} failed to initialize"
                 if attempt < max_retries:
-                    logger.warning(f"{self.config.name} retry {attempt + 1}/{max_retries}: restarting after init failure")
+                    logger.warning(
+                        f"{self.config.name} retry {attempt + 1}/{max_retries}: restarting after init failure"
+                    )
                     await self._restart_process()
                     continue
                 return {
                     "jsonrpc": "2.0",
-                    "error": {
-                        "code": -32603,
-                        "message": last_error
-                    }
+                    "error": {"code": -32603, "message": last_error},
                 }
 
             request = {
                 "jsonrpc": "2.0",
                 "id": self._next_id(),
                 "method": "tools/call",
-                "params": {
-                    "name": tool_name,
-                    "arguments": arguments
-                }
+                "params": {"name": tool_name, "arguments": arguments},
             }
 
             try:
                 # Track latency and record call for adaptive TTL
                 # Use configurable timeout (default: 90s) to prevent Claude Code hanging
                 start_time = time.time()
-                result = await self._send_request(request, timeout=settings.TOOL_CALL_TIMEOUT)
+                result = await self._send_request(
+                    request, timeout=settings.TOOL_CALL_TIMEOUT
+                )
                 latency_ms = (time.time() - start_time) * 1000
                 self._call_latencies.append(latency_ms)
                 self._total_calls += 1
@@ -518,38 +529,33 @@ class ProcessRunner:
             except asyncio.TimeoutError:
                 last_error = f"Request timeout after {settings.TOOL_CALL_TIMEOUT}s"
                 if attempt < max_retries:
-                    logger.warning(f"{self.config.name} retry {attempt + 1}/{max_retries}: timeout, restarting")
+                    logger.warning(
+                        f"{self.config.name} retry {attempt + 1}/{max_retries}: timeout, restarting"
+                    )
                     await self._restart_process()
                     continue
                 return {
                     "jsonrpc": "2.0",
-                    "error": {
-                        "code": -32603,
-                        "message": last_error
-                    }
+                    "error": {"code": -32603, "message": last_error},
                 }
 
             except Exception as e:
                 last_error = str(e)
                 if attempt < max_retries:
-                    logger.warning(f"{self.config.name} retry {attempt + 1}/{max_retries}: {e}")
+                    logger.warning(
+                        f"{self.config.name} retry {attempt + 1}/{max_retries}: {e}"
+                    )
                     await self._restart_process()
                     continue
                 return {
                     "jsonrpc": "2.0",
-                    "error": {
-                        "code": -32603,
-                        "message": f"Call failed: {last_error}"
-                    }
+                    "error": {"code": -32603, "message": f"Call failed: {last_error}"},
                 }
 
         # Should not reach here, but just in case
         return {
             "jsonrpc": "2.0",
-            "error": {
-                "code": -32603,
-                "message": f"Max retries exceeded: {last_error}"
-            }
+            "error": {"code": -32603, "message": f"Max retries exceeded: {last_error}"},
         }
 
     async def _restart_process(self):
@@ -567,8 +573,8 @@ class ProcessRunner:
                 "id": request.get("id"),
                 "error": {
                     "code": -32603,
-                    "message": f"Server {self.config.name} failed to initialize"
-                }
+                    "message": f"Server {self.config.name} failed to initialize",
+                },
             }
 
         # Assign ID if not present
@@ -581,17 +587,16 @@ class ProcessRunner:
             return {
                 "jsonrpc": "2.0",
                 "id": request.get("id"),
-                "error": {
-                    "code": -32603,
-                    "message": str(e)
-                }
+                "error": {"code": -32603, "message": str(e)},
             }
 
     def _next_id(self) -> int:
         self._request_id += 1
         return self._request_id
 
-    async def _send_request(self, request: dict[str, Any], timeout: float = 30.0) -> dict[str, Any]:
+    async def _send_request(
+        self, request: dict[str, Any], timeout: float = 30.0
+    ) -> dict[str, Any]:
         """
         Send a request and wait for response.
 
@@ -664,14 +669,14 @@ class ProcessRunner:
             # We don't support LLM sampling requests from MCP servers
             response["error"] = {
                 "code": -32601,
-                "message": "Sampling not supported by this client"
+                "message": "Sampling not supported by this client",
             }
 
         else:
             # Unknown method - return method not found error
             response["error"] = {
                 "code": -32601,
-                "message": f"Method not found: {method}"
+                "message": f"Method not found: {method}",
             }
 
         # Send response
@@ -714,7 +719,9 @@ class ProcessRunner:
                 # Handle server-initiated notifications (has "method" but no "id")
                 elif "method" in message:
                     # Log notifications for debugging
-                    logger.info(f"{self.config.name} notification: {message.get('method')}")
+                    logger.info(
+                        f"{self.config.name} notification: {message.get('method')}"
+                    )
 
         except Exception as e:
             if self._state not in (ProcessState.STOPPING, ProcessState.STOPPED):
@@ -748,9 +755,15 @@ class ProcessRunner:
 
                 idle_time = time.time() - self._last_used
                 # Use adaptive TTL if enabled, otherwise fall back to config
-                effective_ttl = self._current_ttl if self.config.adaptive_ttl_enabled else self.config.idle_timeout
+                effective_ttl = (
+                    self._current_ttl
+                    if self.config.adaptive_ttl_enabled
+                    else self.config.idle_timeout
+                )
                 if idle_time > effective_ttl:
-                    logger.info(f"{self.config.name} idle for {idle_time:.0f}s (TTL: {effective_ttl:.0f}s), stopping")
+                    logger.info(
+                        f"{self.config.name} idle for {idle_time:.0f}s (TTL: {effective_ttl:.0f}s), stopping"
+                    )
                     self._idle_kill_count += 1
                     await self.stop()
                     if self._on_idle_kill is not None:
@@ -843,8 +856,16 @@ class ProcessRunner:
                 "current_ttl_s": round(self._current_ttl, 1),
                 "min_ttl_s": self.config.min_ttl,
                 "max_ttl_s": self.config.max_ttl,
-                "cold_start_time_s": round(self._cold_start_time, 2) if self._cold_start_time else None,
-                "recent_calls": len([ts for ts in self._call_timestamps if ts > time.time() - self.config.ttl_window]),
+                "cold_start_time_s": round(self._cold_start_time, 2)
+                if self._cold_start_time
+                else None,
+                "recent_calls": len(
+                    [
+                        ts
+                        for ts in self._call_timestamps
+                        if ts > time.time() - self.config.ttl_window
+                    ]
+                ),
             },
         }
 
@@ -858,14 +879,18 @@ class ProcessRunner:
             n = len(sorted_latencies)
             metrics["latency_p50_ms"] = round(sorted_latencies[int(n * 0.50)], 2)
             metrics["latency_p95_ms"] = round(sorted_latencies[int(n * 0.95)], 2)
-            metrics["latency_p99_ms"] = round(sorted_latencies[min(int(n * 0.99), n - 1)], 2)
+            metrics["latency_p99_ms"] = round(
+                sorted_latencies[min(int(n * 0.99), n - 1)], 2
+            )
 
         # Get process metrics if psutil available and process running
         if HAS_PSUTIL and self._proc and self._proc.pid:
             try:
                 proc = psutil.Process(self._proc.pid)
                 metrics["pid"] = self._proc.pid
-                metrics["memory_rss_mb"] = round(proc.memory_info().rss / 1024 / 1024, 2)
+                metrics["memory_rss_mb"] = round(
+                    proc.memory_info().rss / 1024 / 1024, 2
+                )
                 metrics["cpu_percent"] = round(proc.cpu_percent(interval=0.1), 2)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass

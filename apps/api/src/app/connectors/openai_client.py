@@ -31,7 +31,9 @@ class OpenAIClient(BaseConnector):
         url = self._EMBEDDINGS_URL if tool == "embeddings" else self._PROBE_URL
         async with httpx.AsyncClient(timeout=30.0) as client:
             if tool == "models.list":
-                resp = await client.get(self._PROBE_URL, headers=headers, params=payload)
+                resp = await client.get(
+                    self._PROBE_URL, headers=headers, params=payload
+                )
             else:
                 resp = await client.post(url, headers=headers, json=payload)
             resp.raise_for_status()

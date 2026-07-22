@@ -4,6 +4,7 @@ Integration tests for MCP Server PostgreSQL persistence.
 Tests verify that UI state changes (enabled/disabled) are permanently
 persisted to PostgreSQL database and survive container restarts.
 """
+
 import asyncio
 import os
 import pytest
@@ -63,14 +64,15 @@ class TestMCPServerPersistence:
             # Step 2: Toggle server (flip state)
             new_state = not initial_state
             response = await client.post(
-                f"/api/v1/mcp/servers/{server_id}/toggle",
-                json={"enabled": new_state}
+                f"/api/v1/mcp/servers/{server_id}/toggle", json={"enabled": new_state}
             )
             assert response.status_code == 200
             data = response.json()
 
             # Step 3: Verify API returns new enabled state
-            assert data["enabled"] == new_state, "API response doesn't match requested state"
+            assert data["enabled"] == new_state, (
+                "API response doesn't match requested state"
+            )
 
             # Wait for commit to complete (PostgreSQL READ COMMITTED isolation)
             await asyncio.sleep(0.1)
@@ -79,17 +81,19 @@ class TestMCPServerPersistence:
             async with TestSessionLocal() as fresh_db:
                 result = await fresh_db.execute(
                     text("SELECT enabled FROM mcp_servers WHERE name = :name"),
-                    {"name": server_name}
+                    {"name": server_name},
                 )
                 row = result.first()
                 assert row is not None, f"Server {server_name} not found in database"
                 db_enabled = row[0]
-                assert db_enabled == new_state, f"Database state doesn't match API response: DB={db_enabled}, expected={new_state}"
+                assert db_enabled == new_state, (
+                    f"Database state doesn't match API response: DB={db_enabled}, expected={new_state}"
+                )
 
             # Step 5: Toggle again (back to original)
             response = await client.post(
                 f"/api/v1/mcp/servers/{server_id}/toggle",
-                json={"enabled": initial_state}
+                json={"enabled": initial_state},
             )
             assert response.status_code == 200
             data = response.json()
@@ -102,11 +106,13 @@ class TestMCPServerPersistence:
             async with TestSessionLocal() as fresh_db2:
                 result = await fresh_db2.execute(
                     text("SELECT enabled FROM mcp_servers WHERE name = :name"),
-                    {"name": server_name}
+                    {"name": server_name},
                 )
                 row = result.first()
                 db_enabled = row[0]
-                assert db_enabled == initial_state, f"Database state not updated after second toggle: DB={db_enabled}, expected={initial_state}"
+                assert db_enabled == initial_state, (
+                    f"Database state not updated after second toggle: DB={db_enabled}, expected={initial_state}"
+                )
 
     async def test_server_list_reflects_database_state(self):
         """
@@ -127,9 +133,12 @@ class TestMCPServerPersistence:
                     server_name = api_server["name"]
                     db_server = await crud.get_server_by_name(db, server_name)
 
-                    assert db_server is not None, f"Server {server_name} in API but not in DB"
-                    assert db_server.enabled == api_server["enabled"], \
+                    assert db_server is not None, (
+                        f"Server {server_name} in API but not in DB"
+                    )
+                    assert db_server.enabled == api_server["enabled"], (
                         f"Server {server_name} enabled state mismatch: DB={db_server.enabled}, API={api_server['enabled']}"
+                    )
 
     async def test_restart_preserves_enabled_state(self):
         """
@@ -153,8 +162,7 @@ class TestMCPServerPersistence:
             # Ensure server is enabled
             if not initial_enabled:
                 response = await client.post(
-                    f"/api/v1/mcp/servers/{server_id}/toggle",
-                    json={"enabled": True}
+                    f"/api/v1/mcp/servers/{server_id}/toggle", json={"enabled": True}
                 )
                 assert response.status_code == 200
 
@@ -171,7 +179,7 @@ class TestMCPServerPersistence:
             async with TestSessionLocal() as fresh_db:
                 result = await fresh_db.execute(
                     text("SELECT enabled FROM mcp_servers WHERE name = :name"),
-                    {"name": server_name}
+                    {"name": server_name},
                 )
                 row = result.first()
                 assert row is not None, f"Server {server_name} not found"
@@ -200,7 +208,7 @@ class TestMCPServerPersistence:
                 new_state = not ((i % 2 == 0) == initial_state)
                 response = await client.post(
                     f"/api/v1/mcp/servers/{server_id}/toggle",
-                    json={"enabled": new_state}
+                    json={"enabled": new_state},
                 )
                 assert response.status_code == 200
 
@@ -211,12 +219,13 @@ class TestMCPServerPersistence:
                 async with TestSessionLocal() as fresh_db:
                     result = await fresh_db.execute(
                         text("SELECT enabled FROM mcp_servers WHERE name = :name"),
-                        {"name": server_name}
+                        {"name": server_name},
                     )
                     row = result.first()
                     db_enabled = row[0]
-                    assert db_enabled == new_state, \
-                        f"Toggle {i+1}: Expected {new_state}, got {db_enabled}"
+                    assert db_enabled == new_state, (
+                        f"Toggle {i + 1}: Expected {new_state}, got {db_enabled}"
+                    )
 
     async def test_enabled_state_survives_migration(self):
         """
@@ -237,8 +246,9 @@ class TestMCPServerPersistence:
 
             # Verify each server has a boolean enabled state (not None)
             for server in servers:
-                assert isinstance(server.enabled, bool), \
+                assert isinstance(server.enabled, bool), (
                     f"Server {server.name} has invalid enabled state: {server.enabled}"
+                )
 
                 # Verify required fields exist (migration integrity)
                 assert server.name is not None

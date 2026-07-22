@@ -1,4 +1,5 @@
 """Gateway control endpoints"""
+
 import asyncio
 import os
 
@@ -20,7 +21,9 @@ def _project_root() -> str:
 
 async def _run_compose(*args: str, timeout: int = 30) -> asyncio.subprocess.Process:
     proc = await asyncio.create_subprocess_exec(
-        "docker", "compose", *args,
+        "docker",
+        "compose",
+        *args,
         cwd=_project_root(),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,

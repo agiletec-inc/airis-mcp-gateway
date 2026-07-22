@@ -2,7 +2,6 @@
 
 import json
 import pytest
-from unittest.mock import patch, mock_open
 
 from app.core.routing_engine import (
     load_routing_table,
@@ -23,9 +22,21 @@ def clear_cache():
 
 SAMPLE_TABLE = {
     "routes": [
-        {"pattern": "research|investigate|search web", "chain": ["tavily:search"], "hint": "Web research"},
-        {"pattern": "database|sql|query", "chain": ["supabase:query"], "hint": "Database"},
-        {"pattern": "payment|invoice|billing", "chain": ["stripe:*"], "hint": "Payments"},
+        {
+            "pattern": "research|investigate|search web",
+            "chain": ["tavily:search"],
+            "hint": "Web research",
+        },
+        {
+            "pattern": "database|sql|query",
+            "chain": ["supabase:query"],
+            "hint": "Database",
+        },
+        {
+            "pattern": "payment|invoice|billing",
+            "chain": ["stripe:*"],
+            "hint": "Payments",
+        },
     ]
 }
 
@@ -87,7 +98,9 @@ class TestRouteTask:
 
     def test_matches_pattern(self):
         """Matches task against routing table patterns."""
-        result = route_task("research best practices for React", routing_table=SAMPLE_TABLE)
+        result = route_task(
+            "research best practices for React", routing_table=SAMPLE_TABLE
+        )
         assert result.chain == ["tavily:search"]
         assert result.hint == "Web research"
 
@@ -120,7 +133,9 @@ class TestRouteTask:
         result = RouteResult(
             chain=["tavily:search"],
             hint="Web research",
-            suggestions=[{"server": "tavily", "tool": "search", "score": 0.8, "reason": "test"}],
+            suggestions=[
+                {"server": "tavily", "tool": "search", "score": 0.8, "reason": "test"}
+            ],
             pattern="research",
         )
         d = result.to_dict()

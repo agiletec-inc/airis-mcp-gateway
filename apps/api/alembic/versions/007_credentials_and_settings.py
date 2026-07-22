@@ -4,6 +4,7 @@ Revision ID: 007
 Revises: 006
 Create Date: 2025-10-27
 """
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -96,9 +97,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
-        "DROP TRIGGER IF EXISTS set_updated_at_mcp_settings ON mcp_settings;"
-    )
+    op.execute("DROP TRIGGER IF EXISTS set_updated_at_mcp_settings ON mcp_settings;")
     op.execute(
         "DROP TRIGGER IF EXISTS set_updated_at_mcp_credentials ON mcp_credentials;"
     )

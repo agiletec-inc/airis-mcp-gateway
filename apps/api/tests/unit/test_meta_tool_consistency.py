@@ -20,6 +20,7 @@ never advertised `airis-activate` in any mode.
 This test is RED on the tree before the #196 cleanup (airis-activate handled
 but not advertised) and GREEN after the dead handler is removed.
 """
+
 import ast
 from pathlib import Path
 
@@ -71,7 +72,9 @@ def _handled_airis_tool_names() -> set[str]:
             if const_node.value.startswith("airis-"):
                 handled.add(const_node.value)
 
-    assert handled, "AST scan found no `tool_name == \"airis-...\"` dispatch — extraction is broken"
+    assert handled, (
+        'AST scan found no `tool_name == "airis-..."` dispatch — extraction is broken'
+    )
     return handled
 
 

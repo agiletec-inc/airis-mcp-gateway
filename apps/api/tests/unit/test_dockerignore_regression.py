@@ -7,6 +7,7 @@ warm builds, gigabytes of node_modules pushed to the daemon). This test is a
 static guard: it asserts the file exists and contains every exclusion the fix
 added.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -55,7 +56,11 @@ def test_dockerignore_exists():
 @pytest.mark.parametrize("pattern", REQUIRED_PATTERNS)
 def test_dockerignore_contains_required_pattern(pattern: str):
     content = DOCKERIGNORE.read_text(encoding="utf-8")
-    lines = {line.strip() for line in content.splitlines() if line.strip() and not line.strip().startswith("#")}
+    lines = {
+        line.strip()
+        for line in content.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    }
     assert pattern in lines, (
         f"{pattern!r} is missing from .dockerignore. Without it the Docker "
         "build context will include files that should never be shipped (see "

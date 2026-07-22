@@ -7,6 +7,7 @@ use Redis-backed rate limiting (see docs/DEPLOYMENT.md).
 
 Key priority: API-Key header > client IP
 """
+
 import hashlib
 import ipaddress
 import os
@@ -27,7 +28,9 @@ logger = get_logger(__name__)
 
 # Configuration via environment variables
 RATE_LIMIT_PER_IP = int(os.getenv("RATE_LIMIT_PER_IP", "100"))  # requests per minute
-RATE_LIMIT_PER_API_KEY = int(os.getenv("RATE_LIMIT_PER_API_KEY", "1000"))  # requests per minute
+RATE_LIMIT_PER_API_KEY = int(
+    os.getenv("RATE_LIMIT_PER_API_KEY", "1000")
+)  # requests per minute
 RATE_LIMIT_WINDOW = 60  # seconds (fixed at 1 minute)
 
 # Paths excluded from rate limiting (monitoring endpoints)
@@ -74,6 +77,7 @@ TRUSTED_PROXIES: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
 @dataclass
 class RateLimitEntry:
     """Rate limit state for a single key."""
+
     count: int = 0
     window_start: float = 0.0
 
@@ -93,7 +97,9 @@ class RateLimitStore:
     def __init__(self):
         self._store: dict[str, RateLimitEntry] = defaultdict(RateLimitEntry)
 
-    def check_and_increment(self, key: str, limit: int, window: int = RATE_LIMIT_WINDOW) -> tuple[bool, int]:
+    def check_and_increment(
+        self, key: str, limit: int, window: int = RATE_LIMIT_WINDOW
+    ) -> tuple[bool, int]:
         """
         Check rate limit and increment counter.
 

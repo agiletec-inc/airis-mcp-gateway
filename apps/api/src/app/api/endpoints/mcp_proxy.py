@@ -26,20 +26,17 @@ import asyncio
 import json
 from typing import Any, AsyncGenerator, Dict, Optional
 from .gateway_stream_bridge import (
-    cleanup_stale_stream_bridges,
     delete_stream_bridge_session as _delete_stream_bridge_session,
     send_via_stream_bridge as _send_via_stream_bridge,
 )
+
 # Responsibility-split modules. Imported with their public names so the rest
 # of this file reads as if the helpers were still local.
 from .session_queue import (
-    cleanup_stale_queues,
     get_response_queue,
-    get_session_queue_count,
     remove_response_queue,
 )
 from .sse_protocol import (
-    SSEEventBuffer,
     format_sse_event as _format_sse_event,
     parse_sse_json as _parse_sse_json,
 )
@@ -109,31 +106,25 @@ async def _cleanup_session_state(session_id: str) -> None:
     await remove_response_queue(session_id)
     _session_initialize_events.pop(session_id, None)
 
+
 # SSE stream timeout - long read timeout for long-lived connections
 SSE_TIMEOUT = httpx.Timeout(
-    connect=CONNECT_TIMEOUT,
-    read=READ_TIMEOUT,
-    write=WRITE_TIMEOUT,
-    pool=POOL_TIMEOUT
+    connect=CONNECT_TIMEOUT, read=READ_TIMEOUT, write=WRITE_TIMEOUT, pool=POOL_TIMEOUT
 )
 
 # Streaming gateway timeout - similar to SSE
 STREAM_TIMEOUT = httpx.Timeout(
-    connect=CONNECT_TIMEOUT,
-    read=READ_TIMEOUT,
-    write=WRITE_TIMEOUT,
-    pool=POOL_TIMEOUT
+    connect=CONNECT_TIMEOUT, read=READ_TIMEOUT, write=WRITE_TIMEOUT, pool=POOL_TIMEOUT
 )
+
 
 # Standard JSON-RPC timeout - uses configurable TOOL_CALL_TIMEOUT
 def get_jsonrpc_timeout() -> httpx.Timeout:
     """Get JSON-RPC timeout using configurable TOOL_CALL_TIMEOUT."""
     return httpx.Timeout(
-        connect=10.0,
-        read=settings.TOOL_CALL_TIMEOUT,
-        write=10.0,
-        pool=10.0
+        connect=10.0, read=settings.TOOL_CALL_TIMEOUT, write=10.0, pool=10.0
     )
+
 
 async def proxy_sse_stream(request: Request):
     """
@@ -150,7 +141,6 @@ async def proxy_sse_stream(request: Request):
     """
     initialize_request_id = None  # Track initialize request ID
     session_id = request.query_params.get("sessionid")  # Track session ID
-    endpoint_url = None  # Track endpoint URL
     captured_session_id = None  # Session ID captured from Gateway
 
     # Codex streamable_http sometimes POSTs to /sse with Content-Length headers.
@@ -186,7 +176,9 @@ async def proxy_sse_stream(request: Request):
                         queue = await get_response_queue(captured_session_id)
                         try:
                             # Non-blocking check with timeout
-                            response_data = await asyncio.wait_for(queue.get(), timeout=0.1)
+                            response_data = await asyncio.wait_for(
+                                queue.get(), timeout=0.1
+                            )
                             yield ("process_manager", response_data)
                         except asyncio.TimeoutError:
                             yield ("tick", None)  # Keep the generator alive
@@ -210,7 +202,6 @@ async def proxy_sse_stream(request: Request):
             queue_task = None
             keepalive_task = None
             gateway_stream_alive = True
-            sse_buffer = SSEEventBuffer()
 
             try:
                 while True:
@@ -223,10 +214,13 @@ async def proxy_sse_stream(request: Request):
                         keepalive_task = asyncio.create_task(keepalive_gen.__anext__())
 
                     # Wait for any to complete (only include active tasks)
-                    tasks_to_wait = [t for t in [gateway_task, queue_task, keepalive_task] if t is not None]
+                    tasks_to_wait = [
+                        t
+                        for t in [gateway_task, queue_task, keepalive_task]
+                        if t is not None
+                    ]
                     done, _ = await asyncio.wait(
-                        tasks_to_wait,
-                        return_when=asyncio.FIRST_COMPLETED
+                        tasks_to_wait, return_when=asyncio.FIRST_COMPLETED
                     )
 
                     for task in done:
@@ -235,16 +229,24 @@ async def proxy_sse_stream(request: Request):
                         except StopAsyncIteration:
                             if task is gateway_task:
                                 # Gateway stream ended — continue serving process manager responses
-                                logger.info(f"Gateway SSE stream ended, continuing with process manager (session={captured_session_id})")
+                                logger.info(
+                                    f"Gateway SSE stream ended, continuing with process manager (session={captured_session_id})"
+                                )
                                 gateway_task = None
                                 gateway_stream_alive = False
                                 continue
                             if captured_session_id:
                                 await _cleanup_session_state(captured_session_id)
                             return
-                        except (httpx.ReadError, httpx.RemoteProtocolError, httpx.ConnectError) as e:
+                        except (
+                            httpx.ReadError,
+                            httpx.RemoteProtocolError,
+                            httpx.ConnectError,
+                        ) as e:
                             if task is gateway_task:
-                                logger.info(f"Gateway disconnected ({type(e).__name__}), continuing with process manager (session={captured_session_id})")
+                                logger.info(
+                                    f"Gateway disconnected ({type(e).__name__}), continuing with process manager (session={captured_session_id})"
+                                )
                                 gateway_task = None
                                 gateway_stream_alive = False
                                 continue
@@ -255,17 +257,23 @@ async def proxy_sse_stream(request: Request):
                             return
                         except httpx.ReadTimeout:
                             if task is gateway_task:
-                                logger.info(f"Gateway SSE idle timeout, continuing with process manager (session={captured_session_id})")
+                                logger.info(
+                                    f"Gateway SSE idle timeout, continuing with process manager (session={captured_session_id})"
+                                )
                                 gateway_task = None
                                 gateway_stream_alive = False
                                 continue
-                            logger.info(f"SSE read timeout (session={captured_session_id})")
+                            logger.info(
+                                f"SSE read timeout (session={captured_session_id})"
+                            )
                             if captured_session_id:
                                 await _cleanup_session_state(captured_session_id)
                             return
                         except httpx.TimeoutException as e:
                             if task is gateway_task:
-                                logger.info(f"Gateway timeout ({type(e).__name__}), continuing with process manager (session={captured_session_id})")
+                                logger.info(
+                                    f"Gateway timeout ({type(e).__name__}), continuing with process manager (session={captured_session_id})"
+                                )
                                 gateway_task = None
                                 gateway_stream_alive = False
                                 continue
@@ -288,7 +296,9 @@ async def proxy_sse_stream(request: Request):
                         if source == "process_manager":
                             # Send ProcessManager response via SSE
                             queue_task = None
-                            logger.info(f"Sending ProcessManager response via SSE: id={data.get('id') if isinstance(data, dict) else None}")
+                            logger.info(
+                                f"Sending ProcessManager response via SSE: id={data.get('id') if isinstance(data, dict) else None}"
+                            )
                             yield f"event: message\ndata: {json.dumps(data)}\n\n"
                             continue
 
@@ -309,15 +319,21 @@ async def proxy_sse_stream(request: Request):
                             data_str = line[6:]  # Strip "data: " prefix
 
                             # Check if it's an endpoint URL (not JSON)
-                            if not data_str.startswith("{") and not data_str.startswith("["):
+                            if not data_str.startswith("{") and not data_str.startswith(
+                                "["
+                            ):
                                 # Extract sessionid from endpoint URL if present
                                 if "sessionid=" in data_str:
                                     import re
-                                    match = re.search(r'sessionid=([A-Z0-9]+)', data_str)
+
+                                    match = re.search(
+                                        r"sessionid=([A-Z0-9]+)", data_str
+                                    )
                                     if match:
                                         captured_session_id = match.group(1)
-                                        endpoint_url = data_str.strip()
-                                        logger.info(f"Captured endpoint URL with sessionid={captured_session_id}")
+                                        logger.info(
+                                            f"Captured endpoint URL with sessionid={captured_session_id}"
+                                        )
                                         # Create response queue for this session
                                         await get_response_queue(captured_session_id)
                                 yield f"{line}\n"
@@ -327,41 +343,78 @@ async def proxy_sse_stream(request: Request):
                                 json_data = json.loads(data_str)
 
                                 # Detect initialize request (unlikely in SSE stream, but just in case)
-                                if isinstance(json_data, dict) and json_data.get("method") == "initialize":
+                                if (
+                                    isinstance(json_data, dict)
+                                    and json_data.get("method") == "initialize"
+                                ):
                                     initialize_request_id = json_data.get("id")
-                                    logger.info(f"Detected initialize request (id={initialize_request_id})")
-                                    await protocol_logger.log_message("client→server", json_data, {"phase": "initialize"})
+                                    logger.info(
+                                        f"Detected initialize request (id={initialize_request_id})"
+                                    )
+                                    await protocol_logger.log_message(
+                                        "client→server",
+                                        json_data,
+                                        {"phase": "initialize"},
+                                    )
 
                                 # Intercept tools/list response
-                                if isinstance(json_data, dict) and "result" in json_data and "tools" in json_data.get("result", {}):
-                                    await protocol_logger.log_message("client→server", json_data, {"phase": "tools_list"})
-                                    json_data = await apply_schema_partitioning(json_data)
-                                    await protocol_logger.log_message("server→client", json_data, {"phase": "tools_list"})
+                                if (
+                                    isinstance(json_data, dict)
+                                    and "result" in json_data
+                                    and "tools" in json_data.get("result", {})
+                                ):
+                                    await protocol_logger.log_message(
+                                        "client→server",
+                                        json_data,
+                                        {"phase": "tools_list"},
+                                    )
+                                    json_data = await apply_schema_partitioning(
+                                        json_data
+                                    )
+                                    await protocol_logger.log_message(
+                                        "server→client",
+                                        json_data,
+                                        {"phase": "tools_list"},
+                                    )
 
                                 # Intercept prompts/list response (merge Process MCP server prompts)
-                                if isinstance(json_data, dict) and "result" in json_data and "prompts" in json_data.get("result", {}):
+                                if (
+                                    isinstance(json_data, dict)
+                                    and "result" in json_data
+                                    and "prompts" in json_data.get("result", {})
+                                ):
                                     json_data = await apply_prompts_merging(json_data)
 
                                 # Inject instructions into initialize response
                                 is_initialize_response = (
-                                    isinstance(json_data, dict) and
-                                    "result" in json_data and
-                                    isinstance(json_data.get("result"), dict) and
-                                    "protocolVersion" in json_data.get("result", {})
+                                    isinstance(json_data, dict)
+                                    and "result" in json_data
+                                    and isinstance(json_data.get("result"), dict)
+                                    and "protocolVersion" in json_data.get("result", {})
                                 )
                                 if is_initialize_response:
-                                    from ...core.mcp_config_loader import load_mcp_config
+                                    from ...core.mcp_config_loader import (
+                                        load_mcp_config,
+                                    )
+
                                     server_configs = load_mcp_config()
-                                    json_data["result"]["instructions"] = compile_instructions(server_configs)
+                                    json_data["result"]["instructions"] = (
+                                        compile_instructions(server_configs)
+                                    )
 
                                 # Yield transformed data
                                 yield f"data: {json.dumps(json_data)}\n\n"
 
                                 # On initialize response, POST notifications/initialized to Gateway
                                 if is_initialize_response:
-
-                                    logger.info(f"Detected initialize response, sending initialized notification to Gateway")
-                                    await protocol_logger.log_message("server→client", json_data, {"phase": "initialize"})
+                                    logger.info(
+                                        "Detected initialize response, sending initialized notification to Gateway"
+                                    )
+                                    await protocol_logger.log_message(
+                                        "server→client",
+                                        json_data,
+                                        {"phase": "initialize"},
+                                    )
 
                                     # Wake anyone awaiting this session's initialize
                                     # response (e.g. the auto-init fallback in
@@ -373,7 +426,7 @@ async def proxy_sse_stream(request: Request):
                                     # POST notifications/initialized to Gateway
                                     initialized_notification = {
                                         "jsonrpc": "2.0",
-                                        "method": "notifications/initialized"
+                                        "method": "notifications/initialized",
                                     }
 
                                     # POST to Gateway using sessionid
@@ -383,17 +436,27 @@ async def proxy_sse_stream(request: Request):
                                             post_response = await client.post(
                                                 gateway_post_url,
                                                 json=initialized_notification,
-                                                headers={"Content-Type": "application/json"}
+                                                headers={
+                                                    "Content-Type": "application/json"
+                                                },
                                             )
-                                            logger.info(f"Sent initialized notification to Gateway: {post_response.status_code}")
+                                            logger.info(
+                                                f"Sent initialized notification to Gateway: {post_response.status_code}"
+                                            )
                                         except Exception as e:
-                                            logger.error(f"Failed to send initialized notification: {e}")
+                                            logger.error(
+                                                f"Failed to send initialized notification: {e}"
+                                            )
                                     else:
-                                        logger.info("No sessionid available, cannot send initialized notification")
+                                        logger.info(
+                                            "No sessionid available, cannot send initialized notification"
+                                        )
 
                             except json.JSONDecodeError as e:
                                 # Log malformed JSON for debugging (truncate to avoid log spam)
-                                logger.info(f"Malformed JSON in SSE data: {str(e)[:100]}")
+                                logger.info(
+                                    f"Malformed JSON in SSE data: {str(e)[:100]}"
+                                )
                                 yield f"{line}\n"
                         else:
                             yield f"{line}\n"
@@ -409,7 +472,9 @@ async def proxy_sse_stream(request: Request):
                 # Cleanup session queue
                 if captured_session_id:
                     await _cleanup_session_state(captured_session_id)
-                logger.info(f"SSE stream cleanup complete (session={captured_session_id})")
+                logger.info(
+                    f"SSE stream cleanup complete (session={captured_session_id})"
+                )
 
 
 def _build_gateway_jsonrpc_url(request: Request) -> str:
@@ -422,7 +487,7 @@ def _build_gateway_jsonrpc_url(request: Request) -> str:
 
     suffix = path
     if prefix and path.startswith(prefix):
-        suffix = path[len(prefix):]
+        suffix = path[len(prefix) :]
 
     if not suffix:
         suffix = "/"
@@ -453,7 +518,7 @@ def _build_stream_gateway_url(request: Request, include_api_prefix: bool = True)
     prefix = f"{settings.API_V1_PREFIX}/mcp" if include_api_prefix else ""
 
     if prefix and suffix.startswith(prefix):
-        suffix = suffix[len(prefix):]
+        suffix = suffix[len(prefix) :]
 
     if not suffix:
         return base_url if not request.url.query else f"{base_url}?{request.url.query}"
@@ -505,42 +570,12 @@ def _filter_stream_headers(headers: dict[str, str]) -> dict[str, str]:
         None,
     )
     filtered = {
-        key: value
-        for key, value in headers.items()
-        if key.lower() not in blocked
+        key: value for key, value in headers.items() if key.lower() not in blocked
     }
 
     filtered["accept"] = _normalize_stream_accept_header(accept_header)
 
     return filtered
-
-
-def _format_sse_event(data: Dict[str, Any], event_type: str | None = "message") -> bytes:
-    """
-    Encode an SSE event payload.
-    """
-    lines = []
-    if event_type:
-        lines.append(f"event: {event_type}")
-    lines.append(f"data: {json.dumps(data)}")
-    return ("\n".join(lines) + "\n\n").encode("utf-8")
-
-
-def _parse_sse_json(lines: list[str]) -> Optional[Dict[str, Any]]:
-    """
-    Extract JSON payload from SSE event lines.
-    """
-    data_lines: list[str] = []
-    for line in lines:
-        if line.startswith("data:"):
-            data_lines.append(line[5:].lstrip())
-    if not data_lines:
-        return None
-    data_str = "\n".join(data_lines)
-    try:
-        return json.loads(data_str)
-    except json.JSONDecodeError:
-        return None
 
 
 def _method_has_body(method: str) -> bool:
@@ -556,7 +591,9 @@ async def _proxy_streaming_gateway_request(
     """
     Proxy Codex RMCP streamable_http traffic to the streaming gateway.
     """
-    target_url = _build_stream_gateway_url(request, include_api_prefix=include_api_prefix)
+    target_url = _build_stream_gateway_url(
+        request, include_api_prefix=include_api_prefix
+    )
     method = request.method.upper()
     payload = await request.body() if _method_has_body(method) else None
 
@@ -570,7 +607,9 @@ async def _proxy_streaming_gateway_request(
             headers=_filter_stream_headers(dict(request.headers)),
             content=payload,
         )
-        upstream = await client.send(upstream_request, stream=True, follow_redirects=True)
+        upstream = await client.send(
+            upstream_request, stream=True, follow_redirects=True
+        )
 
         response_headers = {
             key: value
@@ -689,7 +728,7 @@ def _build_sse_response(request: Request) -> StreamingResponse:
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",  # Disable buffering at the edge
-        }
+        },
     )
 
 
@@ -723,9 +762,15 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
 
     # Auto-initialize session if tools/call arrives for uninitialized session
     # This is a fallback for clients that don't follow proper MCP init sequence
-    if method == "tools/call" and session_id and session_id not in _initialized_sessions:
+    if (
+        method == "tools/call"
+        and session_id
+        and session_id not in _initialized_sessions
+    ):
         logger.info(f"Session {session_id} not initialized, running init sequence")
-        gateway_post_url = f"{settings.MCP_GATEWAY_URL.rstrip('/')}/sse?sessionid={session_id}"
+        gateway_post_url = (
+            f"{settings.MCP_GATEWAY_URL.rstrip('/')}/sse?sessionid={session_id}"
+        )
 
         async with httpx.AsyncClient(timeout=INIT_CLIENT_TIMEOUT) as init_client:
             try:
@@ -737,24 +782,25 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
                     "params": {
                         "protocolVersion": "2024-11-05",
                         "capabilities": {},
-                        "clientInfo": {
-                            "name": "airis-proxy",
-                            "version": "1.0.0"
-                        }
-                    }
+                        "clientInfo": {"name": "airis-proxy", "version": "1.0.0"},
+                    },
                 }
                 init_response = await init_client.post(
                     gateway_post_url,
                     json=initialize_request,
-                    headers={"Content-Type": "application/json"}
+                    headers={"Content-Type": "application/json"},
                 )
 
                 # SSE transport returns 202 Accepted for successful POST
                 if init_response.status_code not in (200, 202):
-                    logger.error(f"Initialize request failed: {init_response.status_code}")
+                    logger.error(
+                        f"Initialize request failed: {init_response.status_code}"
+                    )
                     # Continue anyway - let the actual request fail with proper error
                 else:
-                    logger.info(f"Initialize request accepted: {init_response.status_code}")
+                    logger.info(
+                        f"Initialize request accepted: {init_response.status_code}"
+                    )
 
                     # Wait for the Gateway's actual initialize response instead
                     # of a fixed sleep. proxy_sse_stream() — running concurrently
@@ -762,7 +808,9 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
                     # sets this event the moment that response arrives (issue #194).
                     init_event = _get_initialize_event(session_id)
                     try:
-                        await asyncio.wait_for(init_event.wait(), timeout=INIT_HANDSHAKE_TIMEOUT)
+                        await asyncio.wait_for(
+                            init_event.wait(), timeout=INIT_HANDSHAKE_TIMEOUT
+                        )
                     except asyncio.TimeoutError:
                         logger.warning(
                             f"Timed out waiting for initialize response for session {session_id}; "
@@ -774,12 +822,12 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
                     # the response comes via stream. Gateway accepts this sequence for recovery.
                     initialized_notification = {
                         "jsonrpc": "2.0",
-                        "method": "notifications/initialized"
+                        "method": "notifications/initialized",
                     }
                     notif_response = await init_client.post(
                         gateway_post_url,
                         json=initialized_notification,
-                        headers={"Content-Type": "application/json"}
+                        headers={"Content-Type": "application/json"},
                     )
 
                     if notif_response.status_code in (200, 202):
@@ -794,7 +842,9 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
                         _initialized_sessions.add(session_id)
                         logger.info(f"Session {session_id} initialized successfully")
                     else:
-                        logger.error(f"Initialized notification failed: {notif_response.status_code}")
+                        logger.error(
+                            f"Initialized notification failed: {notif_response.status_code}"
+                        )
 
             except httpx.TimeoutException:
                 logger.info(f"Init sequence timed out for session {session_id}")
@@ -853,9 +903,15 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
             # Some MCP servers return `"error": null` alongside
             # a successful result, so we must treat null/None as "no error" rather
             # than checking key presence.
-            server_error = server_response.get("error") if isinstance(server_response, dict) else None
+            server_error = (
+                server_response.get("error")
+                if isinstance(server_response, dict)
+                else None
+            )
             if server_error is not None and server_error.get("code") == -32601:
-                logger.info(f"Prompt {prompt_name} not found in ProcessManager, falling through to Gateway")
+                logger.info(
+                    f"Prompt {prompt_name} not found in ProcessManager, falling through to Gateway"
+                )
             else:
                 # Build JSON-RPC response using client's request ID
                 response_data = {
@@ -879,7 +935,7 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
                 return Response(
                     content=json.dumps(response_data),
                     status_code=200,
-                    media_type="application/json"
+                    media_type="application/json",
                 )
         except Exception as e:
             logger.error(f"ProcessManager prompt routing failed: {e}")
@@ -904,7 +960,11 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
                 }
                 # Extract result or error from server response.
                 # Treat `"error": null` as "no error" when it accompanies a result.
-                server_error = server_response.get("error") if isinstance(server_response, dict) else None
+                server_error = (
+                    server_response.get("error")
+                    if isinstance(server_response, dict)
+                    else None
+                )
                 if server_error is not None:
                     # Lazy schema stubs hide params, so a blind call returns
                     # -32602; re-hydrate it with the full schema for self-heal.
@@ -924,7 +984,7 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
                 return Response(
                     content=json.dumps(response_data),
                     status_code=200,
-                    media_type="application/json"
+                    media_type="application/json",
                 )
         except Exception as e:
             logger.error(f"ProcessManager routing check failed: {e}")
@@ -956,7 +1016,7 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
                 return Response(
                     content=json.dumps(response_data),
                     status_code=200,
-                    media_type="application/json"
+                    media_type="application/json",
                 )
 
     # Proxy all other tool calls to Gateway
@@ -981,26 +1041,32 @@ async def _proxy_jsonrpc_request(request: Request) -> Response:
 
         # On successful initialize, send notifications/initialized to Gateway
         if is_initialize_request and response.status_code in (200, 202):
-            logger.info(f"Initialize request successful, sending initialized notification to Gateway (sessionid={session_id})")
+            logger.info(
+                f"Initialize request successful, sending initialized notification to Gateway (sessionid={session_id})"
+            )
             initialized_notification = {
                 "jsonrpc": "2.0",
-                "method": "notifications/initialized"
+                "method": "notifications/initialized",
             }
-            gateway_post_url = f"{settings.MCP_GATEWAY_URL.rstrip('/')}/sse?sessionid={session_id}"
+            gateway_post_url = (
+                f"{settings.MCP_GATEWAY_URL.rstrip('/')}/sse?sessionid={session_id}"
+            )
             try:
                 init_response = await client.post(
                     gateway_post_url,
                     json=initialized_notification,
-                    headers={"Content-Type": "application/json"}
+                    headers={"Content-Type": "application/json"},
                 )
-                logger.info(f"Sent initialized notification: {init_response.status_code}")
+                logger.info(
+                    f"Sent initialized notification: {init_response.status_code}"
+                )
             except Exception as e:
                 logger.error(f"Failed to send initialized notification: {e}")
 
         return Response(
             content=response.content,
             status_code=response.status_code,
-            headers=dict(response.headers)
+            headers=dict(response.headers),
         )
 
 
@@ -1060,7 +1126,9 @@ async def mcp_sse_proxy_post(request: Request):
     return await _proxy_jsonrpc_request(request)
 
 
-@router.api_route("/.well-known/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+@router.api_route(
+    "/.well-known/{path:path}", methods=["GET", "HEAD"], include_in_schema=False
+)
 async def mcp_stream_well_known(request: Request, path: str):
     """
     Forward /.well-known discovery requests under the API prefix.
@@ -1078,7 +1146,9 @@ async def proxy_root_well_known(request: Request, path: str) -> Response:
     )
 
 
-async def handle_airis_find(rpc_request: Dict[str, Any], session_id: Optional[str] = None) -> Response:
+async def handle_airis_find(
+    rpc_request: Dict[str, Any], session_id: Optional[str] = None
+) -> Response:
     """
     airis-find ツールコール: ツール/サーバー検索
 
@@ -1105,19 +1175,23 @@ async def handle_airis_find(rpc_request: Dict[str, Any], session_id: Optional[st
     if dynamic_mcp is None:
         logger.warning("DynamicMCP singleton not initialized")
         return Response(
-            content=json.dumps({
-                "jsonrpc": "2.0",
-                "id": rpc_request.get("id"),
-                "error": {"code": -32603, "message": "Dynamic MCP not initialized"}
-            }),
+            content=json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": rpc_request.get("id"),
+                    "error": {"code": -32603, "message": "Dynamic MCP not initialized"},
+                }
+            ),
             status_code=200,
-            media_type="application/json"
+            media_type="application/json",
         )
 
     # Always ensure servers are cached (even if tools already exist)
     # This is needed because tools/list populates tools but not necessarily servers
     # Check for process servers specifically (Docker servers may already be pre-cached)
-    has_process_servers = any(s.source == "process" for s in dynamic_mcp._servers.values())
+    has_process_servers = any(
+        s.source == "process" for s in dynamic_mcp._servers.values()
+    )
     if not has_process_servers:
         logger.info("Server cache empty, refreshing...")
         # Cache server info for ALL servers (including COLD and disabled).
@@ -1133,7 +1207,7 @@ async def handle_airis_find(rpc_request: Dict[str, Any], session_id: Optional[st
                 enabled=status.get("enabled", False),
                 mode=status.get("mode", "cold"),
                 tools_count=status.get("tools_count", 0),
-                source="process"
+                source="process",
             )
             # Also cache tools_index entries for discoverable COLD/disabled servers
             config = process_manager._server_configs.get(name)
@@ -1146,12 +1220,14 @@ async def handle_airis_find(rpc_request: Dict[str, Any], session_id: Optional[st
                             server=name,
                             description=tool_entry.get("description", ""),
                             input_schema={},
-                            source="index"
+                            source="index",
                         )
                         dynamic_mcp._tool_to_server[tool_name] = name
                         index_count += 1
 
-        logger.info(f"Cached {len(dynamic_mcp._servers)} servers, {index_count} tools from index")
+        logger.info(
+            f"Cached {len(dynamic_mcp._servers)} servers, {index_count} tools from index"
+        )
 
     # Auto-refresh ProcessManager tools if not yet cached
     # (Docker Gateway tools may be pre-cached at startup, but we still need ProcessManager tools)
@@ -1170,10 +1246,12 @@ async def handle_airis_find(rpc_request: Dict[str, Any], session_id: Optional[st
                     server=server_name,
                     description=tool.get("description", ""),
                     input_schema=tool.get("inputSchema", {}),
-                    source="process"
+                    source="process",
                 )
                 dynamic_mcp._tool_to_server[tool_name] = server_name
-        logger.info(f"Cached {len(all_tools)} process tools (total: {len(dynamic_mcp._tools)})")
+        logger.info(
+            f"Cached {len(all_tools)} process tools (total: {len(dynamic_mcp._tools)})"
+        )
 
     # If specific server requested and it's a process server, ensure it's in the cache
     if server:
@@ -1188,7 +1266,7 @@ async def handle_airis_find(rpc_request: Dict[str, Any], session_id: Optional[st
                 enabled=status.get("enabled", False),
                 mode=status.get("mode", "cold"),
                 tools_count=status.get("tools_count", 0),
-                source="process"
+                source="process",
             )
             server_info = dynamic_mcp._servers[server]
             logger.info(f"Added server '{server}' to cache (mode={server_info.mode})")
@@ -1196,7 +1274,12 @@ async def handle_airis_find(rpc_request: Dict[str, Any], session_id: Optional[st
         # If it's a COLD server with no tools cached, start it and cache tools
         # Note: tools_count is metadata, we need to check if tools are actually in _tools dict
         server_has_tools = any(t.server == server for t in dynamic_mcp._tools.values())
-        if is_process and server_info and server_info.mode == "cold" and not server_has_tools:
+        if (
+            is_process
+            and server_info
+            and server_info.mode == "cold"
+            and not server_has_tools
+        ):
             logger.info(f"Starting COLD server '{server}' to get tools...")
             server_tools = await process_manager._list_tools_for_server(server)
             for tool in server_tools:
@@ -1207,7 +1290,7 @@ async def handle_airis_find(rpc_request: Dict[str, Any], session_id: Optional[st
                         server=server,
                         description=tool.get("description", ""),
                         input_schema=tool.get("inputSchema", {}),
-                        source="process"
+                        source="process",
                     )
                     dynamic_mcp._tool_to_server[tool_name] = server
             # Update server tools count
@@ -1215,51 +1298,67 @@ async def handle_airis_find(rpc_request: Dict[str, Any], session_id: Optional[st
                 dynamic_mcp._servers[server].tools_count = len(server_tools)
             logger.info(f"Loaded {len(server_tools)} tools from '{server}'")
 
-    results = dynamic_mcp.find(query=query, server=server, process_manager=process_manager)
+    results = dynamic_mcp.find(
+        query=query, server=server, process_manager=process_manager
+    )
 
     # Format results as text for LLM consumption
     lines = []
-    lines.append(f"Found {len(results['tools'])} tools across {results['total_servers']} servers\n")
+    lines.append(
+        f"Found {len(results['tools'])} tools across {results['total_servers']} servers\n"
+    )
 
-    if results['servers']:
+    if results["servers"]:
         lines.append("## Servers")
-        for s in results['servers']:
-            status = "enabled" if s['enabled'] else "disabled"
-            lines.append(f"- **{s['name']}** ({s['mode']}, {status}): {s['tools_count']} tools")
+        for s in results["servers"]:
+            status = "enabled" if s["enabled"] else "disabled"
+            lines.append(
+                f"- **{s['name']}** ({s['mode']}, {status}): {s['tools_count']} tools"
+            )
         lines.append("")
 
-    if results.get('toolsets'):
+    if results.get("toolsets"):
         lines.append("## Toolsets")
-        for toolset in results['toolsets']:
-            lines.append(f"- **{toolset['ref']}** - {toolset['summary']} ({toolset['tools_count']} tools)")
+        for toolset in results["toolsets"]:
+            lines.append(
+                f"- **{toolset['ref']}** - {toolset['summary']} ({toolset['tools_count']} tools)"
+            )
         lines.append("")
 
-    if results['tools']:
+    if results["tools"]:
         lines.append("## Tools")
-        for t in results['tools']:
+        for t in results["tools"]:
             line = f"- **{t['server']}:{t['name']}** - {t['description']}"
             if t.get("server_status"):
-                line += f" [⚠ {t['server_status']}: {t.get('server_error', 'no details')}]"
+                line += (
+                    f" [⚠ {t['server_status']}: {t.get('server_error', 'no details')}]"
+                )
             lines.append(line)
 
-    if not results['tools'] and not results['servers'] and not results.get('toolsets'):
-        lines.append("No matches found. Try a different query or use airis-find without arguments to list all.")
+    if not results["tools"] and not results["servers"] and not results.get("toolsets"):
+        lines.append(
+            "No matches found. Try a different query or use airis-find without arguments to list all."
+        )
         # Show hint about available COLD servers
         if not server:
             cold_servers = process_manager.get_cold_servers()
-            enabled_cold = [s for s in cold_servers if s in process_manager.get_enabled_servers()]
+            enabled_cold = [
+                s for s in cold_servers if s in process_manager.get_enabled_servers()
+            ]
             if enabled_cold:
-                lines.append(f"\nTip: COLD servers available: {', '.join(enabled_cold)}")
-                lines.append("Use `server` parameter to load specific server, e.g., airis-find server=\"tavily\"")
+                lines.append(
+                    f"\nTip: COLD servers available: {', '.join(enabled_cold)}"
+                )
+                lines.append(
+                    'Use `server` parameter to load specific server, e.g., airis-find server="tavily"'
+                )
 
     response_text = "\n".join(lines)
 
     response_data = {
         "jsonrpc": "2.0",
         "id": rpc_request.get("id"),
-        "result": {
-            "content": [{"type": "text", "text": response_text}]
-        }
+        "result": {"content": [{"type": "text", "text": response_text}]},
     }
 
     # MCP SSE Transport: Response via SSE stream
@@ -1273,11 +1372,13 @@ async def handle_airis_find(rpc_request: Dict[str, Any], session_id: Optional[st
     return Response(
         content=json.dumps(response_data),
         status_code=200,
-        media_type="application/json"
+        media_type="application/json",
     )
 
 
-async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[str] = None) -> Response:
+async def handle_airis_exec(
+    rpc_request: Dict[str, Any], session_id: Optional[str] = None
+) -> Response:
     """
     airis-exec ツールコール: 任意のツールを実行
 
@@ -1303,13 +1404,15 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
 
     if not tool_ref:
         return Response(
-            content=json.dumps({
-                "jsonrpc": "2.0",
-                "id": rpc_request.get("id"),
-                "error": {"code": -32602, "message": "tool is required"}
-            }),
+            content=json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": rpc_request.get("id"),
+                    "error": {"code": -32602, "message": "tool is required"},
+                }
+            ),
             status_code=200,
-            media_type="application/json"
+            media_type="application/json",
         )
 
     dynamic_mcp = get_dynamic_mcp()
@@ -1321,22 +1424,28 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
 
     # Auto-discovery: if tool not in cache, try tools_index to find the server
     if not server_name:
-        server_name = dynamic_mcp.get_server_for_tool_from_index(tool_name, process_manager)
+        server_name = dynamic_mcp.get_server_for_tool_from_index(
+            tool_name, process_manager
+        )
         if server_name:
-            logger.info(f"Auto-discovered tool '{tool_name}' on server '{server_name}' via tools_index")
+            logger.info(
+                f"Auto-discovered tool '{tool_name}' on server '{server_name}' via tools_index"
+            )
 
     if not server_name:
         return Response(
-            content=json.dumps({
-                "jsonrpc": "2.0",
-                "id": rpc_request.get("id"),
-                "error": {
-                    "code": -32601,
-                    "message": f"Tool not found: {tool_ref}. Use airis-find to discover available tools."
+            content=json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": rpc_request.get("id"),
+                    "error": {
+                        "code": -32601,
+                        "message": f"Tool not found: {tool_ref}. Use airis-find to discover available tools.",
+                    },
                 }
-            }),
+            ),
             status_code=200,
-            media_type="application/json"
+            media_type="application/json",
         )
     if process_manager.is_process_server(server_name):
         config = process_manager._server_configs.get(server_name)
@@ -1344,18 +1453,22 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
         # Policy-disabled servers (e.g. supabase, mindbase) must never run,
         # even via COLD auto-enable — refuse before touching the process.
         if config and getattr(config, "policy_disabled", False):
-            logger.warning(f"Refused auto-enable of policy-disabled server for airis-exec: {server_name}")
+            logger.warning(
+                f"Refused auto-enable of policy-disabled server for airis-exec: {server_name}"
+            )
             return Response(
-                content=json.dumps({
-                    "jsonrpc": "2.0",
-                    "id": rpc_request.get("id"),
-                    "error": {
-                        "code": -32001,
-                        "message": f"server '{server_name}' is policy-disabled and cannot be auto-enabled"
+                content=json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": rpc_request.get("id"),
+                        "error": {
+                            "code": -32001,
+                            "message": f"server '{server_name}' is policy-disabled and cannot be auto-enabled",
+                        },
                     }
-                }),
+                ),
                 status_code=200,
-                media_type="application/json"
+                media_type="application/json",
             )
 
         # Auto-enable COLD mode servers on first airis-exec call
@@ -1365,7 +1478,9 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
 
         # Execute if server is now enabled
         if config and config.enabled:
-            result = await process_manager.call_tool_on_server(server_name, tool_name, tool_args)
+            result = await process_manager.call_tool_on_server(
+                server_name, tool_name, tool_args
+            )
 
             response_data = {
                 "jsonrpc": "2.0",
@@ -1379,7 +1494,10 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
                 # couldn't be reached (e.g. missing API key, dead command),
                 # instead of surfacing a bare "failed to initialize".
                 health = process_manager.get_server_health(server_name)
-                if health.status in ("start_failed", "list_failed") and health.last_error:
+                if (
+                    health.status in ("start_failed", "list_failed")
+                    and health.last_error
+                ):
                     error_msg = (
                         f"{error_msg}\n\nServer '{server_name}' health: {health.status} "
                         f"— {health.last_error}\nHint: check the server's command/env "
@@ -1392,18 +1510,22 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
                 if tool_info and tool_info.input_schema:
                     schema_hint = tool_info.input_schema
                 elif not tool_info:
-                    await dynamic_mcp.load_tools_for_server(server_name, process_manager)
+                    await dynamic_mcp.load_tools_for_server(
+                        server_name, process_manager
+                    )
                     tool_info = dynamic_mcp._tools.get(tool_name)
                     if tool_info and tool_info.input_schema:
                         schema_hint = tool_info.input_schema
 
                 if schema_hint:
                     response_data["result"] = {
-                        "content": [{
-                            "type": "text",
-                            "text": f"Error: {error_msg}\n\nExpected schema:\n{json.dumps(schema_hint, indent=2)}"
-                        }],
-                        "isError": True
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": f"Error: {error_msg}\n\nExpected schema:\n{json.dumps(schema_hint, indent=2)}",
+                            }
+                        ],
+                        "isError": True,
                     }
                 else:
                     response_data["error"] = inner_error
@@ -1419,23 +1541,25 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
             return Response(
                 content=json.dumps(response_data),
                 status_code=200,
-                media_type="application/json"
+                media_type="application/json",
             )
 
     # Route to Docker Gateway for non-process tools
     # Check if we have a session to proxy through
     if not session_id:
         return Response(
-            content=json.dumps({
-                "jsonrpc": "2.0",
-                "id": rpc_request.get("id"),
-                "error": {
-                    "code": -32603,
-                    "message": f"Cannot execute Docker gateway tool without session: {tool_ref}"
+            content=json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": rpc_request.get("id"),
+                    "error": {
+                        "code": -32603,
+                        "message": f"Cannot execute Docker gateway tool without session: {tool_ref}",
+                    },
                 }
-            }),
+            ),
             status_code=200,
-            media_type="application/json"
+            media_type="application/json",
         )
 
     # Build tools/call request for Docker Gateway
@@ -1443,13 +1567,12 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
         "jsonrpc": "2.0",
         "id": rpc_request.get("id"),
         "method": "tools/call",
-        "params": {
-            "name": tool_name,
-            "arguments": tool_args
-        }
+        "params": {"name": tool_name, "arguments": tool_args},
     }
 
-    gateway_post_url = f"{settings.MCP_GATEWAY_URL.rstrip('/')}/sse?sessionid={session_id}"
+    gateway_post_url = (
+        f"{settings.MCP_GATEWAY_URL.rstrip('/')}/sse?sessionid={session_id}"
+    )
     logger.info(f"Proxying airis-exec to Docker Gateway: {tool_name}")
 
     try:
@@ -1458,7 +1581,7 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
             response = await client.post(
                 gateway_post_url,
                 json=gateway_request,
-                headers={"Content-Type": "application/json"}
+                headers={"Content-Type": "application/json"},
             )
 
             # SSE transport returns 202 Accepted, actual response comes via SSE stream
@@ -1470,37 +1593,43 @@ async def handle_airis_exec(rpc_request: Dict[str, Any], session_id: Optional[st
             return Response(
                 content=response.content,
                 status_code=response.status_code,
-                media_type="application/json"
+                media_type="application/json",
             )
     except httpx.TimeoutException:
         return Response(
-            content=json.dumps({
-                "jsonrpc": "2.0",
-                "id": rpc_request.get("id"),
-                "error": {
-                    "code": -32603,
-                    "message": f"Docker gateway timeout ({settings.TOOL_CALL_TIMEOUT}s) for tool: {tool_ref}"
+            content=json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": rpc_request.get("id"),
+                    "error": {
+                        "code": -32603,
+                        "message": f"Docker gateway timeout ({settings.TOOL_CALL_TIMEOUT}s) for tool: {tool_ref}",
+                    },
                 }
-            }),
+            ),
             status_code=200,
-            media_type="application/json"
+            media_type="application/json",
         )
     except Exception as e:
         return Response(
-            content=json.dumps({
-                "jsonrpc": "2.0",
-                "id": rpc_request.get("id"),
-                "error": {
-                    "code": -32603,
-                    "message": f"Docker gateway error: {str(e)}"
+            content=json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": rpc_request.get("id"),
+                    "error": {
+                        "code": -32603,
+                        "message": f"Docker gateway error: {str(e)}",
+                    },
                 }
-            }),
+            ),
             status_code=200,
-            media_type="application/json"
+            media_type="application/json",
         )
 
 
-async def handle_airis_schema(rpc_request: Dict[str, Any], session_id: Optional[str] = None) -> Response:
+async def handle_airis_schema(
+    rpc_request: Dict[str, Any], session_id: Optional[str] = None
+) -> Response:
     """
     airis-schema ツールコール: ツールのスキーマを取得
 
@@ -1520,7 +1649,7 @@ async def handle_airis_schema(rpc_request: Dict[str, Any], session_id: Optional[
         error_data = {
             "jsonrpc": "2.0",
             "id": rpc_request.get("id"),
-            "error": {"code": -32602, "message": "tool is required"}
+            "error": {"code": -32602, "message": "tool is required"},
         }
         if session_id:
             queue = await get_response_queue(session_id)
@@ -1529,7 +1658,7 @@ async def handle_airis_schema(rpc_request: Dict[str, Any], session_id: Optional[
         return Response(
             content=json.dumps(error_data),
             status_code=200,
-            media_type="application/json"
+            media_type="application/json",
         )
 
     # Parse tool reference
@@ -1546,16 +1675,22 @@ async def handle_airis_schema(rpc_request: Dict[str, Any], session_id: Optional[
             schema = {
                 "name": tool_name,
                 "description": description or "",
-                "inputSchema": full_schema
+                "inputSchema": full_schema,
             }
 
     # Auto-discovery: if schema not found, try loading from tools_index server
     if not schema:
         process_manager = get_process_manager()
-        server_name = dynamic_mcp.get_server_for_tool_from_index(tool_name, process_manager)
+        server_name = dynamic_mcp.get_server_for_tool_from_index(
+            tool_name, process_manager
+        )
         if server_name:
-            logger.info(f"Auto-loading schema for '{tool_name}' from server '{server_name}'")
-            tools = await dynamic_mcp.load_tools_for_server(server_name, process_manager, force_enable=True)
+            logger.info(
+                f"Auto-loading schema for '{tool_name}' from server '{server_name}'"
+            )
+            await dynamic_mcp.load_tools_for_server(
+                server_name, process_manager, force_enable=True
+            )
             schema = dynamic_mcp.get_tool_schema(tool_name)
 
     if not schema:
@@ -1564,8 +1699,8 @@ async def handle_airis_schema(rpc_request: Dict[str, Any], session_id: Optional[
             "id": rpc_request.get("id"),
             "error": {
                 "code": -32602,
-                "message": f"Schema not found for tool: {tool_ref}. Use airis-find to discover available tools."
-            }
+                "message": f"Schema not found for tool: {tool_ref}. Use airis-find to discover available tools.",
+            },
         }
         if session_id:
             queue = await get_response_queue(session_id)
@@ -1574,7 +1709,7 @@ async def handle_airis_schema(rpc_request: Dict[str, Any], session_id: Optional[
         return Response(
             content=json.dumps(error_data),
             status_code=200,
-            media_type="application/json"
+            media_type="application/json",
         )
 
     # Format schema as readable text
@@ -1588,15 +1723,13 @@ async def handle_airis_schema(rpc_request: Dict[str, Any], session_id: Optional[
         "## Input Schema",
         "```json",
         json.dumps(schema.get("inputSchema", {}), indent=2),
-        "```"
+        "```",
     ]
 
     response_data = {
         "jsonrpc": "2.0",
         "id": rpc_request.get("id"),
-        "result": {
-            "content": [{"type": "text", "text": "\n".join(lines)}]
-        }
+        "result": {"content": [{"type": "text", "text": "\n".join(lines)}]},
     }
 
     # MCP SSE Transport: Response via SSE stream
@@ -1610,11 +1743,13 @@ async def handle_airis_schema(rpc_request: Dict[str, Any], session_id: Optional[
     return Response(
         content=json.dumps(response_data),
         status_code=200,
-        media_type="application/json"
+        media_type="application/json",
     )
 
 
-async def handle_airis_workflow(rpc_request: Dict[str, Any], session_id: Optional[str] = None) -> Response:
+async def handle_airis_workflow(
+    rpc_request: Dict[str, Any], session_id: Optional[str] = None
+) -> Response:
     """
     airis-workflow ツールコール: タスク種別ごとの安全な手順テキストを返す
 
@@ -1684,9 +1819,7 @@ async def handle_airis_workflow(rpc_request: Dict[str, Any], session_id: Optiona
     response_data = {
         "jsonrpc": "2.0",
         "id": rpc_request.get("id"),
-        "result": {
-            "content": [{"type": "text", "text": workflow.text.strip()}]
-        },
+        "result": {"content": [{"type": "text", "text": workflow.text.strip()}]},
     }
 
     # MCP SSE Transport: Response via SSE stream
@@ -1700,7 +1833,7 @@ async def handle_airis_workflow(rpc_request: Dict[str, Any], session_id: Optiona
     return Response(
         content=json.dumps(response_data),
         status_code=200,
-        media_type="application/json"
+        media_type="application/json",
     )
 
 
@@ -1722,47 +1855,42 @@ async def handle_expand_schema(rpc_request: Dict[str, Any]) -> Response:
     mode = arguments.get("mode", "schema")
 
     # Log expandSchema request
-    await protocol_logger.log_message("client→server", rpc_request, {
-        "phase": "expand_schema",
-        "tool_name": tool_name
-    })
+    await protocol_logger.log_message(
+        "client→server", rpc_request, {"phase": "expand_schema", "tool_name": tool_name}
+    )
 
     if not tool_name:
         error_response = {
             "jsonrpc": "2.0",
             "id": rpc_request.get("id"),
-            "error": {
-                "code": -32602,
-                "message": "toolName is required"
-            }
+            "error": {"code": -32602, "message": "toolName is required"},
         }
-        await protocol_logger.log_message("server→client", error_response, {
-            "phase": "expand_schema",
-            "tool_name": tool_name
-        })
+        await protocol_logger.log_message(
+            "server→client",
+            error_response,
+            {"phase": "expand_schema", "tool_name": tool_name},
+        )
         return Response(
             content=json.dumps(error_response),
             status_code=200,
-            media_type="application/json"
+            media_type="application/json",
         )
 
     if mode not in {"schema", "docs"}:
         error_response = {
             "jsonrpc": "2.0",
             "id": rpc_request.get("id"),
-            "error": {
-                "code": -32602,
-                "message": "mode must be 'schema' or 'docs'"
-            }
+            "error": {"code": -32602, "message": "mode must be 'schema' or 'docs'"},
         }
-        await protocol_logger.log_message("server→client", error_response, {
-            "phase": "expand_schema",
-            "tool_name": tool_name
-        })
+        await protocol_logger.log_message(
+            "server→client",
+            error_response,
+            {"phase": "expand_schema", "tool_name": tool_name},
+        )
         return Response(
             content=json.dumps(error_response),
             status_code=200,
-            media_type="application/json"
+            media_type="application/json",
         )
 
     if mode == "docs":
@@ -1773,17 +1901,18 @@ async def handle_expand_schema(rpc_request: Dict[str, Any]) -> Response:
                 "id": rpc_request.get("id"),
                 "error": {
                     "code": -32602,
-                    "message": f"Documentation not found for tool: {tool_name}"
-                }
+                    "message": f"Documentation not found for tool: {tool_name}",
+                },
             }
-            await protocol_logger.log_message("server→client", error_response, {
-                "phase": "expand_schema",
-                "tool_name": tool_name
-            })
+            await protocol_logger.log_message(
+                "server→client",
+                error_response,
+                {"phase": "expand_schema", "tool_name": tool_name},
+            )
             return Response(
                 content=json.dumps(error_response),
                 status_code=200,
-                media_type="application/json"
+                media_type="application/json",
             )
 
         response_content = detailed_description
@@ -1797,17 +1926,18 @@ async def handle_expand_schema(rpc_request: Dict[str, Any]) -> Response:
                 "id": rpc_request.get("id"),
                 "error": {
                     "code": -32602,
-                    "message": f"Schema not found for tool: {tool_name}"
-                }
+                    "message": f"Schema not found for tool: {tool_name}",
+                },
             }
-            await protocol_logger.log_message("server→client", error_response, {
-                "phase": "expand_schema",
-                "tool_name": tool_name
-            })
+            await protocol_logger.log_message(
+                "server→client",
+                error_response,
+                {"phase": "expand_schema", "tool_name": tool_name},
+            )
             return Response(
                 content=json.dumps(error_response),
                 status_code=200,
-                media_type="application/json"
+                media_type="application/json",
             )
 
         response_content = json.dumps(expanded_schema, indent=2)
@@ -1815,30 +1945,26 @@ async def handle_expand_schema(rpc_request: Dict[str, Any]) -> Response:
     success_response = {
         "jsonrpc": "2.0",
         "id": rpc_request.get("id"),
-        "result": {
-            "content": [
-                {
-                    "type": "text",
-                    "text": response_content
-                }
-            ]
-        }
+        "result": {"content": [{"type": "text", "text": response_content}]},
     }
 
     # Log expandSchema response
-    await protocol_logger.log_message("server→client", success_response, {
-        "phase": "expand_schema",
-        "tool_name": tool_name
-    })
+    await protocol_logger.log_message(
+        "server→client",
+        success_response,
+        {"phase": "expand_schema", "tool_name": tool_name},
+    )
 
     return Response(
         content=json.dumps(success_response),
         status_code=200,
-        media_type="application/json"
+        media_type="application/json",
     )
 
 
-async def handle_airis_confidence(rpc_request: Dict[str, Any], session_id: Optional[str] = None) -> Response:
+async def handle_airis_confidence(
+    rpc_request: Dict[str, Any], session_id: Optional[str] = None
+) -> Response:
     """
     airis-confidence: Pre-implementation confidence check
 
@@ -1872,7 +1998,7 @@ async def handle_airis_confidence(rpc_request: Dict[str, Any], session_id: Optio
 
     # Format result as readable text
     lines = [
-        f"# Confidence Assessment",
+        "# Confidence Assessment",
         "",
         f"**Score:** {int(result.score * 100)}% ({result.level})",
         f"**Verdict:** {result.verdict.value}",
@@ -1899,9 +2025,7 @@ async def handle_airis_confidence(rpc_request: Dict[str, Any], session_id: Optio
     response_data = {
         "jsonrpc": "2.0",
         "id": rpc_request.get("id"),
-        "result": {
-            "content": [{"type": "text", "text": response_text}]
-        }
+        "result": {"content": [{"type": "text", "text": response_text}]},
     }
 
     # MCP SSE Transport: Response via SSE stream
@@ -1914,11 +2038,13 @@ async def handle_airis_confidence(rpc_request: Dict[str, Any], session_id: Optio
     return Response(
         content=json.dumps(response_data),
         status_code=200,
-        media_type="application/json"
+        media_type="application/json",
     )
 
 
-async def handle_airis_repo_index(rpc_request: Dict[str, Any], session_id: Optional[str] = None) -> Response:
+async def handle_airis_repo_index(
+    rpc_request: Dict[str, Any], session_id: Optional[str] = None
+) -> Response:
     """
     airis-repo-index: Generate repository index
 
@@ -1939,7 +2065,7 @@ async def handle_airis_repo_index(rpc_request: Dict[str, Any], session_id: Optio
         error_data = {
             "jsonrpc": "2.0",
             "id": rpc_request.get("id"),
-            "error": {"code": -32602, "message": "repo_path is required"}
+            "error": {"code": -32602, "message": "repo_path is required"},
         }
         if session_id:
             queue = await get_response_queue(session_id)
@@ -1948,7 +2074,7 @@ async def handle_airis_repo_index(rpc_request: Dict[str, Any], session_id: Optio
         return Response(
             content=json.dumps(error_data),
             status_code=200,
-            media_type="application/json"
+            media_type="application/json",
         )
 
     try:
@@ -1964,23 +2090,21 @@ async def handle_airis_repo_index(rpc_request: Dict[str, Any], session_id: Optio
         response_data = {
             "jsonrpc": "2.0",
             "id": rpc_request.get("id"),
-            "result": {
-                "content": [{"type": "text", "text": result.markdown}]
-            }
+            "result": {"content": [{"type": "text", "text": result.markdown}]},
         }
 
     except FileNotFoundError as e:
         response_data = {
             "jsonrpc": "2.0",
             "id": rpc_request.get("id"),
-            "error": {"code": -32602, "message": str(e)}
+            "error": {"code": -32602, "message": str(e)},
         }
     except Exception as e:
         logger.error(f"airis-repo-index failed: {e}")
         response_data = {
             "jsonrpc": "2.0",
             "id": rpc_request.get("id"),
-            "error": {"code": -32603, "message": f"Indexing failed: {str(e)}"}
+            "error": {"code": -32603, "message": f"Indexing failed: {str(e)}"},
         }
 
     # MCP SSE Transport: Response via SSE stream
@@ -1993,11 +2117,13 @@ async def handle_airis_repo_index(rpc_request: Dict[str, Any], session_id: Optio
     return Response(
         content=json.dumps(response_data),
         status_code=200,
-        media_type="application/json"
+        media_type="application/json",
     )
 
 
-async def handle_airis_suggest(rpc_request: Dict[str, Any], session_id: Optional[str] = None) -> Response:
+async def handle_airis_suggest(
+    rpc_request: Dict[str, Any], session_id: Optional[str] = None
+) -> Response:
     """
     airis-suggest: Suggest MCP tools based on natural language intent
 
@@ -2008,7 +2134,11 @@ async def handle_airis_suggest(rpc_request: Dict[str, Any], session_id: Optional
     Returns:
         JSON-RPC 2.0 response
     """
-    from ...core.tool_suggester import SuggestToolRequest, suggest_tool, format_suggestions_as_text
+    from ...core.tool_suggester import (
+        SuggestToolRequest,
+        suggest_tool,
+        format_suggestions_as_text,
+    )
 
     params = rpc_request.get("params", {})
     arguments = params.get("arguments", {})
@@ -2018,7 +2148,7 @@ async def handle_airis_suggest(rpc_request: Dict[str, Any], session_id: Optional
         error_data = {
             "jsonrpc": "2.0",
             "id": rpc_request.get("id"),
-            "error": {"code": -32602, "message": "intent is required"}
+            "error": {"code": -32602, "message": "intent is required"},
         }
         if session_id:
             queue = await get_response_queue(session_id)
@@ -2027,7 +2157,7 @@ async def handle_airis_suggest(rpc_request: Dict[str, Any], session_id: Optional
         return Response(
             content=json.dumps(error_data),
             status_code=200,
-            media_type="application/json"
+            media_type="application/json",
         )
 
     # Get DynamicMCP instance for live tool lookup
@@ -2044,9 +2174,7 @@ async def handle_airis_suggest(rpc_request: Dict[str, Any], session_id: Optional
     response_data = {
         "jsonrpc": "2.0",
         "id": rpc_request.get("id"),
-        "result": {
-            "content": [{"type": "text", "text": response_text}]
-        }
+        "result": {"content": [{"type": "text", "text": response_text}]},
     }
 
     # MCP SSE Transport: Response via SSE stream
@@ -2059,11 +2187,13 @@ async def handle_airis_suggest(rpc_request: Dict[str, Any], session_id: Optional
     return Response(
         content=json.dumps(response_data),
         status_code=200,
-        media_type="application/json"
+        media_type="application/json",
     )
 
 
-async def handle_airis_route(rpc_request: Dict[str, Any], session_id: Optional[str] = None) -> Response:
+async def handle_airis_route(
+    rpc_request: Dict[str, Any], session_id: Optional[str] = None
+) -> Response:
     """
     airis-route: Route a task to the optimal tool chain.
 
@@ -2084,7 +2214,7 @@ async def handle_airis_route(rpc_request: Dict[str, Any], session_id: Optional[s
         response_data = {
             "jsonrpc": "2.0",
             "id": rpc_request.get("id"),
-            "error": {"code": -32602, "message": "Missing required parameter: task"}
+            "error": {"code": -32602, "message": "Missing required parameter: task"},
         }
     else:
         dynamic_mcp = get_dynamic_mcp()
@@ -2111,7 +2241,9 @@ async def handle_airis_route(rpc_request: Dict[str, Any], session_id: Optional[s
             lines.append("## Suggested Tools")
             for i, s in enumerate(result.suggestions, 1):
                 score_pct = int(s["score"] * 100)
-                lines.append(f"{i}. **{s['server']}:{s['tool']}** ({score_pct}%) — {s['reason']}")
+                lines.append(
+                    f"{i}. **{s['server']}:{s['tool']}** ({score_pct}%) — {s['reason']}"
+                )
 
         lines.append("")
         lines.append("Use `airis-exec` to execute tools in the chain.")
@@ -2119,9 +2251,7 @@ async def handle_airis_route(rpc_request: Dict[str, Any], session_id: Optional[s
         response_data = {
             "jsonrpc": "2.0",
             "id": rpc_request.get("id"),
-            "result": {
-                "content": [{"type": "text", "text": "\n".join(lines)}]
-            }
+            "result": {"content": [{"type": "text", "text": "\n".join(lines)}]},
         }
 
     # MCP SSE Transport: Response via SSE stream
@@ -2134,5 +2264,5 @@ async def handle_airis_route(rpc_request: Dict[str, Any], session_id: Optional[s
     return Response(
         content=json.dumps(response_data),
         status_code=200,
-        media_type="application/json"
+        media_type="application/json",
     )

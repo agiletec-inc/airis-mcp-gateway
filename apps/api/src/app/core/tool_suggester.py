@@ -84,17 +84,61 @@ class SuggestToolResponse:
 # This serves as a fallback when we can't fetch from DynamicMCP
 TOOL_CATALOG: Dict[str, Dict[str, List[str]]] = {
     "mindbase": {
-        "conversation_search": ["conversation", "conversations", "search", "past", "history", "semantic", "recall", "chat", "transcript", "memory", "find", "previous"],
-        "conversation_hybrid_search": ["conversation", "search", "hybrid", "keyword", "semantic", "history", "past"],
+        "conversation_search": [
+            "conversation",
+            "conversations",
+            "search",
+            "past",
+            "history",
+            "semantic",
+            "recall",
+            "chat",
+            "transcript",
+            "memory",
+            "find",
+            "previous",
+        ],
+        "conversation_hybrid_search": [
+            "conversation",
+            "search",
+            "hybrid",
+            "keyword",
+            "semantic",
+            "history",
+            "past",
+        ],
         "conversation_save": ["conversation", "save", "store", "ingest", "transcript"],
         "conversation_get": ["conversation", "get", "retrieve", "list", "fetch"],
-        "conversation_timeline": ["conversation", "timeline", "chronological", "history", "when"],
+        "conversation_timeline": [
+            "conversation",
+            "timeline",
+            "chronological",
+            "history",
+            "when",
+        ],
         "conversation_topics": ["conversation", "topics", "themes", "group"],
-        "memory_search": ["memory", "search", "recall", "remember", "knowledge", "semantic"],
+        "memory_search": [
+            "memory",
+            "search",
+            "recall",
+            "remember",
+            "knowledge",
+            "semantic",
+        ],
         "memory_write": ["memory", "write", "save", "store", "remember", "note"],
         "memory_read": ["memory", "read", "get", "recall"],
         "memory_list": ["memory", "list", "show"],
-        "content_generate": ["content", "article", "generate", "draft", "blog", "note", "zenn", "qiita", "write"],
+        "content_generate": [
+            "content",
+            "article",
+            "generate",
+            "draft",
+            "blog",
+            "note",
+            "zenn",
+            "qiita",
+            "write",
+        ],
         "content_publish": ["content", "publish", "post", "platform"],
     },
     "memory": {
@@ -189,18 +233,96 @@ def _extract_keywords(text: str) -> List[str]:
 
     # Filter out common stopwords and short words
     stopwords = {
-        "a", "an", "the", "is", "are", "was", "were", "be", "been",
-        "being", "have", "has", "had", "do", "does", "did", "will",
-        "would", "could", "should", "may", "might", "must", "can",
-        "to", "of", "in", "for", "on", "with", "at", "by", "from",
-        "as", "into", "through", "during", "before", "after",
-        "above", "below", "between", "under", "again", "further",
-        "then", "once", "here", "there", "when", "where", "why",
-        "how", "all", "each", "few", "more", "most", "other",
-        "some", "such", "no", "nor", "not", "only", "own", "same",
-        "so", "than", "too", "very", "just", "also", "now", "i",
-        "me", "my", "we", "our", "you", "your", "it", "its",
-        "want", "need", "like", "please", "help", "using", "use",
+        "a",
+        "an",
+        "the",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "must",
+        "can",
+        "to",
+        "of",
+        "in",
+        "for",
+        "on",
+        "with",
+        "at",
+        "by",
+        "from",
+        "as",
+        "into",
+        "through",
+        "during",
+        "before",
+        "after",
+        "above",
+        "below",
+        "between",
+        "under",
+        "again",
+        "further",
+        "then",
+        "once",
+        "here",
+        "there",
+        "when",
+        "where",
+        "why",
+        "how",
+        "all",
+        "each",
+        "few",
+        "more",
+        "most",
+        "other",
+        "some",
+        "such",
+        "no",
+        "nor",
+        "not",
+        "only",
+        "own",
+        "same",
+        "so",
+        "than",
+        "too",
+        "very",
+        "just",
+        "also",
+        "now",
+        "i",
+        "me",
+        "my",
+        "we",
+        "our",
+        "you",
+        "your",
+        "it",
+        "its",
+        "want",
+        "need",
+        "like",
+        "please",
+        "help",
+        "using",
+        "use",
     }
 
     keywords = [w for w in words if w and len(w) > 2 and w not in stopwords]
@@ -293,7 +415,9 @@ def suggest_tool(
             score, matched = _calculate_match_score(keywords, tool_keywords)
 
             if score > 0:
-                reason = f"Matched: {', '.join(matched)}" if matched else "Partial match"
+                reason = (
+                    f"Matched: {', '.join(matched)}" if matched else "Partial match"
+                )
                 suggestions.append(
                     ToolSuggestion(
                         server=tool_info.server,
@@ -313,7 +437,9 @@ def suggest_tool(
             score, matched = _calculate_match_score(keywords, tool_keywords)
 
             if score > 0:
-                reason = f"Matched: {', '.join(matched)}" if matched else "Partial match"
+                reason = (
+                    f"Matched: {', '.join(matched)}" if matched else "Partial match"
+                )
                 suggestions.append(
                     ToolSuggestion(
                         server=server,
@@ -352,7 +478,7 @@ def format_suggestions_as_text(response: SuggestToolResponse) -> str:
         lines.append("\nTry using airis-find with different search terms.")
         return "\n".join(lines)
 
-    lines.append(f"## Tool Suggestions")
+    lines.append("## Tool Suggestions")
     lines.append(f"Keywords: {', '.join(response.query_keywords)}")
     lines.append("")
 

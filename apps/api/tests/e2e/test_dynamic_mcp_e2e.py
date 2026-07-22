@@ -14,11 +14,10 @@ Run with:
 Note: Meta-tools (airis-find, airis-exec, airis-schema) are tested via unit tests
 as they require SSE protocol. These E2E tests verify the REST API layer.
 """
+
 import os
 import pytest
 import httpx
-import json
-from typing import Any
 
 # API base URL for E2E tests
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:9400")
@@ -167,10 +166,7 @@ class TestProcessToolCall:
         """Should be able to call gateway_list_servers tool."""
         response = api_client.post(
             "/process/tools/call",
-            json={
-                "name": "gateway_list_servers",
-                "arguments": {}
-            }
+            json={"name": "gateway_list_servers", "arguments": {}},
         )
         # Should return success or error response
         assert response.status_code in [200, 500]
@@ -261,7 +257,9 @@ class TestDynamicMCPIntegration:
         assert "summary" in roster
 
         summary = roster.get("summary", {})
-        print(f"Server roster: {summary.get('hot_count', 0)} hot, {summary.get('cold_count', 0)} cold")
+        print(
+            f"Server roster: {summary.get('hot_count', 0)} hot, {summary.get('cold_count', 0)} cold"
+        )
 
 
 class TestGatewayControlTools:
@@ -312,8 +310,9 @@ class TestDynamicMCPToolsListBehavior:
         tool_names = {t.get("name") for t in tools}
 
         # Gateway control (HOT) tools should be present
-        assert "gateway_list_servers" in tool_names or len(tools) > 0, \
+        assert "gateway_list_servers" in tool_names or len(tools) > 0, (
             f"Expected gateway control tools, got: {list(tool_names)[:5]}"
+        )
 
     def test_cold_tools_not_in_hot_response(self, api_client):
         """COLD server tools should NOT be in HOT tools response."""
@@ -328,8 +327,9 @@ class TestDynamicMCPToolsListBehavior:
         cold_tools = {"list_tables", "execute_sql", "list_projects", "list_migrations"}
         found_cold = tool_names.intersection(cold_tools)
 
-        assert len(found_cold) == 0, \
+        assert len(found_cold) == 0, (
             f"COLD tools should not be in HOT response: {found_cold}"
+        )
 
     def test_roster_shows_hot_and_cold_servers(self, api_client):
         """Server roster should categorize HOT and COLD servers."""
@@ -367,6 +367,7 @@ class TestDynamicMCPToolsListBehavior:
         # Skip if takes too long
         try:
             import httpx
+
             with httpx.Client(base_url=API_BASE_URL, timeout=10.0) as quick_client:
                 all_response = quick_client.get("/api/tools/combined")
                 if all_response.status_code == 200:
@@ -377,8 +378,9 @@ class TestDynamicMCPToolsListBehavior:
 
                     # HOT should be subset of ALL
                     if all_count > 0:
-                        assert hot_count <= all_count, \
+                        assert hot_count <= all_count, (
                             f"HOT tools ({hot_count}) should be <= ALL tools ({all_count})"
+                        )
         except Exception as e:
             print(f"Skipped ALL tools comparison: {e}")
 
@@ -400,10 +402,7 @@ class TestMetaToolsAvailability:
         # Call gateway_list_servers (HOT tool)
         response = api_client.post(
             "/process/tools/call",
-            json={
-                "name": "gateway_list_servers",
-                "arguments": {}
-            }
+            json={"name": "gateway_list_servers", "arguments": {}},
         )
 
         # Should succeed or return structured error

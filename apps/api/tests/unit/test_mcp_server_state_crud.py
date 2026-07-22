@@ -1,9 +1,9 @@
 """Unit tests for MCP server state CRUD operations"""
+
 import pytest
 import pytest_asyncio
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from app.models.mcp_server_state import MCPServerState
 from app.crud import mcp_server_state as crud
 from app.core.database import Base
 from app.crud import mcp_server as server_crud
@@ -192,7 +192,7 @@ async def test_set_server_enabled_by_name_syncs_registry(test_db: AsyncSession):
         enabled=True,
         command="npx",
         args=["-y", "@modelcontextprotocol/server-filesystem", "/workspace"],
-        env={}
+        env={},
     )
 
     created = await server_crud.create_server(test_db, server)
@@ -205,10 +205,14 @@ async def test_set_server_enabled_by_name_syncs_registry(test_db: AsyncSession):
     assert synced.enabled is False
 
     # Subsequent call with same value should be no-op
-    no_change = await server_crud.set_server_enabled_by_name(test_db, "filesystem", False)
+    no_change = await server_crud.set_server_enabled_by_name(
+        test_db, "filesystem", False
+    )
     assert no_change is not None
     assert no_change.enabled is False
 
     # Unknown servers are safely ignored
-    missing = await server_crud.set_server_enabled_by_name(test_db, "unknown-server", True)
+    missing = await server_crud.set_server_enabled_by_name(
+        test_db, "unknown-server", True
+    )
     assert missing is None

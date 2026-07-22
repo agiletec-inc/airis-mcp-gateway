@@ -1,4 +1,5 @@
 """CRUD operations for secrets"""
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..models.secret import Secret
@@ -6,10 +7,7 @@ from ..core.encryption import encryption_manager
 
 
 async def create_secret(
-    db: AsyncSession,
-    server_name: str,
-    key_name: str,
-    value: str
+    db: AsyncSession, server_name: str, key_name: str, value: str
 ) -> Secret:
     """
     Create a new encrypted secret
@@ -25,9 +23,7 @@ async def create_secret(
     """
     encrypted_value = encryption_manager.encrypt(value)
     secret = Secret(
-        server_name=server_name,
-        key_name=key_name,
-        encrypted_value=encrypted_value
+        server_name=server_name, key_name=key_name, encrypted_value=encrypted_value
     )
     db.add(secret)
     await db.commit()
@@ -36,9 +32,7 @@ async def create_secret(
 
 
 async def get_secret(
-    db: AsyncSession,
-    server_name: str,
-    key_name: str
+    db: AsyncSession, server_name: str, key_name: str
 ) -> Secret | None:
     """
     Get a secret by server and key name
@@ -53,17 +47,14 @@ async def get_secret(
     """
     result = await db.execute(
         select(Secret).where(
-            Secret.server_name == server_name,
-            Secret.key_name == key_name
+            Secret.server_name == server_name, Secret.key_name == key_name
         )
     )
     return result.scalar_one_or_none()
 
 
 async def get_secret_value(
-    db: AsyncSession,
-    server_name: str,
-    key_name: str
+    db: AsyncSession, server_name: str, key_name: str
 ) -> str | None:
     """
     Get decrypted secret value
@@ -82,10 +73,7 @@ async def get_secret_value(
     return None
 
 
-async def get_secrets_by_server(
-    db: AsyncSession,
-    server_name: str
-) -> list[Secret]:
+async def get_secrets_by_server(db: AsyncSession, server_name: str) -> list[Secret]:
     """
     Get all secrets for a server
 
@@ -96,9 +84,7 @@ async def get_secrets_by_server(
     Returns:
         List of secrets
     """
-    result = await db.execute(
-        select(Secret).where(Secret.server_name == server_name)
-    )
+    result = await db.execute(select(Secret).where(Secret.server_name == server_name))
     return list(result.scalars().all())
 
 
@@ -117,10 +103,7 @@ async def get_all_secrets(db: AsyncSession) -> list[Secret]:
 
 
 async def update_secret(
-    db: AsyncSession,
-    server_name: str,
-    key_name: str,
-    value: str
+    db: AsyncSession, server_name: str, key_name: str, value: str
 ) -> Secret | None:
     """
     Update a secret value
@@ -142,11 +125,7 @@ async def update_secret(
     return secret
 
 
-async def delete_secret(
-    db: AsyncSession,
-    server_name: str,
-    key_name: str
-) -> bool:
+async def delete_secret(db: AsyncSession, server_name: str, key_name: str) -> bool:
     """
     Delete a secret
 
@@ -166,10 +145,7 @@ async def delete_secret(
     return False
 
 
-async def delete_secrets_by_server(
-    db: AsyncSession,
-    server_name: str
-) -> int:
+async def delete_secrets_by_server(db: AsyncSession, server_name: str) -> int:
     """
     Delete all secrets for a server
 

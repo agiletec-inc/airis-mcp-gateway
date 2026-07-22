@@ -1,10 +1,10 @@
 """
 Tests for encryption module.
 """
+
 import os
 import pytest
-from unittest.mock import patch, MagicMock
-from pathlib import Path
+from unittest.mock import patch
 
 
 def test_encrypt_decrypt_roundtrip():
@@ -119,6 +119,7 @@ def test_manager_uses_env_var_key():
     with patch.dict(os.environ, {"ENCRYPTION_MASTER_KEY": env_key}):
         # Need to reload to pick up env var
         from app.core import encryption
+
         reload(encryption)
 
         manager = encryption.EncryptionManager()

@@ -1,8 +1,8 @@
 """Unit tests for secrets CRUD operations"""
+
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from app.models.secret import Secret
 from app.crud import secret as crud
 from app.core.database import Base
 
@@ -40,10 +40,7 @@ async def test_create_secret(test_db: AsyncSession):
     """Test creating a new secret"""
     # Create
     secret = await crud.create_secret(
-        test_db,
-        "test-server",
-        "API_KEY",
-        "test-secret-value"
+        test_db, "test-server", "API_KEY", "test-secret-value"
     )
 
     # Verify

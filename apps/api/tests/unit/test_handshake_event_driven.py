@@ -6,6 +6,7 @@ initialize response instead of racing a fixed sleep budget.
 Follows the FakeRequest / monkeypatch pattern from
 test_mcp_proxy_error_injection.py and test_cold_tool_auto_discovery.py.
 """
+
 import asyncio
 import json
 import time
@@ -98,7 +99,9 @@ async def test_auto_init_waits_for_slow_initialize_response(wired, monkeypatch):
     mcp_proxy._session_initialize_events.pop(session_id, None)
 
     call_log: list = []
-    monkeypatch.setattr(mcp_proxy.httpx, "AsyncClient", _make_fake_async_client(call_log))
+    monkeypatch.setattr(
+        mcp_proxy.httpx, "AsyncClient", _make_fake_async_client(call_log)
+    )
 
     slow_delay = 0.5  # far past the old fixed 0.15s + 0.10s budget
 
@@ -149,7 +152,9 @@ async def test_auto_init_timeout_proceeds_when_initialize_response_never_arrives
     mcp_proxy._session_initialize_events.pop(session_id, None)
 
     call_log: list = []
-    monkeypatch.setattr(mcp_proxy.httpx, "AsyncClient", _make_fake_async_client(call_log))
+    monkeypatch.setattr(
+        mcp_proxy.httpx, "AsyncClient", _make_fake_async_client(call_log)
+    )
     # Shrink the bounded wait so the test doesn't take 10s.
     monkeypatch.setattr(mcp_proxy, "INIT_HANDSHAKE_TIMEOUT", 0.2)
 

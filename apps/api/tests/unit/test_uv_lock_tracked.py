@@ -10,6 +10,7 @@ regresses: the lockfile must exist and be git-tracked, `.gitignore` must not
 ignore it again, and both CI and the Dockerfile must install from it with
 `--frozen` (or gate on `uv lock --check`).
 """
+
 from __future__ import annotations
 
 import subprocess

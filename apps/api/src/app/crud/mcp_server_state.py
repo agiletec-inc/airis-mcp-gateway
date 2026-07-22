@@ -1,4 +1,5 @@
 """CRUD operations for MCP server state"""
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from ..models.mcp_server_state import MCPServerState
@@ -19,15 +20,10 @@ async def get_all_server_states(db: AsyncSession) -> list[MCPServerState]:
 
 
 async def create_server_state(
-    db: AsyncSession,
-    server_id: str,
-    enabled: bool
+    db: AsyncSession, server_id: str, enabled: bool
 ) -> MCPServerState:
     """Create new server state"""
-    server_state = MCPServerState(
-        server_id=server_id,
-        enabled=enabled
-    )
+    server_state = MCPServerState(server_id=server_id, enabled=enabled)
     db.add(server_state)
     await db.commit()
     await db.refresh(server_state)
@@ -35,9 +31,7 @@ async def create_server_state(
 
 
 async def update_server_state(
-    db: AsyncSession,
-    server_id: str,
-    enabled: bool
+    db: AsyncSession, server_id: str, enabled: bool
 ) -> MCPServerState | None:
     """Update server state"""
     server_state = await get_server_state(db, server_id)
@@ -51,9 +45,7 @@ async def update_server_state(
 
 
 async def upsert_server_state(
-    db: AsyncSession,
-    server_id: str,
-    enabled: bool
+    db: AsyncSession, server_id: str, enabled: bool
 ) -> MCPServerState:
     """Create or update server state"""
     existing = await get_server_state(db, server_id)

@@ -1,6 +1,5 @@
 """Tests for tool_suggester module."""
 
-import pytest
 from app.core.tool_suggester import (
     SuggestToolRequest,
     SuggestToolResponse,
@@ -162,14 +161,15 @@ class TestSuggestTool:
 
     def test_browser_intent(self):
         """Test browser-related intent."""
-        request = SuggestToolRequest(intent="Navigate to a webpage and take a screenshot")
+        request = SuggestToolRequest(
+            intent="Navigate to a webpage and take a screenshot"
+        )
         response = suggest_tool(request)
 
         assert len(response.suggestions) > 0
         # Should suggest browser or playwright tools
         browser_tools = [
-            s for s in response.suggestions
-            if s.server in ("browser", "playwright")
+            s for s in response.suggestions if s.server in ("browser", "playwright")
         ]
         assert len(browser_tools) > 0
 

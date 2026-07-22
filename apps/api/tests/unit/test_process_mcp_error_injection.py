@@ -10,13 +10,14 @@ An earlier edit referenced `manager._tools`, which does not exist on
 ProcessManager (the tool cache lives on DynamicMCP), so the injection path
 raised AttributeError at runtime. This test pins the working contract.
 """
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.endpoints import process_mcp
-from app.core.dynamic_mcp import DynamicMCP, ToolInfo, get_dynamic_mcp
-from app.core.process_manager import ProcessManager, get_process_manager
+from app.core.dynamic_mcp import DynamicMCP, ToolInfo
+from app.core.process_manager import ProcessManager
 
 
 @pytest.fixture
@@ -24,9 +25,7 @@ def client(monkeypatch):
     """FastAPI TestClient wired to stubbed ProcessManager + DynamicMCP singletons."""
     pm = ProcessManager()
     pm._initialized = True
-    monkeypatch.setattr(
-        "app.api.endpoints.process_mcp.get_process_manager", lambda: pm
-    )
+    monkeypatch.setattr("app.api.endpoints.process_mcp.get_process_manager", lambda: pm)
 
     dmcp = DynamicMCP()
     dmcp._tools["stripe_create_customer"] = ToolInfo(

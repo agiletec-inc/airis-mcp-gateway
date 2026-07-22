@@ -1,6 +1,5 @@
 """Tests for confidence_engine module."""
 
-import pytest
 from app.core.confidence_engine import (
     ConfidenceChecker,
     ConfidenceInput,
@@ -168,7 +167,9 @@ class TestConfidenceResult:
         assert result.level == "high"
 
         # Medium
-        result = ConfidenceResult(score=0.75, verdict=Verdict.PRESENT_ALTERNATIVES, reasons=[])
+        result = ConfidenceResult(
+            score=0.75, verdict=Verdict.PRESENT_ALTERNATIVES, reasons=[]
+        )
         assert result.level == "medium"
 
         # Low

@@ -4,6 +4,7 @@ Request ID middleware for request tracing.
 Generates or propagates X-Request-ID header for all requests.
 This is the foundation for structured logging and debugging.
 """
+
 import uuid
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request

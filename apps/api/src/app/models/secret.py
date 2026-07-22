@@ -15,16 +15,16 @@ class Secret(Base):
     encrypted_value: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 
     # Timestamps (Best Practice: DB-side defaults for reliability)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False
+        server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     # Composite unique constraint
     __table_args__ = (
-        Index('ix_secrets_server_key', 'server_name', 'key_name', unique=True),
+        Index("ix_secrets_server_key", "server_name", "key_name", unique=True),
     )
 
     def __repr__(self) -> str:

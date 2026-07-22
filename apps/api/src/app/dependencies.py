@@ -11,9 +11,7 @@ from .repositories import CredentialRepository, SettingRepository
 
 
 @lru_cache(maxsize=1)
-def _container() -> tuple[
-    CredentialProvider, MCPRegistry, SettingRepository
-]:
+def _container() -> tuple[CredentialProvider, MCPRegistry, SettingRepository]:
     cipher = load_default_cipher()
     credential_repo = CredentialRepository(AsyncSessionLocal, cipher)  # pyright: ignore[reportArgumentType]
     provider = CredentialProvider(credential_repo)

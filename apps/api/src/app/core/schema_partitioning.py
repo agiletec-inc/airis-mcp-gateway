@@ -42,7 +42,9 @@ class SchemaPartitioner:
         """Retrieve stored tool description."""
         return self.tool_docs.get(tool_name)
 
-    def partition_schema(self, schema: Dict[str, Any], depth: int = 1) -> Dict[str, Any]:
+    def partition_schema(
+        self, schema: Dict[str, Any], depth: int = 1
+    ) -> Dict[str, Any]:
         """
         Partition schema to top-level properties only.
 
@@ -124,8 +126,12 @@ class SchemaPartitioner:
                         new_prop["default"] = value["default"]
 
                     # For arrays, recursively partition items
-                    if value.get("type") == "array" and isinstance(value.get("items"), dict):
-                        new_prop["items"] = self.partition_schema(value["items"], max(depth - 1, 0))
+                    if value.get("type") == "array" and isinstance(
+                        value.get("items"), dict
+                    ):
+                        new_prop["items"] = self.partition_schema(
+                            value["items"], max(depth - 1, 0)
+                        )
 
                     # Nested properties are removed (only type info remains)
                     # This achieves token reduction
@@ -138,14 +144,14 @@ class SchemaPartitioner:
 
         # If items exist (array)
         if "items" in partitioned and isinstance(partitioned["items"], dict):
-            partitioned["items"] = self.partition_schema(partitioned["items"], depth - 1)
+            partitioned["items"] = self.partition_schema(
+                partitioned["items"], depth - 1
+            )
 
         return partitioned
 
     def expand_schema(
-        self,
-        tool_name: str,
-        path: Optional[List[str]] = None
+        self, tool_name: str, path: Optional[List[str]] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Get schema details for the specified path.
@@ -186,7 +192,9 @@ class SchemaPartitioner:
 
         return copy.deepcopy(current)
 
-    def get_token_reduction_estimate(self, full_schema: Dict[str, Any]) -> Dict[str, int]:
+    def get_token_reduction_estimate(
+        self, full_schema: Dict[str, Any]
+    ) -> Dict[str, int]:
         """
         Estimate token reduction effect.
 
@@ -205,12 +213,14 @@ class SchemaPartitioner:
         full_tokens = len(full_json) // 4
         partitioned_tokens = len(partitioned_json) // 4
 
-        reduction = int((1 - partitioned_tokens / full_tokens) * 100) if full_tokens > 0 else 0
+        reduction = (
+            int((1 - partitioned_tokens / full_tokens) * 100) if full_tokens > 0 else 0
+        )
 
         return {
             "full": full_tokens,
             "partitioned": partitioned_tokens,
-            "reduction": reduction
+            "reduction": reduction,
         }
 
 

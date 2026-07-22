@@ -4,6 +4,7 @@ from datetime import datetime
 
 class MCPServerBase(BaseModel):
     """Base schema for MCP Server"""
+
     name: str = Field(..., min_length=1, max_length=255)
     enabled: bool = True
     command: str = Field(..., min_length=1)
@@ -15,11 +16,13 @@ class MCPServerBase(BaseModel):
 
 class MCPServerCreate(MCPServerBase):
     """Schema for creating MCP Server"""
+
     pass
 
 
 class MCPServerUpdate(BaseModel):
     """Schema for updating MCP Server"""
+
     enabled: bool | None = None
     command: str | None = Field(None, min_length=1)
     args: list[str] | None = None
@@ -30,6 +33,7 @@ class MCPServerUpdate(BaseModel):
 
 class MCPServerResponse(MCPServerBase):
     """Schema for MCP Server response"""
+
     id: int
     created_at: datetime
     updated_at: datetime
@@ -40,4 +44,5 @@ class MCPServerResponse(MCPServerBase):
 
 class MCPServerToggle(BaseModel):
     """Schema for toggling MCP Server"""
+
     enabled: bool

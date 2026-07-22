@@ -39,11 +39,9 @@ def _env_float(name: str, default: float) -> float:
         _env_logger.error("Invalid %s=%r (expected float): %s", name, raw, exc)
         raise InvalidEnvVar(f"{name}={raw!r} is not a valid float") from exc
 
+
 DEFAULT_PROJECT_ROOT = Path(
-    os.getenv(
-        "CONTAINER_PROJECT_ROOT",
-        os.getenv("PROJECT_ROOT", "/workspace/project")
-    )
+    os.getenv("CONTAINER_PROJECT_ROOT", os.getenv("PROJECT_ROOT", "/workspace/project"))
 )
 DEFAULT_MCP_GATEWAY_URL = os.getenv("MCP_GATEWAY_URL", "http://mcp-gateway:9390")
 DEFAULT_MCP_CONFIG = Path(
@@ -84,7 +82,9 @@ class Settings(BaseSettings):
         "MCP_STREAM_GATEWAY_URL",
         f"{DEFAULT_MCP_GATEWAY_URL.rstrip('/')}/mcp",
     )
-    GATEWAY_PUBLIC_URL: str = os.getenv("GATEWAY_PUBLIC_URL", "http://gateway.localhost:9390")
+    GATEWAY_PUBLIC_URL: str = os.getenv(
+        "GATEWAY_PUBLIC_URL", "http://gateway.localhost:9390"
+    )
     GATEWAY_API_URL: str = os.getenv("GATEWAY_API_URL", "http://localhost:9400/api")
     UI_PUBLIC_URL: str = os.getenv("UI_PUBLIC_URL", "http://ui.gateway.localhost:5273")
     MASTER_KEY_HEX: str | None = None
@@ -118,7 +118,11 @@ class Settings(BaseSettings):
     # schema, so clients can call them directly in one hop (issue #198).
     # Set to false to restore the previous meta-tool-only COLD behavior for
     # context-constrained clients.
-    COLD_TOOLS_IN_LIST: bool = os.getenv("COLD_TOOLS_IN_LIST", "true").lower() in ("true", "1", "yes")
+    COLD_TOOLS_IN_LIST: bool = os.getenv("COLD_TOOLS_IN_LIST", "true").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
 
     # Tool Listing Mode: "full" (all tool names) or "compact" (top 3 per server + count)
     TOOL_LISTING_MODE: str = os.getenv("TOOL_LISTING_MODE", "compact")
@@ -221,6 +225,7 @@ def log_startup_warnings() -> None:
     settings are missing (fail-closed).
     """
     import logging
+
     logger = logging.getLogger("airis.config")
 
     try:

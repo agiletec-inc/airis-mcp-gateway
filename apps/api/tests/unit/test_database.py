@@ -6,6 +6,7 @@ tests exercise each branch by reloading the module under controlled
 conditions, always restoring the original lite-mode state afterward so
 the rest of the suite is unaffected.
 """
+
 from __future__ import annotations
 
 import importlib
@@ -31,7 +32,10 @@ def reload_database():
     saved_modules = {name: sys.modules.get(name) for name in sa_modules}
 
     def _reload(*, gateway_mode=None, database_url=None, block_sqlalchemy=False):
-        for key, value in (("GATEWAY_MODE", gateway_mode), ("DATABASE_URL", database_url)):
+        for key, value in (
+            ("GATEWAY_MODE", gateway_mode),
+            ("DATABASE_URL", database_url),
+        ):
             if value is None:
                 os.environ.pop(key, None)
             else:

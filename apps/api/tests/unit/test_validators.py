@@ -7,6 +7,7 @@ Tests cover:
 - Pattern-based validation for various services
 - Generic validation fallback
 """
+
 import pytest
 
 from app.core.validators import APIKeyValidator, validate_api_key
@@ -59,8 +60,7 @@ class TestTavilyAPIKey:
     def test_valid_tavily_key(self):
         """Test valid Tavily key format."""
         is_valid, error = APIKeyValidator.validate(
-            "TAVILY_API_KEY",
-            "tvly-ABC123xyz456789012"
+            "TAVILY_API_KEY", "tvly-ABC123xyz456789012"
         )
         assert is_valid is True
         assert error is None
@@ -68,16 +68,14 @@ class TestTavilyAPIKey:
     def test_valid_tavily_key_underscore(self):
         """Test valid Tavily key with underscore separator."""
         is_valid, error = APIKeyValidator.validate(
-            "TAVILY_API_KEY",
-            "tvly_ABC123xyz456789012"
+            "TAVILY_API_KEY", "tvly_ABC123xyz456789012"
         )
         assert is_valid is True
 
     def test_invalid_tavily_key(self):
         """Test invalid Tavily key format."""
         is_valid, error = APIKeyValidator.validate(
-            "TAVILY_API_KEY",
-            "invalid_key_format_12345"
+            "TAVILY_API_KEY", "invalid_key_format_12345"
         )
         assert is_valid is False
         assert "Invalid format" in error
@@ -89,24 +87,21 @@ class TestStripeSecretKey:
     def test_valid_stripe_test_key(self):
         """Test valid Stripe test key."""
         is_valid, error = APIKeyValidator.validate(
-            "STRIPE_SECRET_KEY",
-            "sk_test_" + "a" * 24
+            "STRIPE_SECRET_KEY", "sk_test_" + "a" * 24
         )
         assert is_valid is True
 
     def test_valid_stripe_live_key(self):
         """Test valid Stripe live key."""
         is_valid, error = APIKeyValidator.validate(
-            "STRIPE_SECRET_KEY",
-            "sk_live_" + "a" * 24
+            "STRIPE_SECRET_KEY", "sk_live_" + "a" * 24
         )
         assert is_valid is True
 
     def test_invalid_stripe_key(self):
         """Test invalid Stripe key format."""
         is_valid, error = APIKeyValidator.validate(
-            "STRIPE_SECRET_KEY",
-            "not_a_stripe_key_123456"
+            "STRIPE_SECRET_KEY", "not_a_stripe_key_123456"
         )
         assert is_valid is False
 
@@ -117,24 +112,21 @@ class TestGitHubToken:
     def test_valid_github_classic_token(self):
         """Test valid GitHub classic token (ghp_)."""
         is_valid, error = APIKeyValidator.validate(
-            "GITHUB_PERSONAL_ACCESS_TOKEN",
-            "ghp_" + "a" * 36
+            "GITHUB_PERSONAL_ACCESS_TOKEN", "ghp_" + "a" * 36
         )
         assert is_valid is True
 
     def test_valid_github_fine_grained_token(self):
         """Test valid GitHub fine-grained token (ghs_)."""
         is_valid, error = APIKeyValidator.validate(
-            "GITHUB_PERSONAL_ACCESS_TOKEN",
-            "ghs_" + "a" * 36
+            "GITHUB_PERSONAL_ACCESS_TOKEN", "ghs_" + "a" * 36
         )
         assert is_valid is True
 
     def test_invalid_github_token(self):
         """Test invalid GitHub token."""
         is_valid, error = APIKeyValidator.validate(
-            "GITHUB_PERSONAL_ACCESS_TOKEN",
-            "github_pat_invalid_format"
+            "GITHUB_PERSONAL_ACCESS_TOKEN", "github_pat_invalid_format"
         )
         assert is_valid is False
 
@@ -144,17 +136,13 @@ class TestOpenAIAPIKey:
 
     def test_valid_openai_key(self):
         """Test valid OpenAI key."""
-        is_valid, error = APIKeyValidator.validate(
-            "OPENAI_API_KEY",
-            "sk-" + "a" * 48
-        )
+        is_valid, error = APIKeyValidator.validate("OPENAI_API_KEY", "sk-" + "a" * 48)
         assert is_valid is True
 
     def test_invalid_openai_key(self):
         """Test invalid OpenAI key."""
         is_valid, error = APIKeyValidator.validate(
-            "OPENAI_API_KEY",
-            "openai_key_invalid"
+            "OPENAI_API_KEY", "openai_key_invalid"
         )
         assert is_valid is False
 
@@ -165,16 +153,14 @@ class TestAnthropicAPIKey:
     def test_valid_anthropic_key(self):
         """Test valid Anthropic key."""
         is_valid, error = APIKeyValidator.validate(
-            "ANTHROPIC_API_KEY",
-            "sk-ant-" + "a" * 95
+            "ANTHROPIC_API_KEY", "sk-ant-" + "a" * 95
         )
         assert is_valid is True
 
     def test_invalid_anthropic_key(self):
         """Test invalid Anthropic key."""
         is_valid, error = APIKeyValidator.validate(
-            "ANTHROPIC_API_KEY",
-            "anthropic_key_invalid"
+            "ANTHROPIC_API_KEY", "anthropic_key_invalid"
         )
         assert is_valid is False
 
@@ -185,16 +171,14 @@ class TestSupabaseKeys:
     def test_valid_supabase_url(self):
         """Test valid Supabase URL."""
         is_valid, error = APIKeyValidator.validate(
-            "SUPABASE_URL",
-            "https://abc123xyz.supabase.co"
+            "SUPABASE_URL", "https://abc123xyz.supabase.co"
         )
         assert is_valid is True
 
     def test_invalid_supabase_url(self):
         """Test invalid Supabase URL."""
         is_valid, error = APIKeyValidator.validate(
-            "SUPABASE_URL",
-            "https://example.com"
+            "SUPABASE_URL", "https://example.com"
         )
         assert is_valid is False
 
@@ -212,24 +196,21 @@ class TestPostgresKeys:
     def test_valid_postgres_dsn(self):
         """Test valid Postgres DSN."""
         is_valid, error = APIKeyValidator.validate(
-            "PG_DSN",
-            "postgres://user:pass@localhost:5432/db"
+            "PG_DSN", "postgres://user:pass@localhost:5432/db"
         )
         assert is_valid is True
 
     def test_valid_postgresql_dsn(self):
         """Test valid PostgreSQL DSN."""
         is_valid, error = APIKeyValidator.validate(
-            "PG_DSN",
-            "postgresql://user:pass@localhost:5432/db"
+            "PG_DSN", "postgresql://user:pass@localhost:5432/db"
         )
         assert is_valid is True
 
     def test_valid_postgrest_url(self):
         """Test valid PostgREST URL."""
         is_valid, error = APIKeyValidator.validate(
-            "POSTGREST_URL",
-            "https://api.example.com/rest/v1"
+            "POSTGREST_URL", "https://api.example.com/rest/v1"
         )
         assert is_valid is True
 
@@ -278,17 +259,13 @@ class TestUnknownKeys:
     def test_unknown_key_generic_validation(self):
         """Test unknown key passes generic validation."""
         is_valid, error = APIKeyValidator.validate(
-            "UNKNOWN_SERVICE_KEY",
-            "some_valid_key_value_12345"
+            "UNKNOWN_SERVICE_KEY", "some_valid_key_value_12345"
         )
         assert is_valid is True
 
     def test_unknown_key_strips_whitespace(self):
         """Test unknown key has whitespace stripped."""
-        is_valid, error = APIKeyValidator.validate(
-            "UNKNOWN_KEY",
-            "  valid_key_12345  "
-        )
+        is_valid, error = APIKeyValidator.validate("UNKNOWN_KEY", "  valid_key_12345  ")
         assert is_valid is True
 
 

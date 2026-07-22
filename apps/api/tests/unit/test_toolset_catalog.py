@@ -1,8 +1,8 @@
 """Tests for build_toolset_index (issue #85)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from unittest.mock import patch
 
 from app.core.toolset_catalog import build_toolset_index
@@ -92,9 +92,7 @@ def test_remaining_tools_fall_into_default_toolset():
 
 def test_server_with_no_seed_entry_gets_default_only():
     configs = {
-        "github": _FakeConfig(
-            tools_index=[{"name": "get_issue"}, {"name": "list_prs"}]
-        )
+        "github": _FakeConfig(tools_index=[{"name": "get_issue"}, {"name": "list_prs"}])
     }
     with _stub_seed_catalog({}):
         result = build_toolset_index(configs)
@@ -104,9 +102,7 @@ def test_server_with_no_seed_entry_gets_default_only():
 
 
 def test_tools_outside_indexed_list_are_ignored_from_seed():
-    configs = {
-        "stripe": _FakeConfig(tools_index=[{"name": "create_payment"}])
-    }
+    configs = {"stripe": _FakeConfig(tools_index=[{"name": "create_payment"}])}
     seed = {
         "stripe": {
             "toolsets": {
@@ -166,9 +162,7 @@ def test_cold_lazy_server_disabled_but_not_policy_disabled_is_included():
 
 
 def test_toolsets_with_no_matching_tools_are_skipped():
-    configs = {
-        "stripe": _FakeConfig(tools_index=[{"name": "create_payment"}])
-    }
+    configs = {"stripe": _FakeConfig(tools_index=[{"name": "create_payment"}])}
     seed = {
         "stripe": {
             "toolsets": {

@@ -7,6 +7,7 @@ Covers:
 - handle_airis_workflow returns the workflow text for a known topic, and a
   -32602 error for a missing or unknown topic.
 """
+
 import json
 
 import pytest
@@ -51,7 +52,12 @@ async def _call_handler(topic):
 
 
 _FAKE_WORKFLOWS = [
-    _wf("airis-workflow-database", "airis_workflow", topic="database", text="DB PROCEDURE"),
+    _wf(
+        "airis-workflow-database",
+        "airis_workflow",
+        topic="database",
+        text="DB PROCEDURE",
+    ),
     _wf("data-query", "mcp_instructions", topic="", text="INIT ONLY"),
 ]
 

@@ -8,6 +8,7 @@ so the client re-requests tools/list. Two session kinds are covered:
 classic SSE sessions (``session_queue``) and Streamable HTTP bridges
 (``gateway_stream_bridge``).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -117,6 +118,7 @@ async def test_fan_out_is_noop_without_sessions():
 async def test_install_registers_listener_on_process_manager(monkeypatch):
     pm = ProcessManager()
     from app.api.endpoints import tools_list_notifier
+
     monkeypatch.setattr(tools_list_notifier, "get_process_manager", lambda: pm)
 
     install_tools_list_changed_fanout()

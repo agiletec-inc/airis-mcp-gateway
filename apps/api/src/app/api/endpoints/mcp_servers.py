@@ -33,7 +33,7 @@ async def get_server(
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with id {server_id} not found"
+            detail=f"Server with id {server_id} not found",
         )
     return server
 
@@ -47,10 +47,7 @@ async def create_server(
     try:
         return await crud.create_server(db, server)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.patch("/{server_id}", response_model=MCPServerResponse)
@@ -64,7 +61,7 @@ async def update_server(
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with id {server_id} not found"
+            detail=f"Server with id {server_id} not found",
         )
     return server
 
@@ -80,7 +77,7 @@ async def toggle_server(
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with id {server_id} not found"
+            detail=f"Server with id {server_id} not found",
         )
     return server
 
@@ -95,5 +92,5 @@ async def delete_server(
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with id {server_id} not found"
+            detail=f"Server with id {server_id} not found",
         )

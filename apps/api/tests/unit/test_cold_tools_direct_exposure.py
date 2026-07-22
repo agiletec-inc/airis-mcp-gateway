@@ -13,11 +13,12 @@ now advertised directly in tools/list with a lazy stub schema
 ({"type": "object"}), using the bare tool name exactly as
 DynamicMCP.auto_discover_and_execute resolves it.
 """
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -117,7 +118,9 @@ async def test_policy_disabled_server_tools_are_not_listed(monkeypatch):
         "mindbase",
         enabled=False,
         policy_disabled=True,
-        tools_index=[{"name": "conversation_search", "description": "Search conversations"}],
+        tools_index=[
+            {"name": "conversation_search", "description": "Search conversations"}
+        ],
     )
 
     tools = {t["name"] for t in await _list_tools(pm)}
@@ -127,13 +130,17 @@ async def test_policy_disabled_server_tools_are_not_listed(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_cold_tools_in_list_false_restores_old_meta_tool_only_listing(monkeypatch):
+async def test_cold_tools_in_list_false_restores_old_meta_tool_only_listing(
+    monkeypatch,
+):
     pm = _build_pm(monkeypatch)
     monkeypatch.setattr(settings, "COLD_TOOLS_IN_LIST", False)
     pm._server_configs["stripe"] = _make_config(
         "stripe",
         enabled=False,
-        tools_index=[{"name": "create_customer", "description": "Create a Stripe customer"}],
+        tools_index=[
+            {"name": "create_customer", "description": "Create a Stripe customer"}
+        ],
     )
 
     tools = {t["name"] for t in await _list_tools(pm)}
@@ -305,7 +312,9 @@ async def test_tools_list_advertised_name_is_directly_callable_one_hop(monkeypat
     pm._server_configs["stripe"] = _make_config(
         "stripe",
         enabled=False,
-        tools_index=[{"name": "create_customer", "description": "Create a Stripe customer"}],
+        tools_index=[
+            {"name": "create_customer", "description": "Create a Stripe customer"}
+        ],
     )
 
     # Step 1: client reads tools/list and learns the name.
@@ -324,9 +333,13 @@ async def test_tools_list_advertised_name_is_directly_callable_one_hop(monkeypat
 
     async def fake_call_tool_on_server(server_name, tool_name, arguments):
         call_log.append(f"call:{server_name}:{tool_name}")
-        return {"result": {"content": [{"type": "text", "text": "ok"}], "isError": False}}
+        return {
+            "result": {"content": [{"type": "text", "text": "ok"}], "isError": False}
+        }
 
-    async def fake_load_tools_for_server(server_name, process_manager, force_enable=False):
+    async def fake_load_tools_for_server(
+        server_name, process_manager, force_enable=False
+    ):
         pm._tool_to_server["create_customer"] = "stripe"
 
     monkeypatch.setattr(pm, "enable_server", fake_enable_server)
@@ -335,8 +348,12 @@ async def test_tools_list_advertised_name_is_directly_callable_one_hop(monkeypat
     dmcp = DynamicMCP()
     monkeypatch.setattr(dmcp, "load_tools_for_server", fake_load_tools_for_server)
 
-    result = await dmcp.auto_discover_and_execute("create_customer", {"email": "x@y.com"}, pm)
+    result = await dmcp.auto_discover_and_execute(
+        "create_customer", {"email": "x@y.com"}, pm
+    )
 
-    assert result == {"result": {"content": [{"type": "text", "text": "ok"}], "isError": False}}
+    assert result == {
+        "result": {"content": [{"type": "text", "text": "ok"}], "isError": False}
+    }
     assert "enable:stripe" in call_log
     assert "call:stripe:create_customer" in call_log

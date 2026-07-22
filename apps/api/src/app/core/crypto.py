@@ -1,4 +1,5 @@
 """AES-GCM based encryption utilities for credential storage."""
+
 from __future__ import annotations
 
 import os
@@ -15,9 +16,7 @@ class AESEncryption:
 
     def __init__(self, hex_key: str | None):
         if not hex_key:
-            raise RuntimeError(
-                "MASTER_KEY_HEX must be set for credential encryption"
-            )
+            raise RuntimeError("MASTER_KEY_HEX must be set for credential encryption")
 
         key_bytes: bytes | None = None
         try:

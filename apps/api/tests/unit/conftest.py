@@ -1,7 +1,7 @@
 """
 Unit test configuration - uses in-memory SQLite for isolation
 """
-import pytest
+
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from app.core.database import Base

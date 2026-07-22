@@ -12,6 +12,7 @@ These tests assert security *properties* rather than functional behaviour:
 Profile-name path traversal (the fourth category in #95) is already
 covered by `apps/airis-commands/src/lib.test.ts` via `validateProfileName`.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -65,7 +66,9 @@ async def test_start_process_passes_server_args_as_literal_argv(monkeypatch):
         fake_proc.pid = 4242
         return fake_proc
 
-    monkeypatch.setattr(process_runner_module.asyncio, "create_subprocess_exec", _fake_exec)
+    monkeypatch.setattr(
+        process_runner_module.asyncio, "create_subprocess_exec", _fake_exec
+    )
     # Background readers would otherwise run against the mocked process.
     monkeypatch.setattr(runner, "_stdout_reader", AsyncMock())
     monkeypatch.setattr(runner, "_stderr_reader", AsyncMock())
@@ -138,7 +141,9 @@ def _build_json_echo_app(max_size: int | None = None) -> Starlette:
 
 def test_oversized_payload_rejected():
     """RequestSizeLimitMiddleware rejects bodies over the configured limit."""
-    client = TestClient(_build_json_echo_app(max_size=1024), raise_server_exceptions=False)
+    client = TestClient(
+        _build_json_echo_app(max_size=1024), raise_server_exceptions=False
+    )
 
     response = client.post("/echo", content=b"x" * 4096)
 
@@ -148,7 +153,9 @@ def test_oversized_payload_rejected():
 
 def test_normal_payload_passes_size_check():
     """A small body is allowed through the size limit."""
-    client = TestClient(_build_json_echo_app(max_size=1024), raise_server_exceptions=False)
+    client = TestClient(
+        _build_json_echo_app(max_size=1024), raise_server_exceptions=False
+    )
 
     response = client.post("/echo", json={"hello": "world"})
 

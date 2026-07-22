@@ -17,6 +17,7 @@ never requeued for the caller that actually owns it. That caller then blocks
 until ``settings.TOOL_CALL_TIMEOUT`` and returns a 504, even though the
 Gateway already answered.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -37,7 +38,9 @@ class _FakeRequest:
     """Minimal stand-in exposing only what get_stream_session_id() touches."""
 
     def __init__(self, session_id: str):
-        self.headers = _FakeHeaders({gateway_stream_bridge.stream_session_header_name(): session_id})
+        self.headers = _FakeHeaders(
+            {gateway_stream_bridge.stream_session_header_name(): session_id}
+        )
 
 
 class _FakeGatewayResponse:
@@ -103,12 +106,24 @@ async def test_concurrent_calls_each_get_their_own_response(monkeypatch):
 
     task_a = asyncio.create_task(
         gateway_stream_bridge.send_via_stream_bridge(
-            request, {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "a"}}
+            request,
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "a"},
+            },
         )
     )
     task_b = asyncio.create_task(
         gateway_stream_bridge.send_via_stream_bridge(
-            request, {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "b"}}
+            request,
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "b"},
+            },
         )
     )
 
@@ -121,8 +136,12 @@ async def test_concurrent_calls_each_get_their_own_response(monkeypatch):
 
     # Now simulate the Gateway answering call B (id=2) before call A
     # (id=1), e.g. because B's tool happened to resolve faster server-side.
-    await session.response_queue.put({"jsonrpc": "2.0", "id": 2, "result": {"for": "B"}})
-    await session.response_queue.put({"jsonrpc": "2.0", "id": 1, "result": {"for": "A"}})
+    await session.response_queue.put(
+        {"jsonrpc": "2.0", "id": 2, "result": {"for": "B"}}
+    )
+    await session.response_queue.put(
+        {"jsonrpc": "2.0", "id": 1, "result": {"for": "A"}}
+    )
 
     response_a, response_b = await asyncio.gather(task_a, task_b)
 
@@ -159,7 +178,9 @@ async def test_orphaned_response_is_dropped_not_requeued_forever(monkeypatch):
     # id=999 belongs to a call that is no longer live (e.g. already timed
     # out or disconnected) — nobody is or ever will be waiting for it, so
     # it's never in session.pending_response_ids.
-    await session.response_queue.put({"jsonrpc": "2.0", "id": 999, "result": {"for": "ghost"}})
+    await session.response_queue.put(
+        {"jsonrpc": "2.0", "id": 999, "result": {"for": "ghost"}}
+    )
 
     request = _FakeRequest(session.public_session_id)
 
@@ -169,7 +190,13 @@ async def test_orphaned_response_is_dropped_not_requeued_forever(monkeypatch):
     # test — the real assertion is the prompt 504 below.
     response_a = await asyncio.wait_for(
         gateway_stream_bridge.send_via_stream_bridge(
-            request, {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "a"}}
+            request,
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "a"},
+            },
         ),
         timeout=5.0,
     )
@@ -201,12 +228,19 @@ async def test_many_concurrent_callers_all_get_correct_responses(monkeypatch):
 
     request = _FakeRequest(session.public_session_id)
 
-    ids = list(range(1, 9))  # 8 concurrent callers — more than any small fixed retry bound
+    ids = list(
+        range(1, 9)
+    )  # 8 concurrent callers — more than any small fixed retry bound
     tasks = {
         i: asyncio.create_task(
             gateway_stream_bridge.send_via_stream_bridge(
                 request,
-                {"jsonrpc": "2.0", "id": i, "method": "tools/call", "params": {"name": f"call-{i}"}},
+                {
+                    "jsonrpc": "2.0",
+                    "id": i,
+                    "method": "tools/call",
+                    "params": {"name": f"call-{i}"},
+                },
             )
         )
         for i in ids
@@ -223,7 +257,9 @@ async def test_many_concurrent_callers_all_get_correct_responses(monkeypatch):
     # so each caller has to bounce through several foreign ids before its
     # own arrives.
     for i in reversed(ids):
-        await session.response_queue.put({"jsonrpc": "2.0", "id": i, "result": {"for": i}})
+        await session.response_queue.put(
+            {"jsonrpc": "2.0", "id": i, "result": {"for": i}}
+        )
 
     responses = await asyncio.gather(*(tasks[i] for i in ids))
 
@@ -237,7 +273,9 @@ async def test_many_concurrent_callers_all_get_correct_responses(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_duplicate_id_caller_not_dropped_when_sibling_with_same_id_exits(monkeypatch):
+async def test_duplicate_id_caller_not_dropped_when_sibling_with_same_id_exits(
+    monkeypatch,
+):
     """Regression test for #215: `pending_response_ids` must be a refcount,
     not a plain set. If two concurrent callers on one session register the
     SAME id (a JSON-RPC id-uniqueness violation by the client, or
@@ -277,7 +315,12 @@ async def test_duplicate_id_caller_not_dropped_when_sibling_with_same_id_exits(m
         return asyncio.create_task(
             gateway_stream_bridge.send_via_stream_bridge(
                 request,
-                {"jsonrpc": "2.0", "id": call_id, "method": "tools/call", "params": {"name": tag}},
+                {
+                    "jsonrpc": "2.0",
+                    "id": call_id,
+                    "method": "tools/call",
+                    "params": {"name": tag},
+                },
             )
         )
 
@@ -308,7 +351,9 @@ async def test_duplicate_id_caller_not_dropped_when_sibling_with_same_id_exits(m
         pytest.fail("caller_c never registered")
 
     # First id=5 answer -> consumed by the oldest waiter, caller_a.
-    await session.response_queue.put({"jsonrpc": "2.0", "id": 5, "result": {"for": "a"}})
+    await session.response_queue.put(
+        {"jsonrpc": "2.0", "id": 5, "result": {"for": "a"}}
+    )
     done, _pending = await asyncio.wait({task_a}, timeout=5.0)
     assert task_a in done, "caller_a never completed"
     response_a = task_a.result()
@@ -324,7 +369,9 @@ async def test_duplicate_id_caller_not_dropped_when_sibling_with_same_id_exits(m
 
     # Second id=5 answer -> the next oldest waiter is caller_c (a
     # bystander expecting id=9). It must requeue this, not drop it.
-    await session.response_queue.put({"jsonrpc": "2.0", "id": 5, "result": {"for": "b"}})
+    await session.response_queue.put(
+        {"jsonrpc": "2.0", "id": 5, "result": {"for": "b"}}
+    )
     done, _pending = await asyncio.wait({task_b}, timeout=5.0)
     assert task_b in done, (
         "caller_b never completed — its response was likely dropped as "
@@ -338,7 +385,9 @@ async def test_duplicate_id_caller_not_dropped_when_sibling_with_same_id_exits(m
     assert json.loads(response_b.body).get("result") == {"for": "b"}
 
     # Finally, caller_c's own answer.
-    await session.response_queue.put({"jsonrpc": "2.0", "id": 9, "result": {"for": "c"}})
+    await session.response_queue.put(
+        {"jsonrpc": "2.0", "id": 9, "result": {"for": "c"}}
+    )
     response_c = await asyncio.wait_for(task_c, timeout=5.0)
     assert response_c.status_code == 200
     assert json.loads(response_c.body).get("result") == {"for": "c"}

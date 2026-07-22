@@ -11,12 +11,11 @@ Run with:
 To skip slow (COLD server) tests:
     pytest -m "not slow"
 """
+
 import os
 import pytest
 import httpx
 import json
-import time
-from typing import Any, Optional
 
 from tests.e2e.conftest import skip_or_fail
 
@@ -35,15 +34,19 @@ def call_tool(client: httpx.Client, tool_name: str, arguments: dict) -> dict:
     """Helper to call a tool via the process API."""
     try:
         response = client.post(
-            "/process/tools/call",
-            json={"name": tool_name, "arguments": arguments}
+            "/process/tools/call", json={"name": tool_name, "arguments": arguments}
         )
-        return {"status_code": response.status_code, "data": response.json() if response.status_code == 200 else None}
+        return {
+            "status_code": response.status_code,
+            "data": response.json() if response.status_code == 200 else None,
+        }
     except httpx.TimeoutException:
         return {"status_code": 408, "data": None, "timeout": True}
 
 
-def call_tool_dynamic(client: httpx.Client, server: str, tool: str, arguments: dict) -> dict:
+def call_tool_dynamic(
+    client: httpx.Client, server: str, tool: str, arguments: dict
+) -> dict:
     """Helper to call a tool via Dynamic MCP airis-exec."""
     response = client.post(
         "/process/tools/call",
@@ -51,11 +54,14 @@ def call_tool_dynamic(client: httpx.Client, server: str, tool: str, arguments: d
             "name": "mcp-exec",
             "arguments": {
                 "tool": f"{server}:{tool}",
-                "arguments": json.dumps(arguments)
-            }
-        }
+                "arguments": json.dumps(arguments),
+            },
+        },
     )
-    return {"status_code": response.status_code, "data": response.json() if response.status_code == 200 else None}
+    return {
+        "status_code": response.status_code,
+        "data": response.json() if response.status_code == 200 else None,
+    }
 
 
 class TestGatewayControlServer:
@@ -89,7 +95,10 @@ class TestGatewayControlServer:
 
         data = result["data"]
         # May return result or timeout error
-        if "error" in data and "timeout" in str(data.get("error", {}).get("message", "")).lower():
+        if (
+            "error" in data
+            and "timeout" in str(data.get("error", {}).get("message", "")).lower()
+        ):
             skip_or_fail("Timeout waiting for COLD servers - expected in CI")
 
         assert "result" in data
@@ -98,9 +107,11 @@ class TestGatewayControlServer:
 
     def test_gateway_get_server_status(self, api_client):
         """gateway_get_server_status should return server details."""
-        result = call_tool(api_client, "gateway_get_server_status", {
-            "server_name": "airis-mcp-gateway-control"
-        })
+        result = call_tool(
+            api_client,
+            "gateway_get_server_status",
+            {"server_name": "airis-mcp-gateway-control"},
+        )
         if result.get("timeout"):
             skip_or_fail("Request timed out")
         assert result["status_code"] == 200
@@ -123,7 +134,10 @@ class TestAirisCommandsServer:
         assert result["status_code"] == 200
 
         data = result["data"]
-        if "error" in data and "timeout" in str(data.get("error", {}).get("message", "")).lower():
+        if (
+            "error" in data
+            and "timeout" in str(data.get("error", {}).get("message", "")).lower()
+        ):
             skip_or_fail("Timeout - expected in CI")
 
         assert "result" in data
@@ -140,7 +154,10 @@ class TestAirisCommandsServer:
         assert result["status_code"] == 200
 
         data = result["data"]
-        if "error" in data and "timeout" in str(data.get("error", {}).get("message", "")).lower():
+        if (
+            "error" in data
+            and "timeout" in str(data.get("error", {}).get("message", "")).lower()
+        ):
             skip_or_fail("Timeout - expected in CI")
 
         assert "result" in data
@@ -153,21 +170,25 @@ class TestMemoryServer:
     def test_memory_create_and_search(self, api_client):
         """Test creating and searching entities in memory."""
         # Create a test entity
-        create_result = call_tool(api_client, "create_entities", {
-            "entities": [
-                {
-                    "name": "E2E_TEST_ENTITY",
-                    "entityType": "test",
-                    "observations": ["This is an E2E test entity"]
-                }
-            ]
-        })
+        create_result = call_tool(
+            api_client,
+            "create_entities",
+            {
+                "entities": [
+                    {
+                        "name": "E2E_TEST_ENTITY",
+                        "entityType": "test",
+                        "observations": ["This is an E2E test entity"],
+                    }
+                ]
+            },
+        )
         assert create_result["status_code"] == 200
 
         # Search for the entity
-        search_result = call_tool(api_client, "search_nodes", {
-            "query": "E2E_TEST_ENTITY"
-        })
+        search_result = call_tool(
+            api_client, "search_nodes", {"query": "E2E_TEST_ENTITY"}
+        )
         assert search_result["status_code"] == 200
 
     def test_memory_read_graph(self, api_client):
@@ -182,9 +203,7 @@ class TestFetchServer:
 
     def test_fetch_url(self, api_client):
         """Test fetching a URL."""
-        result = call_tool(api_client, "fetch", {
-            "url": "https://httpbin.org/get"
-        })
+        result = call_tool(api_client, "fetch", {"url": "https://httpbin.org/get"})
         assert result["status_code"] == 200
 
         data = result["data"]
@@ -197,12 +216,16 @@ class TestSequentialThinkingServer:
 
     def test_sequential_thinking(self, api_client):
         """Test sequential thinking tool."""
-        result = call_tool(api_client, "sequentialthinking", {
-            "thought": "E2E test thought - analyzing system status",
-            "thoughtNumber": 1,
-            "totalThoughts": 1,
-            "nextThoughtNeeded": False
-        })
+        result = call_tool(
+            api_client,
+            "sequentialthinking",
+            {
+                "thought": "E2E test thought - analyzing system status",
+                "thoughtNumber": 1,
+                "totalThoughts": 1,
+                "nextThoughtNeeded": False,
+            },
+        )
         assert result["status_code"] == 200
 
 
@@ -240,21 +263,21 @@ class TestServerLifecycle:
         test_server = disabled_servers[0]["name"]
 
         # Enable the server
-        enable_result = call_tool(api_client, "gateway_enable_server", {
-            "server_name": test_server
-        })
+        enable_result = call_tool(
+            api_client, "gateway_enable_server", {"server_name": test_server}
+        )
         assert enable_result["status_code"] == 200
 
         # Verify it's enabled
         verify_response = api_client.get(f"/process/servers/{test_server}")
         if verify_response.status_code == 200:
             verify_data = verify_response.json()
-            assert verify_data.get("enabled") == True
+            assert verify_data.get("enabled") is True
 
         # Disable the server again
-        disable_result = call_tool(api_client, "gateway_disable_server", {
-            "server_name": test_server
-        })
+        disable_result = call_tool(
+            api_client, "gateway_disable_server", {"server_name": test_server}
+        )
         assert disable_result["status_code"] == 200
 
 
@@ -281,7 +304,6 @@ class TestToolDiscovery:
         assert response.status_code == 200
 
         data = response.json()
-        servers = data.get("servers", [])
         roster = data.get("roster", {})
 
         hot_count = roster.get("summary", {}).get("hot_count", 0)
@@ -313,9 +335,11 @@ class TestErrorHandling:
 
     def test_call_tool_with_invalid_args(self, api_client):
         """Calling tool with invalid arguments should handle gracefully."""
-        result = call_tool(api_client, "gateway_get_server_status", {
-            "server_name": "nonexistent_server_xyz"
-        })
+        result = call_tool(
+            api_client,
+            "gateway_get_server_status",
+            {"server_name": "nonexistent_server_xyz"},
+        )
         # Should return 200 with error message, or error status
         assert result["status_code"] in [200, 404, 500]
 

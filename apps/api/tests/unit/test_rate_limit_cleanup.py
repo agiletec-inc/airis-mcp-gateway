@@ -1,4 +1,5 @@
 """Tests for rate limit store cleanup and log key redaction (issue #102)."""
+
 from __future__ import annotations
 
 import time

@@ -1,4 +1,5 @@
 """API Key validation utilities"""
+
 import re
 from typing import Optional
 
@@ -56,7 +57,10 @@ class APIKeyValidator:
         if key_name in cls.PATTERNS:
             pattern = cls.PATTERNS[key_name]
             if not re.match(pattern, value):
-                return False, f"Invalid format for {key_name}. Please check the API key."
+                return (
+                    False,
+                    f"Invalid format for {key_name}. Please check the API key.",
+                )
             return True, None
 
         # Generic validation for unknown keys

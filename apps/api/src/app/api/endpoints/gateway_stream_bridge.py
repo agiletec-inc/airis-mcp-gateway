@@ -21,6 +21,7 @@ This module owns the glue that makes both worlds work together:
 Everything else — the SSE proxy, the handlers, the routes — imports
 from here instead of re-implementing httpx session plumbing.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -148,10 +149,18 @@ def get_response_message_id(payload: Any) -> Any:
 
 async def _transform_gateway_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Apply the same shaping the SSE proxy does to Gateway-sourced JSON."""
-    if isinstance(payload, dict) and "result" in payload and "tools" in payload.get("result", {}):
+    if (
+        isinstance(payload, dict)
+        and "result" in payload
+        and "tools" in payload.get("result", {})
+    ):
         payload = await apply_schema_partitioning(payload)
 
-    if isinstance(payload, dict) and "result" in payload and "prompts" in payload.get("result", {}):
+    if (
+        isinstance(payload, dict)
+        and "result" in payload
+        and "prompts" in payload.get("result", {})
+    ):
         payload = await apply_prompts_merging(payload)
 
     is_initialize_response = (
@@ -340,9 +349,7 @@ async def send_via_stream_bridge(
     if session_age < STREAM_BRIDGE_READY_DELAY:
         await asyncio.sleep(STREAM_BRIDGE_READY_DELAY - session_age)
 
-    target_url = (
-        f"{settings.MCP_GATEWAY_URL.rstrip('/')}/sse?sessionid={session.backend_session_id}"
-    )
+    target_url = f"{settings.MCP_GATEWAY_URL.rstrip('/')}/sse?sessionid={session.backend_session_id}"
     expected_id = get_response_message_id(rpc_request)
     # Register this call as a live waiter for expected_id BEFORE dispatching
     # the POST — not after it returns — so that by the time any response
@@ -427,7 +434,8 @@ async def send_via_stream_bridge(
                 )
             if (
                 isinstance(payload, dict)
-                and payload.get("error", {}).get("message") == "Gateway SSE bridge disconnected"
+                and payload.get("error", {}).get("message")
+                == "Gateway SSE bridge disconnected"
             ):
                 await close_stream_bridge_session(session.public_session_id)
                 return Response(
@@ -458,15 +466,15 @@ async def send_via_stream_bridge(
 
             if expected_id is None or get_response_message_id(payload) == expected_id:
                 if pending_notifications:
-                    body_parts = [
-                        format_sse_event(n) for n in pending_notifications
-                    ]
+                    body_parts = [format_sse_event(n) for n in pending_notifications]
                     body_parts.append(format_sse_event(payload))
                     return Response(
                         content=b"".join(body_parts),
                         status_code=200,
                         media_type="text/event-stream",
-                        headers={stream_session_header_name(): session.public_session_id},
+                        headers={
+                            stream_session_header_name(): session.public_session_id
+                        },
                     )
                 return Response(
                     content=json.dumps(payload),

@@ -1,4 +1,5 @@
 """Tests for MCP Streamable HTTP transport GET/HEAD rate-limit exemption."""
+
 from __future__ import annotations
 
 from starlette.applications import Starlette

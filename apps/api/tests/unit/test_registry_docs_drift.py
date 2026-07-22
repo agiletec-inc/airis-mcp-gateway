@@ -10,6 +10,7 @@ that the server is disabled).
 Scope note: `config/gateway-config.yaml` was removed in issue #196 (dead
 config, nothing in `apps/api/src` ever read it); no longer relevant here.
 """
+
 from __future__ import annotations
 
 import json
@@ -26,7 +27,9 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 # used in routing-guide prose — a plain trailing `\b` never matches after
 # `*` (both neighbours are non-word chars), so a negative lookahead is used
 # instead to bound the match for both the alnum and wildcard tool forms.
-TOOL_REF_PATTERN = re.compile(r"\b([a-z][a-z0-9-]+):(\*|[a-z][a-z0-9_-]+)(?![a-z0-9_-])")
+TOOL_REF_PATTERN = re.compile(
+    r"\b([a-z][a-z0-9-]+):(\*|[a-z][a-z0-9_-]+)(?![a-z0-9_-])"
+)
 
 # `[server]` routing-tag syntax used in workflows/*.yaml mcp_instructions bullets.
 BRACKET_REF_PATTERN = re.compile(r"\[([a-z][a-z0-9-]+)\]")
@@ -61,7 +64,9 @@ SCAN_FILES = [
     # gateway-vs-plugins.md silently advertising a FORBIDDEN_SERVERS entry
     # because it was outside this list's scope.
     *sorted(str(p.relative_to(REPO_ROOT)) for p in (REPO_ROOT / "docs").glob("*.md")),
-    *sorted(str(p.relative_to(REPO_ROOT)) for p in (REPO_ROOT / "workflows").glob("*.yaml")),
+    *sorted(
+        str(p.relative_to(REPO_ROOT)) for p in (REPO_ROOT / "workflows").glob("*.yaml")
+    ),
 ]
 
 
@@ -78,7 +83,9 @@ def _load_registry() -> tuple[set[str], set[str], set[str]]:
     servers = data["mcpServers"]
     all_servers = set(servers.keys())
     enabled_servers = {name for name, cfg in servers.items() if cfg.get("enabled")}
-    policy_disabled_servers = {name for name, cfg in servers.items() if cfg.get("policy_disabled")}
+    policy_disabled_servers = {
+        name for name, cfg in servers.items() if cfg.get("policy_disabled")
+    }
     return all_servers, enabled_servers, policy_disabled_servers
 
 
@@ -145,7 +152,9 @@ def _scan_text_for_routing_violations(relpath: str, text: str) -> list[str]:
         # `server:tool` or `[server]` syntax — e.g. a markdown table row
         # "| **cloudflare** | ... |" or prose "DNS/workers → cloudflare".
         for server in FORBIDDEN_SERVERS:
-            if re.search(rf"\b{re.escape(server)}\b", line, re.IGNORECASE) and not _line_is_disqualified(line):
+            if re.search(
+                rf"\b{re.escape(server)}\b", line, re.IGNORECASE
+            ) and not _line_is_disqualified(line):
                 violations.append(
                     f"{relpath}:{lineno}: mentions '{server}', which this "
                     f"project has decided not to support — {line.strip()!r}"
@@ -178,7 +187,9 @@ def test_toolsets_json_keys_reference_real_registry_servers():
     data = json.loads((REPO_ROOT / "config" / "toolsets.json").read_text())
     keys = set(data.keys())
     phantom = (keys - ALL_SERVERS) | (keys & FORBIDDEN_SERVERS)
-    assert not phantom, f"toolsets.json references servers not in the registry: {phantom}"
+    assert not phantom, (
+        f"toolsets.json references servers not in the registry: {phantom}"
+    )
 
 
 def test_airis_catalog_yaml_registry_keys_reference_real_registry_servers():
@@ -188,7 +199,9 @@ def test_airis_catalog_yaml_registry_keys_reference_real_registry_servers():
     data = yaml.safe_load((REPO_ROOT / "catalogs" / "airis-catalog.yaml").read_text())
     registry_keys = set(data.get("registry", {}).keys())
     phantom = (registry_keys - ALL_SERVERS) | (registry_keys & FORBIDDEN_SERVERS)
-    assert not phantom, f"airis-catalog.yaml references servers not in the registry: {phantom}"
+    assert not phantom, (
+        f"airis-catalog.yaml references servers not in the registry: {phantom}"
+    )
 
 
 def test_airis_catalog_yaml_disabled_servers_are_annotated():
