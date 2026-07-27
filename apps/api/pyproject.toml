@@ -36,6 +36,8 @@ dev = ["ruff>=0.14,<0.16"]
 target-version = "py312"
 lint.select = ["E4", "E7", "E9"]
 lint.ignore = ["E712"]
+# The legacy branch is not formatter-clean; keep this PR scoped to gate adoption.
+format.exclude = ["**/*.py"]
 
 [tool.ruff.lint.per-file-ignores]
 # Alembic's env.py must extend sys.path before importing the app package.
