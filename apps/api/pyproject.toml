@@ -23,7 +23,6 @@ test = [
     "sqlalchemy>=2.0.49,<3.0.0",
     "aiosqlite>=0.22.1,<1.0.0",
     "greenlet>=3.5.0,<4.0.0",
-    "ruff>=0.12.0,<1.0.0",
 ]
 
 [build-system]
