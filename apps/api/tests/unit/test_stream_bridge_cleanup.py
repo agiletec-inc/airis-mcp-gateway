@@ -1,4 +1,5 @@
 """Tests for stream bridge session cleanup (issue #111)."""
+
 from __future__ import annotations
 
 import time as _time
@@ -15,7 +16,9 @@ class _FakeBridge:
     plus an async close() that records the call.
     """
 
-    def __init__(self, public_session_id: str, last_activity: float, closed: bool = False):
+    def __init__(
+        self, public_session_id: str, last_activity: float, closed: bool = False
+    ):
         self.public_session_id = public_session_id
         self.last_activity = last_activity
         self.closed = closed

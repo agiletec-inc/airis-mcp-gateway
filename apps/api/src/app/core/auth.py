@@ -9,6 +9,7 @@ raw JSON-RPC) so they:
 - fail closed in any non-development environment that is missing a key,
   instead of silently serving admin endpoints unauthenticated.
 """
+
 from __future__ import annotations
 
 import secrets

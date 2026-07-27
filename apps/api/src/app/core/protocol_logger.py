@@ -8,7 +8,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 import json
-import asyncio
 import os
 import tempfile
 
@@ -28,9 +27,7 @@ class ProtocolLogger:
         Args:
             log_dir: Directory for log files
         """
-        requested_dir = Path(
-            os.environ.get("PROTOCOL_LOG_DIR", str(log_dir))
-        )
+        requested_dir = Path(os.environ.get("PROTOCOL_LOG_DIR", str(log_dir)))
         self.log_dir = self._ensure_log_dir(requested_dir)
         self.log_file = self.log_dir / "protocol_messages.jsonl"
 
@@ -38,7 +35,7 @@ class ProtocolLogger:
         self,
         direction: str,
         message: Dict[str, Any],
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Log MCP protocol message
@@ -66,9 +63,7 @@ class ProtocolLogger:
             f.write(json.dumps(log_entry) + "\n")
 
     async def log_initialize(
-        self,
-        request: Dict[str, Any],
-        response: Dict[str, Any]
+        self, request: Dict[str, Any], response: Dict[str, Any]
     ) -> None:
         """
         Log initialize request/response pair
@@ -84,7 +79,7 @@ class ProtocolLogger:
         self,
         request: Dict[str, Any],
         response: Dict[str, Any],
-        pattern: str = "unknown"
+        pattern: str = "unknown",
     ) -> None:
         """
         Log tools/list request/response pair
@@ -94,10 +89,7 @@ class ProtocolLogger:
             response: tools/list response
             pattern: "baseline" | "openmcp" | "multi-hop"
         """
-        metadata = {
-            "phase": "tools_list",
-            "pattern": pattern
-        }
+        metadata = {"phase": "tools_list", "pattern": pattern}
 
         await self.log_message("client→server", request, metadata)
         await self.log_message("server→client", response, metadata)
@@ -107,7 +99,7 @@ class ProtocolLogger:
         request: Dict[str, Any],
         response: Dict[str, Any],
         tool_name: str,
-        call_number: int = 1
+        call_number: int = 1,
     ) -> None:
         """
         Log tools/call request/response pair
@@ -121,7 +113,7 @@ class ProtocolLogger:
         metadata = {
             "phase": "tools_call",
             "tool_name": tool_name,
-            "call_number": call_number
+            "call_number": call_number,
         }
 
         await self.log_message("client→server", request, metadata)

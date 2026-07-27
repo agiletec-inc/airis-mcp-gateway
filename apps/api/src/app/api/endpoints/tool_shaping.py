@@ -24,6 +24,7 @@ layer only need to call one function each to get a fully shaped payload
 — they never have to reach into the schema partitioner, the dynamic
 MCP registry, or the process manager on their own.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -121,10 +122,17 @@ def extract_server_name_from_tool(tool_name: str) -> Optional[str]:
 
     # Built-in servers (auto-enabled via --servers at Gateway startup)
     builtin_tools = {
-        "get_time", "get_current_time",
-        "fetch", "fetch_url",
-        "git_status", "git_diff", "git_commit", "git_push",
-        "read_memory", "write_memory", "delete_memory",
+        "get_time",
+        "get_current_time",
+        "fetch",
+        "fetch_url",
+        "git_status",
+        "git_diff",
+        "git_commit",
+        "git_push",
+        "read_memory",
+        "write_memory",
+        "delete_memory",
     }
     if tool_name in builtin_tools:
         return None
@@ -133,26 +141,49 @@ def extract_server_name_from_tool(tool_name: str) -> Optional[str]:
     if len(parts) >= 2:
         prefix = parts[0]
         known_servers = {
-            "mindbase", "github", "tavily", "stripe", "twilio",
-            "supabase", "notion", "slack", "figma", "cloudflare",
-            "docker", "postgres", "mongodb", "sqlite",
+            "mindbase",
+            "github",
+            "tavily",
+            "stripe",
+            "twilio",
+            "supabase",
+            "notion",
+            "slack",
+            "figma",
+            "cloudflare",
+            "docker",
+            "postgres",
+            "mongodb",
+            "sqlite",
         }
         if prefix in known_servers:
             return prefix
 
     filesystem_tools = {
-        "read_file", "write_file", "create_file", "delete_file",
-        "list_dir", "list_directory", "search_files",
-        "read_text_file", "read_media_file", "read_multiple_files",
+        "read_file",
+        "write_file",
+        "create_file",
+        "delete_file",
+        "list_dir",
+        "list_directory",
+        "search_files",
+        "read_text_file",
+        "read_media_file",
+        "read_multiple_files",
         "edit_file",
     }
     if tool_name in filesystem_tools:
         return "filesystem"
 
     serena_tools = {
-        "find_symbol", "find_referencing_symbols", "get_symbols_overview",
-        "insert_after_symbol", "replace_symbol", "delete_symbol",
-        "activate_project", "switch_modes",
+        "find_symbol",
+        "find_referencing_symbols",
+        "get_symbols_overview",
+        "insert_after_symbol",
+        "replace_symbol",
+        "delete_symbol",
+        "activate_project",
+        "switch_modes",
     }
     if tool_name in serena_tools:
         return "serena"
@@ -167,7 +198,9 @@ def extract_server_name_from_tool(tool_name: str) -> Optional[str]:
         return "sequential-thinking"
 
     if tool_name in [
-        "list_mcp_servers", "enable_mcp_server", "disable_mcp_server",
+        "list_mcp_servers",
+        "enable_mcp_server",
+        "disable_mcp_server",
         "get_mcp_server_status",
     ]:
         return "airis-mcp-gateway-control"
@@ -316,7 +349,8 @@ async def apply_schema_partitioning(data: Dict[str, Any]) -> Dict[str, Any]:
         hot_tools_list: list[dict] = []
         try:
             hot_servers = [
-                s for s in process_manager.get_hot_servers()
+                s
+                for s in process_manager.get_hot_servers()
                 if s not in excluded_servers
             ]
 
@@ -351,8 +385,7 @@ async def apply_schema_partitioning(data: Dict[str, Any]) -> Dict[str, Any]:
         # each dict first so we do not mutate ProcessRunner's cached tools.
         if settings.SCHEMA_MODE == "lazy":
             hot_tools_list = [
-                {**t, "inputSchema": {"type": "object"}}
-                for t in hot_tools_list
+                {**t, "inputSchema": {"type": "object"}} for t in hot_tools_list
             ]
 
         tools.extend(hot_tools_list)
@@ -365,7 +398,8 @@ async def apply_schema_partitioning(data: Dict[str, Any]) -> Dict[str, Any]:
         if settings.COLD_TOOLS_IN_LIST:
             existing_names = {t.get("name") for t in tools}
             cold_tools_list = [
-                t for t in collect_cold_discoverable_tools(process_manager)
+                t
+                for t in collect_cold_discoverable_tools(process_manager)
                 if t["name"] not in existing_names
             ]
             tools.extend(cold_tools_list)

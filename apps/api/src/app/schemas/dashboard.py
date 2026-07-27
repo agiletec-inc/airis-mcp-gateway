@@ -1,10 +1,12 @@
 """Schemas for dashboard summary and server status."""
+
 from pydantic import BaseModel
 from typing import Literal
 
 
 class ToolSummary(BaseModel):
     """Basic information about MCP tools exposed by a server."""
+
     id: str
     name: str | None = None
     description: str | None = None
@@ -12,12 +14,13 @@ class ToolSummary(BaseModel):
 
 class ServerSummary(BaseModel):
     """Aggregated view of a single MCP server."""
+
     id: str
     name: str
     description: str
     category: str
     enabled: bool
-    status: Literal['connected', 'disconnected', 'error']
+    status: Literal["connected", "disconnected", "error"]
     api_key_required: bool
     api_key_configured: bool
     recommended: bool
@@ -28,6 +31,7 @@ class ServerSummary(BaseModel):
 
 class DashboardStats(BaseModel):
     """Top-level counts for quick glancing in UI / menu bar."""
+
     total: int
     active: int
     inactive: int
@@ -36,5 +40,6 @@ class DashboardStats(BaseModel):
 
 class DashboardSummaryResponse(BaseModel):
     """Full response for dashboard summary endpoint."""
+
     stats: DashboardStats
     servers: list[ServerSummary]

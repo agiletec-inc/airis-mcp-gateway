@@ -14,6 +14,7 @@ future FastAPI/Starlette change (or a refactor of our own routers) drops a
 route that a live transport depends on, instead of passing on structure that
 no longer reflects what actually gets served.
 """
+
 from app.main import app
 
 
@@ -61,7 +62,8 @@ def test_mcp_root_routes_dispatch_get_post_delete():
     effective_routes = list(iter_effective_routes(app))
 
     mcp_paths_seen = {
-        full_path for full_path, _methods, _route in effective_routes
+        full_path
+        for full_path, _methods, _route in effective_routes
         if full_path in {"/mcp", "/mcp/"}
     }
     assert mcp_paths_seen, "Expected /mcp or /mcp/ to be registered on the FastAPI app"

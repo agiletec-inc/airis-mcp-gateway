@@ -15,6 +15,7 @@ logger = get_logger(__name__)
 @dataclass
 class ToolsetInfo:
     """Logical capability slice exposed to the model."""
+
     ref: str
     server: str
     name: str

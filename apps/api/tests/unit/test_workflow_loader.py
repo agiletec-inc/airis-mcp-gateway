@@ -8,7 +8,6 @@ Tests cover:
 - Missing/empty workflows directory handling
 """
 
-import pytest
 from pathlib import Path
 
 from app.core.workflow_loader import (
@@ -66,12 +65,14 @@ class TestValidate:
 
     def test_multiple_errors_reported(self):
         """Multiple validation errors are all reported."""
-        errors = _validate(self._make_valid(
-            name="",
-            priority="invalid",
-            compile_to="",
-            text="",
-        ))
+        errors = _validate(
+            self._make_valid(
+                name="",
+                priority="invalid",
+                compile_to="",
+                text="",
+            )
+        )
         assert len(errors) >= 3
 
 
@@ -195,10 +196,7 @@ class TestLoadWorkflows:
     def test_compile_to_filter(self, tmp_path):
         """Workflows with any compile_to value are loaded (filtering is in compiler)."""
         (tmp_path / "wf.yaml").write_text(
-            "name: wf\n"
-            "compile_to: mcp_instructions\n"
-            "priority: high\n"
-            "text: test text\n"
+            "name: wf\ncompile_to: mcp_instructions\npriority: high\ntext: test text\n"
         )
 
         workflows = load_workflows(tmp_path)
@@ -223,10 +221,7 @@ class TestLoadWorkflows:
     def test_topic_defaults_to_empty(self, tmp_path):
         """A workflow without a topic field defaults topic to empty string."""
         (tmp_path / "wf.yaml").write_text(
-            "name: no-topic\n"
-            "compile_to: mcp_instructions\n"
-            "priority: high\n"
-            "text: body\n"
+            "name: no-topic\ncompile_to: mcp_instructions\npriority: high\ntext: body\n"
         )
 
         workflows = load_workflows(tmp_path)

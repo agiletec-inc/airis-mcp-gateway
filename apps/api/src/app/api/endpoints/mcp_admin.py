@@ -1,4 +1,5 @@
 """Administrative endpoints for MCP credential and toggle management."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status

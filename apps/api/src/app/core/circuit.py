@@ -38,7 +38,7 @@ class Circuit:
     def record_failure(self) -> None:
         self._failures += 1
         backoff = min(self._base * (2 ** (self._failures - 1)), self._max)
-        jitter = random.randint(0, int(backoff * 0.2))
+        jitter = random.randint(0, int(backoff * 0.2))  # nosec B311: jitter is not security-sensitive
         self._state = "OPEN"
         self._retry_at_ms = time.time() * 1000 + backoff + jitter
 

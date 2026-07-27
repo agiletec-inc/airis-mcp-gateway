@@ -7,6 +7,7 @@ fallback). Only `policy_disabled` servers (never authorized to run, e.g.
 supabase, mindbase) are excluded — plain `enabled: false` COLD/lazy servers
 (e.g. stripe) remain discoverable.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -6,6 +6,7 @@ config module between test files. Holding references imported at the top
 of this module would leave them pointing at a stale InvalidEnvVar class
 that the live module no longer raises.
 """
+
 from __future__ import annotations
 
 import pytest

@@ -1,4 +1,5 @@
 """Tests for production fail-closed behavior in EncryptionManager (issues #93, #113)."""
+
 from __future__ import annotations
 
 import os

@@ -14,6 +14,7 @@ available in the api container), so we:
 2. Assert `zod` is imported in src/index.ts for either app.
 3. Assert `parseArgs(` (or an equivalent zod `.safeParse`/`.parse`) is used.
 """
+
 from __future__ import annotations
 
 import re
@@ -89,8 +90,7 @@ def test_ts_app_actually_validates_arguments(ts_file: Path):
     """
     content = ts_file.read_text(encoding="utf-8")
     has_validation = any(
-        marker in content
-        for marker in ("parseArgs(", ".safeParse(", ".parse(")
+        marker in content for marker in ("parseArgs(", ".safeParse(", ".parse(")
     )
     assert has_validation, (
         f"{ts_file.relative_to(REPO_ROOT)} imports zod but never calls "

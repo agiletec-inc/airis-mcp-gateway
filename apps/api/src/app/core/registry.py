@@ -31,9 +31,7 @@ class MCPRegistry:
             circuit.half_open()
         logger.info("credentials hot-reloaded for connector %s", connector_id)
 
-    async def _get(
-        self, connector_id: str
-    ) -> Tuple[Any, Circuit]:
+    async def _get(self, connector_id: str) -> Tuple[Any, Circuit]:
         if connector_id not in self._clients:
             self._clients[connector_id] = build_connector(connector_id, self._creds)
             self._circuits[connector_id] = Circuit()

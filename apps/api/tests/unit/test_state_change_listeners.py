@@ -14,6 +14,7 @@ connected clients. These tests pin:
 - listener exceptions are swallowed so one bad listener cannot break
   the manager
 """
+
 from __future__ import annotations
 
 import pytest

@@ -53,6 +53,7 @@ _TOOL_ROUTING_GUIDE = (
     "host-dependent → plugin/skill/CLI | simple file ops → native tools."
 )
 
+
 def compile_instructions(server_configs: dict[str, McpServerConfig]) -> str:
     """Compile workflows and behavior specs into instructions string.
 
@@ -69,7 +70,11 @@ def compile_instructions(server_configs: dict[str, McpServerConfig]) -> str:
 
     # Use workflow texts if available, otherwise fall back to hardcoded constant
     workflow_text = _compile_workflow_texts(workflows)
-    sections = [_BASE_INSTRUCTIONS, _META_TOOLS_SECTION, workflow_text or _TOOL_ROUTING_GUIDE]
+    sections = [
+        _BASE_INSTRUCTIONS,
+        _META_TOOLS_SECTION,
+        workflow_text or _TOOL_ROUTING_GUIDE,
+    ]
 
     # Servers covered by workflows are excluded from behavior lines
     workflow_servers = set()
@@ -119,7 +124,6 @@ def _compile_behavior_lines(
         List of "WHEN <trigger> -> <instruction> [server]" lines,
         sorted by priority (high > medium > low).
     """
-    from .mcp_config_loader import ServerMode
 
     if exclude is None:
         exclude = set()

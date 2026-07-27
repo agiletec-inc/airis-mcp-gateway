@@ -1,4 +1,5 @@
 """Tests for ENV=production fail-closed validation (issue #97)."""
+
 from __future__ import annotations
 
 import importlib
@@ -19,6 +20,7 @@ def clean_env(monkeypatch):
     # in LIFO order *after* fixture teardown runs, so explicitly scrub the
     # relevant variables before reloading.
     import os as _os
+
     for key in ("AIRIS_API_KEY", "ALLOWED_ORIGINS", "ENV"):
         _os.environ.pop(key, None)
     importlib.reload(config_module)

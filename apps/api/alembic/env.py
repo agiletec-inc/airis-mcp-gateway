@@ -14,7 +14,6 @@ sys.path.insert(0, str(SRC_DIR))
 
 from app.core.database import Base
 from app.core.config import settings
-from app.models import MCPServer  # Import all models
 
 # this is the Alembic Config object
 config = context.config

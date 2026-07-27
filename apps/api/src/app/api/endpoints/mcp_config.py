@@ -1,4 +1,5 @@
 """API endpoints for MCP configuration"""
+
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from pathlib import Path
@@ -10,6 +11,7 @@ router = APIRouter(tags=["mcp-config"])
 
 class MCPServerInfo(BaseModel):
     """MCP Server information from config"""
+
     id: str
     name: str
     description: str
@@ -25,6 +27,7 @@ class MCPServerInfo(BaseModel):
 
 class MCPConfigResponse(BaseModel):
     """Response schema for MCP configuration"""
+
     servers: list[MCPServerInfo]
     total: int
 
@@ -38,7 +41,7 @@ SERVER_METADATA = {
         "category": "builtin",
         "apiKeyRequired": False,
         "recommended": True,
-        "builtin": True
+        "builtin": True,
     },
     "fetch": {
         "name": "Fetch",
@@ -46,7 +49,7 @@ SERVER_METADATA = {
         "category": "builtin",
         "apiKeyRequired": False,
         "recommended": True,
-        "builtin": True
+        "builtin": True,
     },
     "git": {
         "name": "Git",
@@ -54,7 +57,7 @@ SERVER_METADATA = {
         "category": "builtin",
         "apiKeyRequired": False,
         "recommended": True,
-        "builtin": True
+        "builtin": True,
     },
     "memory": {
         "name": "Memory",
@@ -62,7 +65,7 @@ SERVER_METADATA = {
         "category": "builtin",
         "apiKeyRequired": False,
         "recommended": True,
-        "builtin": True
+        "builtin": True,
     },
     # Gateway servers (no auth)
     "filesystem": {
@@ -71,7 +74,7 @@ SERVER_METADATA = {
         "category": "gateway",
         "apiKeyRequired": False,
         "recommended": True,
-        "builtin": False
+        "builtin": False,
     },
     "context7": {
         "name": "Context7",
@@ -79,7 +82,7 @@ SERVER_METADATA = {
         "category": "gateway",
         "apiKeyRequired": False,
         "recommended": True,
-        "builtin": False
+        "builtin": False,
     },
     "sequential-thinking": {
         "name": "Sequential Thinking",
@@ -87,7 +90,7 @@ SERVER_METADATA = {
         "category": "gateway",
         "apiKeyRequired": False,
         "recommended": True,
-        "builtin": False
+        "builtin": False,
     },
     "serena": {
         "name": "Serena",
@@ -95,7 +98,7 @@ SERVER_METADATA = {
         "category": "gateway",
         "apiKeyRequired": False,
         "recommended": True,
-        "builtin": False
+        "builtin": False,
     },
     "mindbase": {
         "name": "Mindbase",
@@ -103,7 +106,7 @@ SERVER_METADATA = {
         "category": "gateway",
         "apiKeyRequired": False,
         "recommended": True,
-        "builtin": False
+        "builtin": False,
     },
     "airis-mcp-gateway-control": {
         "name": "Gateway Control",
@@ -111,7 +114,7 @@ SERVER_METADATA = {
         "category": "gateway",
         "apiKeyRequired": False,
         "recommended": True,
-        "builtin": False
+        "builtin": False,
     },
     "puppeteer": {
         "name": "Puppeteer",
@@ -119,7 +122,7 @@ SERVER_METADATA = {
         "category": "gateway",
         "apiKeyRequired": False,
         "recommended": False,
-        "builtin": False
+        "builtin": False,
     },
     "playwright": {
         "name": "Playwright",
@@ -127,7 +130,7 @@ SERVER_METADATA = {
         "category": "gateway",
         "apiKeyRequired": False,
         "recommended": True,
-        "builtin": False
+        "builtin": False,
     },
     "sqlite": {
         "name": "SQLite",
@@ -135,9 +138,8 @@ SERVER_METADATA = {
         "category": "gateway",
         "apiKeyRequired": False,
         "recommended": False,
-        "builtin": False
+        "builtin": False,
     },
-
     # Auth required servers
     "tavily": {
         "name": "Tavily",
@@ -145,7 +147,7 @@ SERVER_METADATA = {
         "category": "auth-required",
         "apiKeyRequired": True,
         "recommended": True,
-        "builtin": False
+        "builtin": False,
     },
     "magic": {
         "name": "Magic",
@@ -153,7 +155,7 @@ SERVER_METADATA = {
         "category": "auth-required",
         "apiKeyRequired": True,
         "recommended": True,
-        "builtin": False
+        "builtin": False,
     },
     "morphllm-fast-apply": {
         "name": "MorphLLM Fast Apply",
@@ -161,7 +163,7 @@ SERVER_METADATA = {
         "category": "auth-required",
         "apiKeyRequired": True,
         "recommended": False,
-        "builtin": False
+        "builtin": False,
     },
     "stripe": {
         "name": "Stripe",
@@ -169,7 +171,7 @@ SERVER_METADATA = {
         "category": "auth-required",
         "apiKeyRequired": True,
         "recommended": False,
-        "builtin": False
+        "builtin": False,
     },
     "figma": {
         "name": "Figma",
@@ -177,9 +179,8 @@ SERVER_METADATA = {
         "category": "auth-required",
         "apiKeyRequired": True,
         "recommended": False,
-        "builtin": False
+        "builtin": False,
     },
-
     # Disabled but available
     "supabase": {
         "name": "Supabase",
@@ -187,7 +188,7 @@ SERVER_METADATA = {
         "category": "disabled",
         "apiKeyRequired": True,
         "recommended": True,
-        "builtin": False
+        "builtin": False,
     },
     "supabase-selfhost": {
         "name": "Supabase Self-host",
@@ -195,7 +196,7 @@ SERVER_METADATA = {
         "category": "custom",
         "apiKeyRequired": True,
         "recommended": False,
-        "builtin": False
+        "builtin": False,
     },
     "slack": {
         "name": "Slack",
@@ -203,7 +204,7 @@ SERVER_METADATA = {
         "category": "disabled",
         "apiKeyRequired": True,
         "recommended": False,
-        "builtin": False
+        "builtin": False,
     },
     "github": {
         "name": "GitHub",
@@ -211,7 +212,7 @@ SERVER_METADATA = {
         "category": "disabled",
         "apiKeyRequired": True,
         "recommended": True,
-        "builtin": False
+        "builtin": False,
     },
     "notion": {
         "name": "Notion",
@@ -219,7 +220,7 @@ SERVER_METADATA = {
         "category": "disabled",
         "apiKeyRequired": True,
         "recommended": False,
-        "builtin": False
+        "builtin": False,
     },
     "brave-search": {
         "name": "Brave Search",
@@ -227,7 +228,7 @@ SERVER_METADATA = {
         "category": "disabled",
         "apiKeyRequired": True,
         "recommended": False,
-        "builtin": False
+        "builtin": False,
     },
     "chrome-devtools": {
         "name": "Chrome DevTools",
@@ -235,7 +236,7 @@ SERVER_METADATA = {
         "category": "gateway",
         "apiKeyRequired": False,
         "recommended": True,
-        "builtin": False
+        "builtin": False,
     },
     "sentry": {
         "name": "Sentry",
@@ -243,7 +244,7 @@ SERVER_METADATA = {
         "category": "disabled",
         "apiKeyRequired": True,
         "recommended": False,
-        "builtin": False
+        "builtin": False,
     },
     "twilio": {
         "name": "Twilio",
@@ -251,7 +252,7 @@ SERVER_METADATA = {
         "category": "disabled",
         "apiKeyRequired": True,
         "recommended": False,
-        "builtin": False
+        "builtin": False,
     },
     "mongodb": {
         "name": "MongoDB",
@@ -259,7 +260,7 @@ SERVER_METADATA = {
         "category": "disabled",
         "apiKeyRequired": True,
         "recommended": False,
-        "builtin": False
+        "builtin": False,
     },
     "mcp-postgres-server": {
         "name": "PostgreSQL",
@@ -267,8 +268,8 @@ SERVER_METADATA = {
         "category": "disabled",
         "apiKeyRequired": True,
         "recommended": False,
-        "builtin": False
-    }
+        "builtin": False,
+    },
 }
 
 
@@ -276,16 +277,13 @@ def load_mcp_servers_from_config() -> list[MCPServerInfo]:
     """Read mcp-config.json and return enriched server info list."""
     project_root = Path(
         os.getenv(
-            'CONTAINER_PROJECT_ROOT',
-            os.getenv('PROJECT_ROOT', '/workspace/project')
+            "CONTAINER_PROJECT_ROOT", os.getenv("PROJECT_ROOT", "/workspace/project")
         )
     )
-    default_config_path = project_root / 'mcp-config.json'
-    config_path = Path(
-        os.getenv('MCP_CONFIG_PATH', str(default_config_path))
-    )
+    default_config_path = project_root / "mcp-config.json"
+    config_path = Path(os.getenv("MCP_CONFIG_PATH", str(default_config_path)))
 
-    with open(config_path, 'r') as f:
+    with open(config_path, "r") as f:
         config = json.load(f)
 
     mcp_servers = config.get("mcpServers", {})
@@ -295,14 +293,17 @@ def load_mcp_servers_from_config() -> list[MCPServerInfo]:
         if server_id.startswith("__"):
             continue
 
-        metadata = SERVER_METADATA.get(server_id, {
-            "name": server_id.replace("-", " ").title(),
-            "description": f"{server_id} MCP server",
-            "category": "custom",
-            "apiKeyRequired": True,
-            "recommended": False,
-            "builtin": False
-        })
+        metadata = SERVER_METADATA.get(
+            server_id,
+            {
+                "name": server_id.replace("-", " ").title(),
+                "description": f"{server_id} MCP server",
+                "category": "custom",
+                "apiKeyRequired": True,
+                "recommended": False,
+                "builtin": False,
+            },
+        )
 
         command = str(server_config.get("command", ""))
         args = server_config.get("args", [])
@@ -316,35 +317,36 @@ def load_mcp_servers_from_config() -> list[MCPServerInfo]:
         if env is not None and not isinstance(env, dict):
             env = None
 
-        servers.append(MCPServerInfo(
-            id=server_id,
-            command=command,
-            args=args,
-            env=env,
-            enabled=enabled,
-            **metadata
-        ))
+        servers.append(
+            MCPServerInfo(
+                id=server_id,
+                command=command,
+                args=args,
+                env=env,
+                enabled=enabled,
+                **metadata,
+            )
+        )
 
     builtin_servers = ["time", "fetch", "git", "memory"]
     for builtin_id in builtin_servers:
         if not any(s.id == builtin_id for s in servers):
             metadata = SERVER_METADATA[builtin_id]
-            servers.append(MCPServerInfo(
-                id=builtin_id,
-                command="",
-                args=[],
-                env=None,
-                enabled=True,
-                **metadata
-            ))
+            servers.append(
+                MCPServerInfo(
+                    id=builtin_id,
+                    command="",
+                    args=[],
+                    env=None,
+                    enabled=True,
+                    **metadata,
+                )
+            )
 
     return servers
 
 
-@router.get(
-    "/servers",
-    response_model=MCPConfigResponse
-)
+@router.get("/servers", response_model=MCPConfigResponse)
 async def get_mcp_servers():
     """
     Get list of available MCP servers from mcp-config.json
@@ -354,21 +356,17 @@ async def get_mcp_servers():
         servers = load_mcp_servers_from_config()
     except FileNotFoundError as exc:  # noqa: BLE001
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="mcp-config.json not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="mcp-config.json not found"
         ) from exc
     except json.JSONDecodeError as exc:  # noqa: BLE001
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Invalid JSON in mcp-config.json"
+            detail="Invalid JSON in mcp-config.json",
         ) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error reading MCP configuration: {exc}"
+            detail=f"Error reading MCP configuration: {exc}",
         ) from exc
 
-    return {
-        "servers": servers,
-        "total": len(servers)
-    }
+    return {"servers": servers, "total": len(servers)}

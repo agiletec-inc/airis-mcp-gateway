@@ -1,4 +1,5 @@
 """Unit tests for MCP server enable/disable state management"""
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.crud import mcp_server as crud
@@ -16,7 +17,7 @@ async def test_enable_server(db_session: AsyncSession):
         args=["-y", "test-package"],
         env={},
         description="Test server",
-        category="Test"
+        category="Test",
     )
     server = await crud.create_server(db_session, server_data)
     assert server.enabled is False
@@ -40,7 +41,7 @@ async def test_disable_server(db_session: AsyncSession):
         args=["-y", "test-package"],
         env={},
         description="Test server",
-        category="Test"
+        category="Test",
     )
     server = await crud.create_server(db_session, server_data)
     assert server.enabled is True
@@ -63,7 +64,7 @@ async def test_toggle_idempotent(db_session: AsyncSession):
         args=["-y", "test-package"],
         env={},
         description="Test server",
-        category="Test"
+        category="Test",
     )
     server = await crud.create_server(db_session, server_data)
 
@@ -88,7 +89,7 @@ async def test_list_only_enabled_servers(db_session: AsyncSession):
             args=["-y", f"package-{i}"],
             env={},
             description=f"Server {i}",
-            category="Test"
+            category="Test",
         )
         server = await crud.create_server(db_session, server_data)
         created_servers.append(server)
@@ -123,7 +124,7 @@ async def test_concurrent_toggles(db_session: AsyncSession):
             args=["-y", f"package-{i}"],
             env={},
             description=f"Concurrent test server {i}",
-            category="Test"
+            category="Test",
         )
         server = await crud.create_server(db_session, server_data)
         servers.append(server)
@@ -151,7 +152,7 @@ async def test_default_enabled_servers():
         "context7",
         "filesystem",
         "memory",
-        "time"
+        "time",
     ]
 
     default_disabled = [
@@ -161,7 +162,7 @@ async def test_default_enabled_servers():
         "fetch",
         "git",
         "sequential-thinking",
-        "airis-agent"
+        "airis-agent",
     ]
 
     # Verify default configuration is correct
@@ -182,14 +183,13 @@ async def test_updated_at_timestamp(db_session: AsyncSession):
         args=["-y", "test"],
         env={},
         description="Timestamp test",
-        category="Test"
+        category="Test",
     )
     server = await crud.create_server(db_session, server_data)
 
     # Flush and refresh to get DB-generated timestamp
     await db_session.flush()
     await db_session.refresh(server)
-    original_updated_at = server.updated_at
 
     # Wait for timestamp to change (PostgreSQL precision is microseconds)
     await asyncio.sleep(0.01)

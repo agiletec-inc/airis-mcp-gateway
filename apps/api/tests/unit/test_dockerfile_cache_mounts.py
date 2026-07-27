@@ -13,6 +13,7 @@ This is a static guard over the repo-root Dockerfile:
 - A pnpm store cache mount (`--mount=type=cache,target=/pnpm/store`).
 - The pnpm workspace manifests are COPYed BEFORE the src/ trees.
 """
+
 from __future__ import annotations
 
 import re
@@ -108,6 +109,5 @@ def test_dockerfile_copies_workspace_manifests_before_src():
         assert pkg_match, f"Missing `COPY apps/{app}/package.json ...` (issue #81)."
         assert src_match, f"Missing `COPY apps/{app}/src ...` (issue #81)."
         assert pkg_match.start() < src_match.start(), (
-            f"apps/{app}/package.json must be COPYed before apps/{app}/src "
-            f"(issue #81)."
+            f"apps/{app}/package.json must be COPYed before apps/{app}/src (issue #81)."
         )

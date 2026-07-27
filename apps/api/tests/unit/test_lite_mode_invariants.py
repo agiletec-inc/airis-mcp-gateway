@@ -18,6 +18,7 @@ This test makes that invariant mechanical instead of tribal knowledge:
     effective route table (reusing the FastAPI-0.137-safe route walker from
     `test_mcp_route_presence.py`).
 """
+
 import subprocess
 import sys
 
@@ -76,7 +77,10 @@ def test_db_backed_api_router_is_not_mounted_on_app():
     # check below, since FastAPI 0.137+ nests included sub-routers instead
     # of flattening them onto `api_router.routes` (see test_mcp_route_presence.py).
     declared_paths = {
-        full_path for full_path, _methods, _route in iter_effective_routes(routes_module.api_router)
+        full_path
+        for full_path, _methods, _route in iter_effective_routes(
+            routes_module.api_router
+        )
     }
     assert declared_paths, "api_router declared no routes — sanity check failed"
 

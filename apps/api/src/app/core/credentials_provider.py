@@ -67,7 +67,9 @@ class CredentialProvider:
                 subscriber(credential_id, timestamp)
             except Exception as exc:  # noqa: BLE001
                 # Subscribers should be robust; ignore failure to avoid cascade.
-                logger.debug("Subscriber notification failed for %s: %s", credential_id, exc)
+                logger.debug(
+                    "Subscriber notification failed for %s: %s", credential_id, exc
+                )
                 continue
 
         return result

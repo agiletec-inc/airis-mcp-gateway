@@ -72,7 +72,9 @@ class TestGenerateRepoIndex:
             assert isinstance(response, RepoIndexResponse)
             assert response.markdown is not None
             assert len(response.markdown) > 0
-            assert "README.md" in response.markdown or "Project Index" in response.markdown
+            assert (
+                "README.md" in response.markdown or "Project Index" in response.markdown
+            )
             assert response.stats["total_files"] >= 4
 
     def test_quick_mode_depth(self):

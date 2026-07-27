@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from .logging import get_logger
@@ -73,7 +72,9 @@ def load_routing_table(path: str = DEFAULT_ROUTING_TABLE_PATH) -> Dict[str, Any]
         with open(path) as f:
             _routing_table = json.load(f)
             _routing_table_path = path
-            logger.info(f"Loaded routing table from {path} ({len(_routing_table.get('routes', []))} routes)")
+            logger.info(
+                f"Loaded routing table from {path} ({len(_routing_table.get('routes', []))} routes)"
+            )
             return _routing_table
     except FileNotFoundError:
         logger.debug(f"Routing table not found at {path}, returning empty")

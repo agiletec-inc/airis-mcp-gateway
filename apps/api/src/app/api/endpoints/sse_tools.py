@@ -12,7 +12,7 @@ Events:
 import asyncio
 import json
 import time
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator
 from dataclasses import dataclass, field
 from collections import deque
 from fastapi import APIRouter, Request
@@ -20,8 +20,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 import httpx
 
 from ...core.config import settings
-from ...core.process_manager import get_process_manager, ProcessManager
-from ...core.process_runner import ProcessState
+from ...core.process_manager import get_process_manager
 from ...core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -35,6 +34,7 @@ MAX_EVENT_QUEUE = 100
 @dataclass
 class SSEClient:
     """Tracks an SSE client connection."""
+
     id: str
     connected_at: float = field(default_factory=time.time)
     last_event_at: float = field(default_factory=time.time)
@@ -77,7 +77,9 @@ class SSEToolsPublisher:
         async with self._lock:
             if client_id in self._clients:
                 del self._clients[client_id]
-                logger.info(f"Client {client_id} disconnected (total: {len(self._clients)})")
+                logger.info(
+                    f"Client {client_id} disconnected (total: {len(self._clients)})"
+                )
 
     @property
     def client_count(self) -> int:
@@ -107,7 +109,7 @@ def format_sse_event(event_type: str, data: Any) -> str:
 async def get_docker_gateway_tools() -> list[dict[str, Any]]:
     """Fetch tools from Docker MCP Gateway."""
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0):
             # Docker Gateway doesn't have a direct tools endpoint
             # We get tools via the SSE stream, so return empty here
             # The actual tools come through the MCP protocol
@@ -130,25 +132,29 @@ async def get_all_server_status() -> list[dict[str, Any]]:
         # Catch all network errors for health check
         docker_status = "unreachable"
 
-    servers.append({
-        "name": "docker-gateway",
-        "type": "docker",
-        "status": docker_status,
-        "url": settings.MCP_GATEWAY_URL,
-    })
+    servers.append(
+        {
+            "name": "docker-gateway",
+            "type": "docker",
+            "status": docker_status,
+            "url": settings.MCP_GATEWAY_URL,
+        }
+    )
 
     # Process servers status
     try:
         manager = get_process_manager()
         for status in manager.get_all_status():
-            servers.append({
-                "name": status["name"],
-                "type": "process",
-                "status": status["state"],
-                "command": status.get("command", ""),
-                "enabled": status.get("enabled", False),
-                "tools_count": status.get("tools_count", 0),
-            })
+            servers.append(
+                {
+                    "name": status["name"],
+                    "type": "process",
+                    "status": status["state"],
+                    "command": status.get("command", ""),
+                    "enabled": status.get("enabled", False),
+                    "tools_count": status.get("tools_count", 0),
+                }
+            )
     except Exception as e:
         logger.error(f"Failed to get process status: {e}")
 
@@ -171,15 +177,17 @@ def _apply_brief_description(description: str, mode: str = "brief") -> str:
             if delimiter == "\n":
                 text = text[:idx]
             else:
-                text = text[:idx + len(delimiter.strip())]
+                text = text[: idx + len(delimiter.strip())]
             break
 
     if len(text) > max_length:
-        text = text[:max_length - 1].rstrip() + "…"
+        text = text[: max_length - 1].rstrip() + "…"
     return text
 
 
-async def get_combined_tools(mode: str = "hot", description_mode: str = "brief") -> dict[str, Any]:
+async def get_combined_tools(
+    mode: str = "hot", description_mode: str = "brief"
+) -> dict[str, Any]:
     """
     Get all tools from all sources with brief descriptions.
 
@@ -237,18 +245,24 @@ async def sse_event_generator(client_id: str) -> AsyncIterator[str]:
     try:
         # Initial burst: server status
         servers = await get_all_server_status()
-        yield format_sse_event("server_status", {
-            "servers": servers,
-            "timestamp": int(time.time()),
-        })
+        yield format_sse_event(
+            "server_status",
+            {
+                "servers": servers,
+                "timestamp": int(time.time()),
+            },
+        )
 
         # Initial burst: tools list
         combined = await get_combined_tools()
-        yield format_sse_event("tools_list", {
-            "tools": combined["tools"],
-            "tools_count": combined["tools_count"],
-            "timestamp": int(time.time()),
-        })
+        yield format_sse_event(
+            "tools_list",
+            {
+                "tools": combined["tools"],
+                "tools_count": combined["tools_count"],
+                "timestamp": int(time.time()),
+            },
+        )
 
         # Heartbeat loop with periodic status updates
         last_status_check = time.time()
@@ -268,27 +282,36 @@ async def sse_event_generator(client_id: str) -> AsyncIterator[str]:
                 # Check for state changes
                 if new_servers != servers:
                     servers = new_servers
-                    yield format_sse_event("server_status", {
-                        "servers": servers,
-                        "timestamp": int(now),
-                    })
+                    yield format_sse_event(
+                        "server_status",
+                        {
+                            "servers": servers,
+                            "timestamp": int(now),
+                        },
+                    )
 
             # Heartbeat
             if int(now) % heartbeat_interval == 0:
-                yield format_sse_event("heartbeat", {
-                    "timestamp": int(now),
-                    "client_id": client_id,
-                })
+                yield format_sse_event(
+                    "heartbeat",
+                    {
+                        "timestamp": int(now),
+                        "client_id": client_id,
+                    },
+                )
 
     except asyncio.CancelledError:
         logger.info(f"Client {client_id} stream cancelled")
         raise
     except Exception as e:
         logger.error(f"Client {client_id} stream error: {e}")
-        yield format_sse_event("error", {
-            "message": str(e),
-            "timestamp": int(time.time()),
-        })
+        yield format_sse_event(
+            "error",
+            {
+                "message": str(e),
+                "timestamp": int(time.time()),
+            },
+        )
 
 
 @router.get("/sse/tools")
@@ -321,15 +344,12 @@ async def sse_tools_stream(request: Request):
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
-        }
+        },
     )
 
 
 @router.get("/tools/combined")
-async def get_tools_combined(
-    mode: str = "hot",
-    desc: str = "brief"
-):
+async def get_tools_combined(mode: str = "hot", desc: str = "brief"):
     """
     Get combined tools list (SSE fallback for non-streaming clients).
 
@@ -382,16 +402,18 @@ async def get_tools_status(metrics: bool = False):
                 "hot_count": len(hot_servers),
                 "cold_count": len(cold_servers),
                 "total_enabled": len(hot_servers) + len(cold_servers),
-            }
+            },
         }
     except Exception as e:
         logger.error(f"Failed to get process status with metrics: {e}")
         processes = []
         roster = {"hot": [], "cold": [], "summary": {}}
 
-    return JSONResponse({
-        "roster": roster,
-        "servers": servers,
-        "processes": processes,
-        "sse": _publisher.get_stats(),
-    })
+    return JSONResponse(
+        {
+            "roster": roster,
+            "servers": servers,
+            "processes": processes,
+            "sse": _publisher.get_stats(),
+        }
+    )

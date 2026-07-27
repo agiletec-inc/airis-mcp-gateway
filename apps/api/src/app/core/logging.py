@@ -4,6 +4,7 @@ Logging configuration for AIRIS MCP Gateway.
 Provides structured logging with configurable levels and formats.
 Supports request_id context for request tracing.
 """
+
 import json
 import logging
 import os
@@ -54,12 +55,18 @@ def redact_sensitive(value: Any, *, _depth: int = 0) -> Any:
 
     if isinstance(value, dict):
         return {
-            k: (_REDACTED if _is_sensitive_key(str(k)) else redact_sensitive(v, _depth=_depth + 1))
+            k: (
+                _REDACTED
+                if _is_sensitive_key(str(k))
+                else redact_sensitive(v, _depth=_depth + 1)
+            )
             for k, v in value.items()
         }
     if isinstance(value, (list, tuple)):
         redacted_items = [redact_sensitive(item, _depth=_depth + 1) for item in value]
-        return type(value)(redacted_items) if isinstance(value, tuple) else redacted_items
+        return (
+            type(value)(redacted_items) if isinstance(value, tuple) else redacted_items
+        )
     return value
 
 
@@ -111,7 +118,9 @@ class JSONFormatter(logging.Formatter):
 
         # Add exception info if present
         if record.exc_info:
-            log_data["exception"] = redact_log_message(self.formatException(record.exc_info))
+            log_data["exception"] = redact_log_message(
+                self.formatException(record.exc_info)
+            )
 
         return json.dumps(log_data, ensure_ascii=False)
 
@@ -124,8 +133,7 @@ class RedactingFormatter(logging.Formatter):
 
 
 def setup_logging(
-    level: Optional[str] = None,
-    format_style: Optional[str] = None
+    level: Optional[str] = None, format_style: Optional[str] = None
 ) -> None:
     """
     Configure application-wide logging.
@@ -164,10 +172,12 @@ def setup_logging(
         handler.setFormatter(JSONFormatter(datefmt="%Y-%m-%dT%H:%M:%S"))
     else:
         # Human-readable format for development (also redacts secrets)
-        handler.setFormatter(RedactingFormatter(
-            "[%(asctime)s] %(levelname)s %(name)s [%(request_id)s]: %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S"
-        ))
+        handler.setFormatter(
+            RedactingFormatter(
+                "[%(asctime)s] %(levelname)s %(name)s [%(request_id)s]: %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
 
     root_logger.addHandler(handler)
 

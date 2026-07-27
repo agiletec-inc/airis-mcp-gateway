@@ -10,6 +10,7 @@ any `asyncio.get_event_loop()` call reappears. It is intentionally a static
 check (not a runtime check) because #98 is a code-style invariant: the fix is
 "do not write this call", not "handle it at runtime".
 """
+
 import ast
 from pathlib import Path
 

@@ -16,6 +16,7 @@ No fixed sleeps — reads and responds to each request as it arrives, so the
 real event-driven handshake in ProcessRunner (issue #194 / PR #202) is
 exercised for real, not simulated.
 """
+
 from __future__ import annotations
 
 import json

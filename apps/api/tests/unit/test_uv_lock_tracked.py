@@ -10,6 +10,7 @@ regresses: the lockfile must exist and be git-tracked, `.gitignore` must not
 ignore it again, and both CI and the Dockerfile must install from it with
 `--frozen` (or gate on `uv lock --check`).
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -47,7 +48,14 @@ def test_uv_lock_exists():
 
 def test_uv_lock_is_git_tracked():
     result = subprocess.run(
-        ["git", "ls-files", "--error-unmatch", "apps/api/uv.lock"],
+        [
+            "git",
+            "-c",
+            f"safe.directory={REPO_ROOT}",
+            "ls-files",
+            "--error-unmatch",
+            "apps/api/uv.lock",
+        ],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,

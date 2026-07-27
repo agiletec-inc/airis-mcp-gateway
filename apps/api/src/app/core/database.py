@@ -4,6 +4,7 @@ Database module - supports both lite mode (no DB) and full mode (with PostgreSQL
 Lite mode: Returns None for DB sessions, uses stub Base
 Full mode: Returns async PostgreSQL sessions via SQLAlchemy
 """
+
 import os
 from typing import AsyncGenerator, Optional
 
@@ -13,8 +14,13 @@ _DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 # Try to import SQLAlchemy
 try:
-    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+    from sqlalchemy.ext.asyncio import (
+        AsyncSession,
+        create_async_engine,
+        async_sessionmaker,
+    )
     from sqlalchemy.orm import DeclarativeBase
+
     _HAS_SQLALCHEMY = True
 except ImportError:
     _HAS_SQLALCHEMY = False
@@ -29,6 +35,7 @@ if _HAS_SQLALCHEMY and _DATABASE_URL and _GATEWAY_MODE == "full":
 
     class Base(DeclarativeBase):
         """SQLAlchemy declarative base for models"""
+
         pass
 
     def is_db_available() -> bool:
@@ -44,6 +51,7 @@ elif _HAS_SQLALCHEMY:
 
     class Base(DeclarativeBase):
         """SQLAlchemy declarative base for models (test/lite mode)"""
+
         pass
 
     engine = None
@@ -59,6 +67,7 @@ else:
     # No SQLAlchemy - pure lite mode
     class Base:
         """Stub base class when SQLAlchemy not available"""
+
         pass
 
     engine = None

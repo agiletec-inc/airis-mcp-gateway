@@ -1,4 +1,5 @@
 """Endpoints for aggregated dashboard data."""
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 

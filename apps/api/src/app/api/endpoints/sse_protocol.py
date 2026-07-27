@@ -6,6 +6,7 @@ between FastAPI StreamingResponse byte streams and in-memory JSON-RPC
 payloads. No I/O, no session state — the contents of this module can be
 unit-tested without a running event loop.
 """
+
 from __future__ import annotations
 
 import json

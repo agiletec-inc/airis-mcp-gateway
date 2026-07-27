@@ -1,4 +1,5 @@
 """Encryption utilities for secret management"""
+
 import base64
 import os
 import stat
@@ -38,7 +39,9 @@ def _chmod_strict(path: Path, *, description: str) -> None:
     try:
         os.chmod(path, _SECURE_FILE_MODE)
     except OSError as exc:
-        logger.warning("Could not chmod %s on %s: %s", oct(_SECURE_FILE_MODE), path, exc)
+        logger.warning(
+            "Could not chmod %s on %s: %s", oct(_SECURE_FILE_MODE), path, exc
+        )
 
     try:
         actual = stat.S_IMODE(os.stat(path).st_mode)
@@ -60,8 +63,7 @@ def _chmod_strict(path: Path, *, description: str) -> None:
         )
         return
     raise RuntimeError(
-        msg
-        + ". Refusing to use this file. Set ENCRYPTION_ALLOW_INSECURE_KEY_PERMS=1 "
+        msg + ". Refusing to use this file. Set ENCRYPTION_ALLOW_INSECURE_KEY_PERMS=1 "
         "to override (not recommended)."
     )
 
@@ -106,10 +108,15 @@ class EncryptionManager:
             if not master_key:
                 master_key = Fernet.generate_key().decode()
                 self._persist_key(master_key)
-                logger.warning(f"Generated new ENCRYPTION_MASTER_KEY and stored it at {self._key_file_path}")
-                logger.warning("Set ENCRYPTION_MASTER_KEY in your environment to override the persisted key")
+                logger.warning(
+                    f"Generated new ENCRYPTION_MASTER_KEY and stored it at {self._key_file_path}"
+                )
+                logger.warning(
+                    "Set ENCRYPTION_MASTER_KEY in your environment to override the persisted key"
+                )
 
-        assert isinstance(master_key, str)
+        if not isinstance(master_key, str):
+            raise TypeError("master_key must be a string")
         self.master_key = master_key
         self._fernet = self._create_fernet(master_key)
 
@@ -189,7 +196,9 @@ class EncryptionManager:
             self._key_file_path.parent.mkdir(parents=True, exist_ok=True)
             self._key_file_path.write_text(key, encoding="utf-8")
         except OSError as exc:
-            logger.warning(f"Failed to persist ENCRYPTION_MASTER_KEY to {self._key_file_path}: {exc}")
+            logger.warning(
+                f"Failed to persist ENCRYPTION_MASTER_KEY to {self._key_file_path}: {exc}"
+            )
             return
 
         _chmod_strict(self._key_file_path, description="encryption master key")

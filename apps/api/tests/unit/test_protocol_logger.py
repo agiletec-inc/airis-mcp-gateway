@@ -5,6 +5,7 @@ cover directory resolution (including the /tmp fallback), the entry shape
 written by log_message, the request/response helper methods, and log
 clearing.
 """
+
 from __future__ import annotations
 
 import json

@@ -4,6 +4,7 @@ Simple bearer token authentication for single-user mode.
 If AIRIS_API_KEY is not set, authentication is disabled (open access).
 If set, all requests must include: Authorization: Bearer <key>
 """
+
 import os
 import secrets
 from fastapi import Request, HTTPException

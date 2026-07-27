@@ -18,6 +18,7 @@ tests/unit/test_uv_lock_tracked.py, test_dockerignore_regression.py,
 test_dockerfile_cache_mounts.py, test_package_manager_consistency.py, and
 test_typescript_no_unsafe_cast.py for the sanctioned pattern.
 """
+
 from __future__ import annotations
 
 import ast
@@ -120,6 +121,5 @@ def test_guard_actually_detects_the_forbidden_pattern():
     matches = list(_iter_exists_skip_guards(tree))
     assert matches, "detector failed to find the forbidden exists()-skip pattern"
     assert not any(
-        any(marker in cond for marker in ALLOWED_SIGNAL_MARKERS)
-        for _, cond in matches
+        any(marker in cond for marker in ALLOWED_SIGNAL_MARKERS) for _, cond in matches
     ), "fixture condition unexpectedly matched the allowlist"

@@ -1,4 +1,5 @@
 """Dashboard summary aggregation logic."""
+
 from collections import defaultdict
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,11 +15,11 @@ from ..schemas.dashboard import (
 
 from typing import Literal
 
-ServerStatus = Literal['connected', 'disconnected', 'error']
+ServerStatus = Literal["connected", "disconnected", "error"]
 
 
 def _default_status(enabled: bool) -> ServerStatus:
-    return 'connected' if enabled else 'disconnected'
+    return "connected" if enabled else "disconnected"
 
 
 async def build_dashboard_summary(db: AsyncSession) -> DashboardSummaryResponse:
@@ -46,20 +47,22 @@ async def build_dashboard_summary(db: AsyncSession) -> DashboardSummaryResponse:
         if server.apiKeyRequired and not api_key_configured:
             api_key_missing += 1
 
-        summaries.append(ServerSummary(
-            id=server.id,
-            name=server.name,
-            description=server.description,
-            category=server.category,
-            enabled=enabled,
-            status=_default_status(enabled),
-            api_key_required=server.apiKeyRequired,
-            api_key_configured=api_key_configured,
-            recommended=server.recommended,
-            builtin=server.builtin,
-            tool_count=None,
-            tools=[],
-        ))
+        summaries.append(
+            ServerSummary(
+                id=server.id,
+                name=server.name,
+                description=server.description,
+                category=server.category,
+                enabled=enabled,
+                status=_default_status(enabled),
+                api_key_required=server.apiKeyRequired,
+                api_key_configured=api_key_configured,
+                recommended=server.recommended,
+                builtin=server.builtin,
+                tool_count=None,
+                tools=[],
+            )
+        )
 
     stats = DashboardStats(
         total=len(summaries),

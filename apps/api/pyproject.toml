@@ -29,8 +29,23 @@ test = [
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
+[dependency-groups]
+dev = ["ruff>=0.14,<1.0"]
+
+[tool.ruff]
+target-version = "py312"
+lint.select = ["E4", "E7", "E9"]
+lint.ignore = ["E712"]
+
+[tool.ruff.lint.per-file-ignores]
+# Alembic's env.py must extend sys.path before importing the app package.
+"alembic/env.py" = ["E402"]
+
 [tool.pytest.ini_options]
 markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
+# Bare `pytest` (org quality gate) runs the same suite as the canonical CI;
+# integration/ needs stubs wiring and e2e/ needs the Docker stack.
+testpaths = ["tests/unit"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}

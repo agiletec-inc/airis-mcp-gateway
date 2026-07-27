@@ -4,6 +4,7 @@ Logging context middleware for request tracing.
 Sets request_id in ContextVar so all log messages include it.
 Must be registered AFTER RequestIDMiddleware (so it runs after request_id is set).
 """
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -32,7 +33,7 @@ class LoggingContextMiddleware(BaseHTTPMiddleware):
         client_ip = self._get_client_ip(request)
         logger.info(
             f"Request started: {request.method} {request.url.path}",
-            extra={"client_ip": client_ip}
+            extra={"client_ip": client_ip},
         )
 
         try:
@@ -45,7 +46,7 @@ class LoggingContextMiddleware(BaseHTTPMiddleware):
 
             return response
 
-        except Exception as e:
+        except Exception:
             # Log exception (will include request_id)
             logger.exception(f"Request failed: {request.method} {request.url.path}")
             raise

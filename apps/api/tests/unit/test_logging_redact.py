@@ -1,4 +1,5 @@
 """Tests for sensitive field redaction in logging (issue #105)."""
+
 from __future__ import annotations
 
 import json
@@ -32,7 +33,9 @@ def test_redact_sensitive_masks_known_keys():
 
 def test_redact_sensitive_handles_case_insensitive_keys():
     assert redact_sensitive({"API_KEY": "x"}) == {"API_KEY": "***REDACTED***"}
-    assert redact_sensitive({"Authorization": "x"}) == {"Authorization": "***REDACTED***"}
+    assert redact_sensitive({"Authorization": "x"}) == {
+        "Authorization": "***REDACTED***"
+    }
 
 
 def test_redact_sensitive_returns_primitives_unchanged():

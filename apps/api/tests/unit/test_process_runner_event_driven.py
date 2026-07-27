@@ -13,6 +13,7 @@ require a real MCP server). Instead we construct a ProcessRunner, then use
 `_set_state()` to drive the state machine from another task, proving the
 waiter unblocks on the condition's notify, not on a timer.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -78,7 +79,7 @@ async def test_set_state_notifies_waiters_immediately():
     # CI box. The old 50ms polling implementation could not beat ~50ms worst
     # case, so a threshold of 25ms clearly distinguishes the two regimes.
     assert elapsed < 0.025, (
-        f"waiter took {elapsed*1000:.1f}ms to unblock after _set_state; "
+        f"waiter took {elapsed * 1000:.1f}ms to unblock after _set_state; "
         "likely regressed to polling instead of Condition.notify_all "
         "(issue #100)."
     )
@@ -129,6 +130,6 @@ async def test_ensure_ready_returns_immediately_when_already_ready():
     assert ok is True
     assert err is None
     assert elapsed < 0.01, (
-        f"fast-path ensure_ready took {elapsed*1000:.1f}ms; it should return "
+        f"fast-path ensure_ready took {elapsed * 1000:.1f}ms; it should return "
         "before any condition wait."
     )

@@ -8,6 +8,7 @@ Collects:
 Note: In-memory storage - resets on restart.
 For production with multiple workers, use Prometheus client library.
 """
+
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -26,6 +27,7 @@ logger = get_logger(__name__)
 @dataclass
 class LatencyStats:
     """Latency statistics with percentile calculation."""
+
     samples: list[float] = field(default_factory=list)
     max_samples: int = 1000  # Keep last N samples
 
@@ -34,7 +36,7 @@ class LatencyStats:
         self.samples.append(latency_ms)
         # Trim to max samples (keep most recent)
         if len(self.samples) > self.max_samples:
-            self.samples = self.samples[-self.max_samples:]
+            self.samples = self.samples[-self.max_samples :]
 
     def percentile(self, p: float) -> Optional[float]:
         """Calculate percentile (0-100)."""
@@ -72,11 +74,7 @@ class HTTPMetricsStore:
         self._latency: dict[str, LatencyStats] = defaultdict(LatencyStats)
 
     def record_request(
-        self,
-        method: str,
-        path: str,
-        status_code: int,
-        latency_ms: float
+        self, method: str, path: str, status_code: int, latency_ms: float
     ) -> None:
         """Record a completed request."""
         # Normalize path (remove query params, collapse IDs)
@@ -97,7 +95,8 @@ class HTTPMetricsStore:
 
         # Collapse UUID segments (simplistic - just long hex strings)
         import re
-        path = re.sub(r'/[0-9a-f]{8,}', '/{id}', path, flags=re.IGNORECASE)
+
+        path = re.sub(r"/[0-9a-f]{8,}", "/{id}", path, flags=re.IGNORECASE)
 
         return path
 

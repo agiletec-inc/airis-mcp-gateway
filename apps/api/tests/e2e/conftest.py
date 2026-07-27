@@ -1,6 +1,7 @@
 """
 Shared helpers for e2e tests (require the live Docker stack).
 """
+
 import os
 
 import pytest

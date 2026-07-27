@@ -18,6 +18,7 @@ event loop — no mocks. They verify:
 3. The GC cannot collect the task even when the caller throws away the
    returned reference — because the module-level set still holds it.
 """
+
 from __future__ import annotations
 
 import asyncio

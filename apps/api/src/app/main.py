@@ -5,6 +5,7 @@ Routes:
 - Docker MCP servers -> Docker MCP Gateway (port 9390)
 - Process MCP servers (uvx/npx) -> Direct subprocess management
 """
+
 import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -95,11 +96,13 @@ async def _precache_docker_gateway_tools():
 
     # Wait for the Gateway to accept /health instead of sleeping blindly.
     if not await _wait_for_docker_gateway(timeout=30.0):
-        logger.warning("[Startup] Docker Gateway did not become ready in 30s; skipping precache")
+        logger.warning(
+            "[Startup] Docker Gateway did not become ready in 30s; skipping precache"
+        )
         return
 
     gateway_url = MCP_GATEWAY_URL.rstrip("/")
-    logger.info(f"[Startup] Pre-caching Docker Gateway tools...")
+    logger.info("[Startup] Pre-caching Docker Gateway tools...")
 
     docker_tools = []
     endpoint_url = None
@@ -124,13 +127,11 @@ async def _precache_docker_gateway_tools():
             "params": {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
-                "clientInfo": {"name": "airis-startup", "version": "1.0.0"}
-            }
+                "clientInfo": {"name": "airis-startup", "version": "1.0.0"},
+            },
         }
         await client.post(
-            endpoint,
-            json=init_request,
-            headers={"Content-Type": "application/json"}
+            endpoint, json=init_request, headers={"Content-Type": "application/json"}
         )
 
         # Wait for the actual initialize response (id=1) on the GET stream,
@@ -147,7 +148,7 @@ async def _precache_docker_gateway_tools():
         await client.post(
             endpoint,
             json={"jsonrpc": "2.0", "method": "notifications/initialized"},
-            headers={"Content-Type": "application/json"}
+            headers={"Content-Type": "application/json"},
         )
         # notifications/initialized has no JSON-RPC response by protocol
         # design, so there is no-observable-event to await here: the Docker
@@ -161,7 +162,7 @@ async def _precache_docker_gateway_tools():
         await client.post(
             endpoint,
             json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
-            headers={"Content-Type": "application/json"}
+            headers={"Content-Type": "application/json"},
         )
         logger.info(f"[Startup] Sent all requests to {endpoint}")
 
@@ -172,7 +173,7 @@ async def _precache_docker_gateway_tools():
                 "GET",
                 f"{gateway_url}/sse",
                 headers={"Accept": "text/event-stream"},
-                timeout=15.0
+                timeout=15.0,
             ) as response:
                 sender_task = None
                 async for line in response.aiter_lines():
@@ -192,7 +193,9 @@ async def _precache_docker_gateway_tools():
                             endpoint_url = f"{gateway_url}{data_str}"
                             logger.info(f"[Startup] Got endpoint: {endpoint_url}")
                             # Start sending requests in background
-                            sender_task = asyncio.create_task(send_requests(client, endpoint_url))
+                            sender_task = asyncio.create_task(
+                                send_requests(client, endpoint_url)
+                            )
                             continue
 
                         # JSON response - look for tools/list
@@ -208,13 +211,17 @@ async def _precache_docker_gateway_tools():
                                 )
                                 continue
 
-                            if data.get("id") == 1 and ("result" in data or "error" in data):
+                            if data.get("id") == 1 and (
+                                "result" in data or "error" in data
+                            ):
                                 init_response_event.set()
                                 continue
 
                             if data.get("id") == 2 and "result" in data:
                                 docker_tools = data["result"].get("tools", [])
-                                logger.info(f"[Startup] Received {len(docker_tools)} tools from Gateway")
+                                logger.info(
+                                    f"[Startup] Received {len(docker_tools)} tools from Gateway"
+                                )
                                 break
 
                 # Cancel sender if still running
@@ -224,6 +231,7 @@ async def _precache_docker_gateway_tools():
             if docker_tools:
                 # Cache Docker tools in DynamicMCP
                 from .core.dynamic_mcp import get_dynamic_mcp, ToolInfo, ServerInfo
+
                 dynamic_mcp = get_dynamic_mcp()
 
                 docker_server_tools = {}
@@ -236,10 +244,12 @@ async def _precache_docker_gateway_tools():
                             server=server_name,
                             description=tool.get("description", ""),
                             input_schema=tool.get("inputSchema", {}),
-                            source="docker"
+                            source="docker",
                         )
                         dynamic_mcp._tool_to_server[tool_name] = server_name
-                        docker_server_tools[server_name] = docker_server_tools.get(server_name, 0) + 1
+                        docker_server_tools[server_name] = (
+                            docker_server_tools.get(server_name, 0) + 1
+                        )
 
                 for server_name, tools_count in docker_server_tools.items():
                     if server_name not in dynamic_mcp._servers:
@@ -248,15 +258,18 @@ async def _precache_docker_gateway_tools():
                             enabled=True,
                             mode="docker",
                             tools_count=tools_count,
-                            source="docker"
+                            source="docker",
                         )
 
-                logger.info(f"[Startup] Pre-cached {len(docker_tools)} Docker Gateway tools from {len(docker_server_tools)} servers")
+                logger.info(
+                    f"[Startup] Pre-cached {len(docker_tools)} Docker Gateway tools from {len(docker_server_tools)} servers"
+                )
             else:
                 logger.info("[Startup] No Docker Gateway tools found in response")
 
     except Exception as e:
         import traceback
+
         logger.info(f"[Startup] Docker Gateway pre-cache failed: {e}")
         logger.info(f"[Startup] Traceback: {traceback.format_exc()}")
 
@@ -269,6 +282,7 @@ async def lifespan(app: FastAPI):
 
     # Validate and log configuration warnings
     from .core.config import log_startup_warnings
+
     log_startup_warnings()
 
     # Initialize ProcessManager for uvx/npx servers
@@ -281,6 +295,7 @@ async def lifespan(app: FastAPI):
         # Subscribe the SSE fan-out so clients are notified whenever a
         # server enters or leaves the HOT set (enable / disable / idle-kill).
         from .api.endpoints.tools_list_notifier import install_tools_list_changed_fanout
+
         install_tools_list_changed_fanout()
 
         # Pre-warm HOT servers to avoid cold start timeouts on first tools/list
@@ -366,10 +381,7 @@ async def lifespan(app: FastAPI):
 
         # Shutdown with timeout
         try:
-            await asyncio.wait_for(
-                manager.shutdown(),
-                timeout=SHUTDOWN_TIMEOUT
-            )
+            await asyncio.wait_for(manager.shutdown(), timeout=SHUTDOWN_TIMEOUT)
             logger.info("Graceful shutdown completed")
         except asyncio.TimeoutError:
             logger.warning(
@@ -412,7 +424,9 @@ def _parse_allowed_origins() -> list[str]:
 
 ALLOWED_ORIGINS = _parse_allowed_origins()
 if ALLOWED_ORIGINS == ["*"]:
-    logger.warning("CORS: wildcard origin enabled (development mode). Set ALLOWED_ORIGINS for production.")
+    logger.warning(
+        "CORS: wildcard origin enabled (development mode). Set ALLOWED_ORIGINS for production."
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -461,6 +475,7 @@ app.include_router(sse_tools.router, prefix="/api", tags=["sse-tools"])
 async def root_sse_proxy(request: Request):
     """SSE endpoint at root level for Claude Code compatibility."""
     from fastapi.responses import StreamingResponse
+
     return StreamingResponse(
         mcp_proxy.proxy_sse_stream(request),
         media_type="text/event-stream",
@@ -468,7 +483,7 @@ async def root_sse_proxy(request: Request):
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
-        }
+        },
     )
 
 
@@ -500,7 +515,7 @@ async def root_sse_proxy_post(request: Request):
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
-            }
+            },
         )
     # Fall back to JSON-RPC proxy
     return await mcp_proxy._proxy_jsonrpc_request(request)
@@ -535,7 +550,9 @@ async def health_servers():
             "name": name,
             "mode": config.mode.value if config else None,
             "enabled": config.enabled if config else False,
-            "policy_disabled": getattr(config, "policy_disabled", False) if config else False,
+            "policy_disabled": getattr(config, "policy_disabled", False)
+            if config
+            else False,
             "status": health_record.status,
             "last_error": health_record.last_error,
             "last_checked": health_record.last_checked,
@@ -646,35 +663,67 @@ async def metrics():
         enabled = 1 if status.get("enabled") else 0
         lines.append(f'mcp_server_enabled{{server="{name}"}} {enabled}')
 
-    lines.extend(["", "# HELP mcp_server_tools Number of tools provided by server", "# TYPE mcp_server_tools gauge"])
+    lines.extend(
+        [
+            "",
+            "# HELP mcp_server_tools Number of tools provided by server",
+            "# TYPE mcp_server_tools gauge",
+        ]
+    )
     for status in process_status:
         name = status.get("name", "unknown")
         tools = status.get("tools_count", 0)
         lines.append(f'mcp_server_tools{{server="{name}"}} {tools}')
 
-    lines.extend(["", "# HELP mcp_server_uptime_seconds Uptime of running server in seconds", "# TYPE mcp_server_uptime_seconds gauge"])
+    lines.extend(
+        [
+            "",
+            "# HELP mcp_server_uptime_seconds Uptime of running server in seconds",
+            "# TYPE mcp_server_uptime_seconds gauge",
+        ]
+    )
     for status in process_status:
         name = status.get("name", "unknown")
         metrics_data = status.get("metrics", {})
         uptime_ms = metrics_data.get("uptime_ms")
         if uptime_ms is not None:
-            lines.append(f'mcp_server_uptime_seconds{{server="{name}"}} {uptime_ms / 1000:.2f}')
+            lines.append(
+                f'mcp_server_uptime_seconds{{server="{name}"}} {uptime_ms / 1000:.2f}'
+            )
 
-    lines.extend(["", "# HELP mcp_server_spawn_total Total number of process spawns (includes restarts)", "# TYPE mcp_server_spawn_total counter"])
+    lines.extend(
+        [
+            "",
+            "# HELP mcp_server_spawn_total Total number of process spawns (includes restarts)",
+            "# TYPE mcp_server_spawn_total counter",
+        ]
+    )
     for status in process_status:
         name = status.get("name", "unknown")
         metrics_data = status.get("metrics", {})
         spawn_count = metrics_data.get("spawn_count", 0)
         lines.append(f'mcp_server_spawn_total{{server="{name}"}} {spawn_count}')
 
-    lines.extend(["", "# HELP mcp_server_calls_total Total number of tool calls", "# TYPE mcp_server_calls_total counter"])
+    lines.extend(
+        [
+            "",
+            "# HELP mcp_server_calls_total Total number of tool calls",
+            "# TYPE mcp_server_calls_total counter",
+        ]
+    )
     for status in process_status:
         name = status.get("name", "unknown")
         metrics_data = status.get("metrics", {})
         total_calls = metrics_data.get("total_calls", 0)
         lines.append(f'mcp_server_calls_total{{server="{name}"}} {total_calls}')
 
-    lines.extend(["", "# HELP mcp_server_latency_p50_ms 50th percentile latency in milliseconds", "# TYPE mcp_server_latency_p50_ms gauge"])
+    lines.extend(
+        [
+            "",
+            "# HELP mcp_server_latency_p50_ms 50th percentile latency in milliseconds",
+            "# TYPE mcp_server_latency_p50_ms gauge",
+        ]
+    )
     for status in process_status:
         name = status.get("name", "unknown")
         metrics_data = status.get("metrics", {})
@@ -682,7 +731,13 @@ async def metrics():
         if p50 is not None:
             lines.append(f'mcp_server_latency_p50_ms{{server="{name}"}} {p50}')
 
-    lines.extend(["", "# HELP mcp_server_latency_p95_ms 95th percentile latency in milliseconds", "# TYPE mcp_server_latency_p95_ms gauge"])
+    lines.extend(
+        [
+            "",
+            "# HELP mcp_server_latency_p95_ms 95th percentile latency in milliseconds",
+            "# TYPE mcp_server_latency_p95_ms gauge",
+        ]
+    )
     for status in process_status:
         name = status.get("name", "unknown")
         metrics_data = status.get("metrics", {})
@@ -690,7 +745,13 @@ async def metrics():
         if p95 is not None:
             lines.append(f'mcp_server_latency_p95_ms{{server="{name}"}} {p95}')
 
-    lines.extend(["", "# HELP mcp_server_latency_p99_ms 99th percentile latency in milliseconds", "# TYPE mcp_server_latency_p99_ms gauge"])
+    lines.extend(
+        [
+            "",
+            "# HELP mcp_server_latency_p99_ms 99th percentile latency in milliseconds",
+            "# TYPE mcp_server_latency_p99_ms gauge",
+        ]
+    )
     for status in process_status:
         name = status.get("name", "unknown")
         metrics_data = status.get("metrics", {})
@@ -703,24 +764,56 @@ async def metrics():
     request_counts = http_store.get_request_counts()
     latency_stats = http_store.get_latency_stats()
 
-    lines.extend(["", "# HELP http_requests_total Total HTTP requests", "# TYPE http_requests_total counter"])
+    lines.extend(
+        [
+            "",
+            "# HELP http_requests_total Total HTTP requests",
+            "# TYPE http_requests_total counter",
+        ]
+    )
     for (method, path, status_code), count in sorted(request_counts.items()):
-        lines.append(f'http_requests_total{{method="{method}",path="{path}",status="{status_code}"}} {count}')
+        lines.append(
+            f'http_requests_total{{method="{method}",path="{path}",status="{status_code}"}} {count}'
+        )
 
-    lines.extend(["", "# HELP http_request_latency_p50_ms HTTP request latency 50th percentile", "# TYPE http_request_latency_p50_ms gauge"])
+    lines.extend(
+        [
+            "",
+            "# HELP http_request_latency_p50_ms HTTP request latency 50th percentile",
+            "# TYPE http_request_latency_p50_ms gauge",
+        ]
+    )
     for path, stats in sorted(latency_stats.items()):
         if stats["p50"] is not None:
-            lines.append(f'http_request_latency_p50_ms{{path="{path}"}} {stats["p50"]:.2f}')
+            lines.append(
+                f'http_request_latency_p50_ms{{path="{path}"}} {stats["p50"]:.2f}'
+            )
 
-    lines.extend(["", "# HELP http_request_latency_p95_ms HTTP request latency 95th percentile", "# TYPE http_request_latency_p95_ms gauge"])
+    lines.extend(
+        [
+            "",
+            "# HELP http_request_latency_p95_ms HTTP request latency 95th percentile",
+            "# TYPE http_request_latency_p95_ms gauge",
+        ]
+    )
     for path, stats in sorted(latency_stats.items()):
         if stats["p95"] is not None:
-            lines.append(f'http_request_latency_p95_ms{{path="{path}"}} {stats["p95"]:.2f}')
+            lines.append(
+                f'http_request_latency_p95_ms{{path="{path}"}} {stats["p95"]:.2f}'
+            )
 
-    lines.extend(["", "# HELP http_request_latency_p99_ms HTTP request latency 99th percentile", "# TYPE http_request_latency_p99_ms gauge"])
+    lines.extend(
+        [
+            "",
+            "# HELP http_request_latency_p99_ms HTTP request latency 99th percentile",
+            "# TYPE http_request_latency_p99_ms gauge",
+        ]
+    )
     for path, stats in sorted(latency_stats.items()):
         if stats["p99"] is not None:
-            lines.append(f'http_request_latency_p99_ms{{path="{path}"}} {stats["p99"]:.2f}')
+            lines.append(
+                f'http_request_latency_p99_ms{{path="{path}"}} {stats["p99"]:.2f}'
+            )
 
     lines.append("")
     return PlainTextResponse("\n".join(lines), media_type="text/plain")

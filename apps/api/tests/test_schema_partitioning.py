@@ -1,4 +1,5 @@
 """Tests for schema partitioning functionality."""
+
 import json
 import sys
 from pathlib import Path
@@ -23,9 +24,7 @@ class TestPartitionSchema:
         """Simple schema should remain unchanged."""
         schema = {
             "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "Search query"}
-            }
+            "properties": {"query": {"type": "string", "description": "Search query"}},
         }
         result = partition_schema(schema)
         assert result["type"] == "object"
@@ -44,13 +43,11 @@ class TestPartitionSchema:
                         "offset": {"type": "integer"},
                         "filters": {
                             "type": "object",
-                            "properties": {
-                                "status": {"type": "string"}
-                            }
-                        }
-                    }
+                            "properties": {"status": {"type": "string"}},
+                        },
+                    },
                 }
-            }
+            },
         }
         result = partition_schema(schema)
 
@@ -61,7 +58,9 @@ class TestPartitionSchema:
         assert options["type"] == "object"
         assert options.get("_partitioned") is True
         # Nested properties should not be present
-        assert "properties" not in options or "limit" not in options.get("properties", {})
+        assert "properties" not in options or "limit" not in options.get(
+            "properties", {}
+        )
 
     def test_array_schema(self):
         """Array schemas should have items simplified."""
@@ -76,12 +75,12 @@ class TestPartitionSchema:
                             "id": {"type": "string"},
                             "nested": {
                                 "type": "object",
-                                "properties": {"deep": {"type": "string"}}
-                            }
-                        }
-                    }
+                                "properties": {"deep": {"type": "string"}},
+                            },
+                        },
+                    },
                 }
-            }
+            },
         }
         result = partition_schema(schema)
         items_prop = result["properties"]["items"]
@@ -96,13 +95,10 @@ class TestPartitionSchema:
                 "status": {
                     "type": "string",
                     "enum": ["active", "inactive"],
-                    "description": "Status value"
+                    "description": "Status value",
                 },
-                "email": {
-                    "type": "string",
-                    "format": "email"
-                }
-            }
+                "email": {"type": "string", "format": "email"},
+            },
         }
         result = partition_schema(schema)
         assert result["properties"]["status"]["enum"] == ["active", "inactive"]
@@ -122,12 +118,10 @@ class TestPartitionTool:
                 "properties": {
                     "config": {
                         "type": "object",
-                        "properties": {
-                            "nested": {"type": "string"}
-                        }
+                        "properties": {"nested": {"type": "string"}},
                     }
-                }
-            }
+                },
+            },
         }
         result = partition_tool(tool)
         assert result["name"] == "test_tool"
@@ -183,13 +177,11 @@ class TestGetSchemaAtPath:
                     "properties": {
                         "database": {
                             "type": "object",
-                            "properties": {
-                                "host": {"type": "string"}
-                            }
+                            "properties": {"host": {"type": "string"}},
                         }
-                    }
+                    },
                 }
-            }
+            },
         }
         result = get_schema_at_path(schema, ["config", "database"])
         assert result["type"] == "object"
@@ -221,33 +213,36 @@ class TestTokenSavings:
                             "properties": {
                                 "page": {"type": "integer", "default": 1},
                                 "limit": {"type": "integer", "default": 10},
-                                "cursor": {"type": "string"}
-                            }
+                                "cursor": {"type": "string"},
+                            },
                         },
                         "filters": {
                             "type": "object",
                             "properties": {
-                                "status": {"type": "string", "enum": ["active", "archived"]},
+                                "status": {
+                                    "type": "string",
+                                    "enum": ["active", "archived"],
+                                },
                                 "tags": {"type": "array", "items": {"type": "string"}},
                                 "dateRange": {
                                     "type": "object",
                                     "properties": {
                                         "start": {"type": "string", "format": "date"},
-                                        "end": {"type": "string", "format": "date"}
-                                    }
-                                }
-                            }
+                                        "end": {"type": "string", "format": "date"},
+                                    },
+                                },
+                            },
                         },
                         "sort": {
                             "type": "object",
                             "properties": {
                                 "field": {"type": "string"},
-                                "order": {"type": "string", "enum": ["asc", "desc"]}
-                            }
-                        }
-                    }
-                }
-            }
+                                "order": {"type": "string", "enum": ["asc", "desc"]},
+                            },
+                        },
+                    },
+                },
+            },
         }
 
         full_size = len(json.dumps(complex_schema))
@@ -255,7 +250,9 @@ class TestTokenSavings:
         partitioned_size = len(json.dumps(partitioned))
 
         reduction = (full_size - partitioned_size) / full_size * 100
-        print(f"\nFull: {full_size} chars, Partitioned: {partitioned_size} chars, Reduction: {reduction:.1f}%")
+        print(
+            f"\nFull: {full_size} chars, Partitioned: {partitioned_size} chars, Reduction: {reduction:.1f}%"
+        )
 
         # Should achieve at least 30% reduction for complex schemas
         assert reduction > 30, f"Expected >30% reduction, got {reduction:.1f}%"
@@ -263,4 +260,5 @@ class TestTokenSavings:
 
 if __name__ == "__main__":
     import pytest
+
     pytest.main([__file__, "-v"])

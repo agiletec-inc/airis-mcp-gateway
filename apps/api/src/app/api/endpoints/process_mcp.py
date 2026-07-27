@@ -20,12 +20,16 @@ router = APIRouter(dependencies=[Depends(verify_api_key)])
 
 class ToolCallRequest(BaseModel):
     """Request body for tools/call."""
+
     name: str = Field(..., description="Tool name to call")
-    arguments: dict[str, Any] = Field(default_factory=dict, description="Tool arguments")
+    arguments: dict[str, Any] = Field(
+        default_factory=dict, description="Tool arguments"
+    )
 
 
 class ToolCallResponse(BaseModel):
     """Response from tools/call."""
+
     jsonrpc: str = "2.0"
     id: Optional[int] = None
     result: Optional[dict[str, Any]] = None
@@ -34,6 +38,7 @@ class ToolCallResponse(BaseModel):
 
 class ServerStatusResponse(BaseModel):
     """Server status information."""
+
     name: str
     type: str
     command: Optional[str] = None
@@ -51,9 +56,7 @@ async def list_process_servers():
         List of server status objects
     """
     manager = get_process_manager()
-    return {
-        "servers": manager.get_all_status()
-    }
+    return {"servers": manager.get_all_status()}
 
 
 @router.get("/servers/{server_name}")
@@ -118,7 +121,9 @@ async def disable_server(server_name: str):
 @router.get("/tools")
 async def list_tools(
     server: Optional[str] = Query(None, description="Filter by server name"),
-    mode: Optional[str] = Query("all", description="Filter by mode: hot, cold, all (default: all)")
+    mode: Optional[str] = Query(
+        "all", description="Filter by mode: hot, cold, all (default: all)"
+    ),
 ):
     """
     List available tools from process MCP servers.
@@ -152,8 +157,11 @@ async def call_tool(request: ToolCallRequest):
     # Auto-discovery: if tool not found, try tools_index for COLD servers
     if response.get("error", {}).get("code") == -32601:
         from ...core.dynamic_mcp import get_dynamic_mcp
+
         dmcp = get_dynamic_mcp()
-        result = await dmcp.auto_discover_and_execute(request.name, request.arguments, manager)
+        result = await dmcp.auto_discover_and_execute(
+            request.name, request.arguments, manager
+        )
         if result is not None:
             response = result
 
@@ -161,16 +169,14 @@ async def call_tool(request: ToolCallRequest):
     # it alongside a successful result.
     # Validation error: inject full schema so the caller can self-heal on retry.
     from ...core.dynamic_mcp import inject_schema_on_validation_error
+
     inject_schema_on_validation_error(response.get("error"), request.name)
 
     return response
 
 
 @router.post("/tools/call/{server_name}")
-async def call_tool_on_server(
-    server_name: str,
-    request: ToolCallRequest
-):
+async def call_tool_on_server(server_name: str, request: ToolCallRequest):
     """
     Call a tool on a specific process MCP server.
 
@@ -187,19 +193,14 @@ async def call_tool_on_server(
         raise HTTPException(404, f"Server not found: {server_name}")
 
     response = await manager.call_tool_on_server(
-        server_name,
-        request.name,
-        request.arguments
+        server_name, request.name, request.arguments
     )
 
     return response
 
 
 @router.post("/rpc/{server_name}")
-async def send_rpc_request(
-    server_name: str,
-    request: dict[str, Any]
-):
+async def send_rpc_request(server_name: str, request: dict[str, Any]):
     """
     Send a raw JSON-RPC request to a process MCP server.
 

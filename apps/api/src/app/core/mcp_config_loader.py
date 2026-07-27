@@ -21,11 +21,11 @@ logger = get_logger(__name__)
 
 class ServerType(Enum):
     PROCESS = "process"  # uvx, npx, node, python, deno
-    DOCKER = "docker"    # Docker MCP Gateway
+    DOCKER = "docker"  # Docker MCP Gateway
 
 
 class ServerMode(Enum):
-    HOT = "hot"    # Always ready, descriptions included
+    HOT = "hot"  # Always ready, descriptions included
     COLD = "cold"  # Lazy loaded, descriptions on-demand
 
 
@@ -45,14 +45,16 @@ PROCESS_COMMANDS = {
 @dataclass
 class BehaviorConfig:
     """Proactive tool usage behavior definition."""
-    triggers: list[str]       # Usage scenarios (1-3 items)
-    instruction: str          # One-line action instruction
+
+    triggers: list[str]  # Usage scenarios (1-3 items)
+    instruction: str  # One-line action instruction
     priority: str = "medium"  # high / medium / low
 
 
 @dataclass
 class McpServerConfig:
     """Parsed MCP server configuration."""
+
     name: str
     server_type: ServerType
     command: str
@@ -89,7 +91,9 @@ class McpServerConfig:
             args=self.args,
             env=self.env,
             cwd=self.cwd,
-            idle_timeout=self.idle_timeout if self.idle_timeout is not None else idle_timeout,
+            idle_timeout=self.idle_timeout
+            if self.idle_timeout is not None
+            else idle_timeout,
             mode=self.mode.value,
         )
         # Override TTL settings if specified
@@ -161,8 +165,10 @@ def load_mcp_config(config_path: Optional[str] = None) -> dict[str, McpServerCon
                 break
 
     if config_path is None or not os.path.exists(config_path):
-        logger.warning("No mcp-config.json found, using empty config. "
-                       "Set MCP_CONFIG_PATH env var or create mcp-config.json.")
+        logger.warning(
+            "No mcp-config.json found, using empty config. "
+            "Set MCP_CONFIG_PATH env var or create mcp-config.json."
+        )
         return {}
 
     logger.info(f"Loading config from: {config_path}")
@@ -187,7 +193,9 @@ def load_mcp_config(config_path: Optional[str] = None) -> dict[str, McpServerCon
             profile_name = _expand_env_vars(profile_ref)
             profile = profiles.get(profile_name, {})
             if not profile:
-                logger.warning(f"Profile '{profile_name}' not found for server '{name}'")
+                logger.warning(
+                    f"Profile '{profile_name}' not found for server '{name}'"
+                )
                 continue
             command = profile.get("command", "")
             args = profile.get("args", [])
@@ -254,7 +262,9 @@ def load_mcp_config(config_path: Optional[str] = None) -> dict[str, McpServerCon
             behavior=behavior,
         )
 
-        logger.debug(f"{name}: type={server_type.value}, mode={mode.value}, enabled={enabled}")
+        logger.debug(
+            f"{name}: type={server_type.value}, mode={mode.value}, enabled={enabled}"
+        )
 
     return servers
 
@@ -267,7 +277,8 @@ def _expand_env_vars(value: str) -> str:
     result = value
     # Handle ${VAR} and ${VAR:-default} patterns
     import re
-    pattern = r'\$\{([^}:]+)(?::-([^}]*))?\}'
+
+    pattern = r"\$\{([^}:]+)(?::-([^}]*))?\}"
 
     def replacer(match):
         var_name = match.group(1)
@@ -277,7 +288,9 @@ def _expand_env_vars(value: str) -> str:
     return re.sub(pattern, replacer, result)
 
 
-def get_process_servers(config: dict[str, McpServerConfig]) -> dict[str, McpServerConfig]:
+def get_process_servers(
+    config: dict[str, McpServerConfig],
+) -> dict[str, McpServerConfig]:
     """Filter to only process-type servers."""
     return {
         name: server
@@ -286,7 +299,9 @@ def get_process_servers(config: dict[str, McpServerConfig]) -> dict[str, McpServ
     }
 
 
-def get_docker_servers(config: dict[str, McpServerConfig]) -> dict[str, McpServerConfig]:
+def get_docker_servers(
+    config: dict[str, McpServerConfig],
+) -> dict[str, McpServerConfig]:
     """Filter to only docker-type servers."""
     return {
         name: server
@@ -295,13 +310,11 @@ def get_docker_servers(config: dict[str, McpServerConfig]) -> dict[str, McpServe
     }
 
 
-def get_enabled_servers(config: dict[str, McpServerConfig]) -> dict[str, McpServerConfig]:
+def get_enabled_servers(
+    config: dict[str, McpServerConfig],
+) -> dict[str, McpServerConfig]:
     """Filter to only enabled servers."""
-    return {
-        name: server
-        for name, server in config.items()
-        if server.enabled
-    }
+    return {name: server for name, server in config.items() if server.enabled}
 
 
 def get_hot_servers(config: dict[str, McpServerConfig]) -> dict[str, McpServerConfig]:

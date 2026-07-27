@@ -5,7 +5,9 @@ from ..models.mcp_server import MCPServer
 from ..schemas.mcp_server import MCPServerCreate, MCPServerUpdate
 
 
-async def get_servers(db: AsyncSession, skip: int = 0, limit: int = 100) -> list[MCPServer]:
+async def get_servers(
+    db: AsyncSession, skip: int = 0, limit: int = 100
+) -> list[MCPServer]:
     """Get all MCP servers"""
     result = await db.execute(
         select(MCPServer).offset(skip).limit(limit).order_by(MCPServer.name)
@@ -55,7 +57,9 @@ async def update_server(
     return db_server
 
 
-async def toggle_server(db: AsyncSession, server_id: int, enabled: bool) -> MCPServer | None:
+async def toggle_server(
+    db: AsyncSession, server_id: int, enabled: bool
+) -> MCPServer | None:
     """Toggle MCP server enabled status"""
     db_server = await get_server_by_id(db, server_id)
     if not db_server:
@@ -79,9 +83,7 @@ async def delete_server(db: AsyncSession, server_id: int) -> bool:
 
 
 async def set_server_enabled_by_name(
-    db: AsyncSession,
-    name: str,
-    enabled: bool
+    db: AsyncSession, name: str, enabled: bool
 ) -> MCPServer | None:
     """Set server enabled flag by name (no-op if server not found)"""
     db_server = await get_server_by_name(db, name)

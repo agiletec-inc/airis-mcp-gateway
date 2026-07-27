@@ -11,6 +11,7 @@ on demand.
 This test runs the real apply_schema_partitioning with a stubbed
 ProcessManager so we exercise the actual transformation, not a mock.
 """
+
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -65,17 +66,19 @@ async def test_hot_tools_keep_full_schema_in_full_mode(monkeypatch):
     """SCHEMA_MODE=full must preserve the backend's original inputSchema."""
     pm = MagicMock()
     pm.get_hot_servers = lambda: ["stripe"]
-    pm.list_tools = AsyncMock(return_value=[
-        {
-            "name": "stripe_create_customer",
-            "description": "Create a Stripe customer",
-            "inputSchema": {
-                "type": "object",
-                "properties": {"email": {"type": "string"}},
-                "required": ["email"],
-            },
-        }
-    ])
+    pm.list_tools = AsyncMock(
+        return_value=[
+            {
+                "name": "stripe_create_customer",
+                "description": "Create a Stripe customer",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"email": {"type": "string"}},
+                    "required": ["email"],
+                },
+            }
+        ]
+    )
 
     monkeypatch.setattr(tool_shaping, "get_process_manager", lambda: pm)
     monkeypatch.setattr(settings, "DYNAMIC_MCP", True)

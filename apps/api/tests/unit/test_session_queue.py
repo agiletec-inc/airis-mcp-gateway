@@ -1,6 +1,7 @@
 """
 Tests for session response queue thread safety.
 """
+
 import asyncio
 import pytest
 
@@ -11,7 +12,6 @@ async def test_session_queue_concurrent_access():
     # Import here to get fresh module state
     from app.api.endpoints.session_queue import (
         get_response_queue,
-        remove_response_queue,
         _session_response_queues,
     )
 

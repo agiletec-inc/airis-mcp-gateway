@@ -1,4 +1,5 @@
 """Unit tests for schema_partitioning.py"""
+
 import pytest
 from app.core.schema_partitioning import SchemaPartitioner
 
@@ -15,8 +16,8 @@ def test_partition_simple_schema(partitioner):
         "type": "object",
         "properties": {
             "name": {"type": "string", "description": "User name"},
-            "age": {"type": "number", "description": "User age"}
-        }
+            "age": {"type": "number", "description": "User age"},
+        },
     }
 
     result = partitioner.partition_schema(schema)
@@ -50,14 +51,14 @@ def test_partition_nested_schema(partitioner):
                                     "city": {"type": "string"},
                                     "state": {"type": "string"},
                                     "postal_code": {"type": "string"},
-                                    "country": {"type": "string"}
-                                }
+                                    "country": {"type": "string"},
+                                },
                             }
-                        }
+                        },
                     }
-                }
-            }
-        }
+                },
+            },
+        },
     }
 
     result = partitioner.partition_schema(schema)
@@ -85,9 +86,9 @@ def test_partition_preserves_enum(partitioner):
             "status": {
                 "type": "string",
                 "enum": ["pending", "approved", "rejected"],
-                "description": "Payment status"
+                "description": "Payment status",
             }
-        }
+        },
     }
 
     result = partitioner.partition_schema(schema)
@@ -101,17 +102,9 @@ def test_partition_preserves_format(partitioner):
     schema = {
         "type": "object",
         "properties": {
-            "email": {
-                "type": "string",
-                "format": "email",
-                "description": "User email"
-            },
-            "url": {
-                "type": "string",
-                "format": "uri",
-                "description": "Website URL"
-            }
-        }
+            "email": {"type": "string", "format": "email", "description": "User email"},
+            "url": {"type": "string", "format": "uri", "description": "Website URL"},
+        },
     }
 
     result = partitioner.partition_schema(schema)
@@ -128,9 +121,9 @@ def test_partition_preserves_pattern(partitioner):
             "phone": {
                 "type": "string",
                 "pattern": r"^\d{3}-\d{4}$",
-                "description": "Phone number"
+                "description": "Phone number",
             }
-        }
+        },
     }
 
     result = partitioner.partition_schema(schema)
@@ -142,12 +135,7 @@ def test_partition_preserves_required(partitioner):
     """Test that required field info is preserved"""
     schema = {
         "type": "object",
-        "properties": {
-            "field": {
-                "type": "string",
-                "required": True
-            }
-        }
+        "properties": {"field": {"type": "string", "required": True}},
     }
 
     result = partitioner.partition_schema(schema)
@@ -159,12 +147,7 @@ def test_partition_preserves_default(partitioner):
     """Test that default values are preserved"""
     schema = {
         "type": "object",
-        "properties": {
-            "count": {
-                "type": "number",
-                "default": 10
-            }
-        }
+        "properties": {"count": {"type": "number", "default": 10}},
     }
 
     result = partitioner.partition_schema(schema)
@@ -174,12 +157,7 @@ def test_partition_preserves_default(partitioner):
 
 def test_store_full_schema(partitioner):
     """Test storing full schema"""
-    schema = {
-        "type": "object",
-        "properties": {
-            "field": {"type": "string"}
-        }
-    }
+    schema = {"type": "object", "properties": {"field": {"type": "string"}}}
 
     partitioner.store_full_schema("test_tool", schema)
 
@@ -189,12 +167,7 @@ def test_store_full_schema(partitioner):
 
 def test_expand_schema_full(partitioner):
     """Test expanding full schema (no path)"""
-    schema = {
-        "type": "object",
-        "properties": {
-            "field": {"type": "string"}
-        }
-    }
+    schema = {"type": "object", "properties": {"field": {"type": "string"}}}
 
     partitioner.store_full_schema("test_tool", schema)
     expanded = partitioner.expand_schema("test_tool")
@@ -220,20 +193,22 @@ def test_expand_schema_path(partitioner):
                                 "type": "object",
                                 "properties": {
                                     "line1": {"type": "string"},
-                                    "city": {"type": "string"}
-                                }
+                                    "city": {"type": "string"},
+                                },
                             }
-                        }
+                        },
                     }
-                }
+                },
             }
-        }
+        },
     }
 
     partitioner.store_full_schema("test_tool", schema)
 
     # Expand metadata.shipping.address
-    expanded = partitioner.expand_schema("test_tool", ["metadata", "shipping", "address"])
+    expanded = partitioner.expand_schema(
+        "test_tool", ["metadata", "shipping", "address"]
+    )
 
     assert expanded is not None
     assert expanded["type"] == "object"
@@ -243,12 +218,7 @@ def test_expand_schema_path(partitioner):
 
 def test_expand_schema_invalid_path(partitioner):
     """Test expanding with invalid path"""
-    schema = {
-        "type": "object",
-        "properties": {
-            "field": {"type": "string"}
-        }
-    }
+    schema = {"type": "object", "properties": {"field": {"type": "string"}}}
 
     partitioner.store_full_schema("test_tool", schema)
 
@@ -282,11 +252,11 @@ def test_get_token_reduction_estimate(partitioner):
                             "field2": {"type": "string", "description": "B" * 100},
                             "field3": {"type": "string", "description": "C" * 100},
                             "field4": {"type": "string", "description": "D" * 100},
-                        }
+                        },
                     }
-                }
-            }
-        }
+                },
+            },
+        },
     }
 
     estimate = partitioner.get_token_reduction_estimate(schema)
@@ -313,14 +283,12 @@ def test_partition_array_schema(partitioner):
                     "properties": {
                         "nested": {
                             "type": "object",
-                            "properties": {
-                                "deep": {"type": "string"}
-                            }
+                            "properties": {"deep": {"type": "string"}},
                         }
-                    }
-                }
+                    },
+                },
             }
-        }
+        },
     }
 
     result = partitioner.partition_schema(schema)
@@ -338,9 +306,9 @@ def test_partition_preserves_const(partitioner):
             "version": {
                 "type": "string",
                 "const": "1.3.0",
-                "description": "API version"
+                "description": "API version",
             }
-        }
+        },
     }
 
     result = partitioner.partition_schema(schema)
@@ -350,10 +318,7 @@ def test_partition_preserves_const(partitioner):
 
 def test_partition_empty_schema(partitioner):
     """Test partitioning empty schema"""
-    schema = {
-        "type": "object",
-        "properties": {}
-    }
+    schema = {"type": "object", "properties": {}}
 
     result = partitioner.partition_schema(schema)
 
@@ -376,12 +341,9 @@ def test_expand_schema_properties_path(partitioner):
         "properties": {
             "user": {
                 "type": "object",
-                "properties": {
-                    "name": {"type": "string"},
-                    "age": {"type": "number"}
-                }
+                "properties": {"name": {"type": "string"}, "age": {"type": "number"}},
             }
-        }
+        },
     }
 
     partitioner.store_full_schema("test_tool", schema)

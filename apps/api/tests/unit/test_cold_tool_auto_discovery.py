@@ -6,7 +6,6 @@ the gateway looks it up via tools_index, auto-enables its COLD server, loads the
 tools into cache, and executes directly — without needing airis-exec as a router.
 """
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -19,9 +18,14 @@ from app.core.mcp_config_loader import McpServerConfig, ServerMode
 # ── Helpers ──
 
 
-def _make_config(name: str, *, enabled: bool = True, mode=ServerMode.COLD,
-                 tools_index: list[dict] | None = None,
-                 policy_disabled: bool = False) -> McpServerConfig:
+def _make_config(
+    name: str,
+    *,
+    enabled: bool = True,
+    mode=ServerMode.COLD,
+    tools_index: list[dict] | None = None,
+    policy_disabled: bool = False,
+) -> McpServerConfig:
     return McpServerConfig(
         name=name,
         server_type="process",
@@ -46,12 +50,8 @@ def _wire_process_manager(pm: ProcessManager) -> None:
 
 
 def _make_client(pm: ProcessManager, dmcp: DynamicMCP, monkeypatch) -> TestClient:
-    monkeypatch.setattr(
-        "app.api.endpoints.mcp_proxy.get_process_manager", lambda: pm
-    )
-    monkeypatch.setattr(
-        "app.api.endpoints.mcp_proxy.get_dynamic_mcp", lambda: dmcp
-    )
+    monkeypatch.setattr("app.api.endpoints.mcp_proxy.get_process_manager", lambda: pm)
+    monkeypatch.setattr("app.api.endpoints.mcp_proxy.get_dynamic_mcp", lambda: dmcp)
 
     app = FastAPI()
     app.include_router(mcp_proxy.router, prefix="/mcp")
@@ -66,8 +66,12 @@ def test_get_server_for_tool_from_index_finds_cold_tool():
     pm = ProcessManager()
     pm._initialized = True
     pm._server_configs["stripe"] = _make_config(
-        "stripe", mode=ServerMode.COLD, enabled=False,
-        tools_index=[{"name": "create_customer", "description": "Create a Stripe customer"}],
+        "stripe",
+        mode=ServerMode.COLD,
+        enabled=False,
+        tools_index=[
+            {"name": "create_customer", "description": "Create a Stripe customer"}
+        ],
     )
     _wire_process_manager(pm)
 
@@ -104,7 +108,9 @@ def test_cold_tool_auto_discovered_and_executed(monkeypatch):
     pm = ProcessManager()
     pm._initialized = True
     pm._server_configs["stripe"] = _make_config(
-        "stripe", mode=ServerMode.COLD, enabled=False,
+        "stripe",
+        mode=ServerMode.COLD,
+        enabled=False,
         tools_index=[{"name": "create_customer", "description": "Create customer"}],
     )
     _wire_process_manager(pm)
@@ -117,9 +123,13 @@ def test_cold_tool_auto_discovered_and_executed(monkeypatch):
 
     async def fake_call_tool_on_server(server_name, tool_name, arguments):
         call_log.append(f"call:{server_name}:{tool_name}")
-        return {"result": {"content": [{"type": "text", "text": "ok"}], "isError": False}}
+        return {
+            "result": {"content": [{"type": "text", "text": "ok"}], "isError": False}
+        }
 
-    async def fake_load_tools_for_server(server_name, process_manager, force_enable=False):
+    async def fake_load_tools_for_server(
+        server_name, process_manager, force_enable=False
+    ):
         pm._tool_to_server["create_customer"] = "stripe"
 
     monkeypatch.setattr(pm, "enable_server", fake_enable_server)
@@ -152,7 +162,9 @@ def test_cold_tool_already_enabled_server_skips_enable(monkeypatch):
     pm = ProcessManager()
     pm._initialized = True
     pm._server_configs["stripe"] = _make_config(
-        "stripe", mode=ServerMode.COLD, enabled=True,
+        "stripe",
+        mode=ServerMode.COLD,
+        enabled=True,
         tools_index=[{"name": "create_customer", "description": "Create customer"}],
     )
     _wire_process_manager(pm)
@@ -164,9 +176,13 @@ def test_cold_tool_already_enabled_server_skips_enable(monkeypatch):
 
     async def fake_call_tool_on_server(server_name, tool_name, arguments):
         call_log.append(f"call:{server_name}:{tool_name}")
-        return {"result": {"content": [{"type": "text", "text": "ok"}], "isError": False}}
+        return {
+            "result": {"content": [{"type": "text", "text": "ok"}], "isError": False}
+        }
 
-    async def fake_load_tools_for_server(server_name, process_manager, force_enable=False):
+    async def fake_load_tools_for_server(
+        server_name, process_manager, force_enable=False
+    ):
         pm._tool_to_server["create_customer"] = "stripe"
 
     monkeypatch.setattr(pm, "enable_server", fake_enable_server)
@@ -197,7 +213,9 @@ def test_hot_tool_in_tool_to_server_uses_fast_path(monkeypatch):
     pm._initialized = True
     pm._tool_to_server["gateway_health"] = "gateway-control"
     pm._server_configs["gateway-control"] = _make_config(
-        "gateway-control", mode=ServerMode.HOT, enabled=True,
+        "gateway-control",
+        mode=ServerMode.HOT,
+        enabled=True,
     )
     _wire_process_manager(pm)
 
@@ -244,6 +262,7 @@ def test_unknown_tool_falls_through_to_gateway(monkeypatch):
     async def fake_send_via_stream_bridge(*args, **kwargs):
         fallthrough_called.append(True)
         from fastapi.responses import JSONResponse
+
         return JSONResponse(
             status_code=503,
             content={
@@ -278,7 +297,10 @@ def test_policy_disabled_server_refuses_auto_enable(monkeypatch):
     pm = ProcessManager()
     pm._initialized = True
     pm._server_configs["supabase"] = _make_config(
-        "supabase", mode=ServerMode.COLD, enabled=False, policy_disabled=True,
+        "supabase",
+        mode=ServerMode.COLD,
+        enabled=False,
+        policy_disabled=True,
         tools_index=[{"name": "query", "description": "Execute a SQL query"}],
     )
     _wire_process_manager(pm)
@@ -290,7 +312,9 @@ def test_policy_disabled_server_refuses_auto_enable(monkeypatch):
 
     async def fake_call_tool_on_server(server_name, tool_name, arguments):
         call_log.append(f"call:{server_name}:{tool_name}")
-        return {"result": {"content": [{"type": "text", "text": "should not be reached"}]}}
+        return {
+            "result": {"content": [{"type": "text", "text": "should not be reached"}]}
+        }
 
     monkeypatch.setattr(pm, "enable_server", fake_enable_server)
     monkeypatch.setattr(pm, "call_tool_on_server", fake_call_tool_on_server)
@@ -322,7 +346,9 @@ def test_auto_discovery_error_handling(monkeypatch):
     pm = ProcessManager()
     pm._initialized = True
     pm._server_configs["stripe"] = _make_config(
-        "stripe", mode=ServerMode.COLD, enabled=False,
+        "stripe",
+        mode=ServerMode.COLD,
+        enabled=False,
         tools_index=[{"name": "create_customer", "description": "Create customer"}],
     )
     _wire_process_manager(pm)
@@ -333,7 +359,9 @@ def test_auto_discovery_error_handling(monkeypatch):
     async def fake_call_tool_on_server(server_name, tool_name, arguments):
         return {"error": {"code": -32603, "message": "Internal server error"}}
 
-    async def fake_load_tools_for_server(server_name, process_manager, force_enable=False):
+    async def fake_load_tools_for_server(
+        server_name, process_manager, force_enable=False
+    ):
         pm._tool_to_server["create_customer"] = "stripe"
 
     monkeypatch.setattr(pm, "enable_server", fake_enable_server)

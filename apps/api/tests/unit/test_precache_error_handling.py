@@ -14,6 +14,7 @@ Both checks are static — we cannot spin up a real Docker Gateway in unit
 tests — but they are expressed over the parsed AST of main.py, so any future
 edit that reintroduces the bugs will fail at CI time.
 """
+
 from __future__ import annotations
 
 import ast
@@ -30,9 +31,14 @@ def _load_main_ast() -> ast.Module:
     return ast.parse(MAIN_PY.read_text(encoding="utf-8"), filename=str(MAIN_PY))
 
 
-def _find_function(tree: ast.Module, name: str) -> ast.AsyncFunctionDef | ast.FunctionDef:
+def _find_function(
+    tree: ast.Module, name: str
+) -> ast.AsyncFunctionDef | ast.FunctionDef:
     for node in ast.walk(tree):
-        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)) and node.name == name:
+        if (
+            isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef))
+            and node.name == name
+        ):
             return node
     pytest.fail(f"function {name!r} not found in {MAIN_PY}")
 
@@ -121,9 +127,7 @@ def test_precache_logs_jsondecodeerror_instead_of_swallowing():
     precache = _find_function(tree, "_precache_docker_gateway_tools")
 
     handlers = [
-        node
-        for node in ast.walk(precache)
-        if isinstance(node, ast.ExceptHandler)
+        node for node in ast.walk(precache) if isinstance(node, ast.ExceptHandler)
     ]
 
     json_handlers = []

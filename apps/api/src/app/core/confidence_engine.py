@@ -263,19 +263,13 @@ class ConfidenceChecker:
         questions: List[str] = []
 
         if input.unclear_requirements:
-            questions.append(
-                "What are the specific requirements for this feature?"
-            )
+            questions.append("What are the specific requirements for this feature?")
 
         if input.no_precedent:
-            questions.append(
-                "Are there any similar implementations we can reference?"
-            )
+            questions.append("Are there any similar implementations we can reference?")
 
         if input.missing_domain_knowledge:
-            questions.append(
-                "What domain-specific constraints should I consider?"
-            )
+            questions.append("What domain-specific constraints should I consider?")
 
         # If no specific blockers but still low confidence, add generic question
         if not questions:
@@ -300,7 +294,9 @@ class ConfidenceChecker:
         elif score >= self.MEDIUM_THRESHOLD:
             return "Medium confidence (70-89%) - Present alternatives, recommend best"
         elif score >= self.LOW_THRESHOLD:
-            return "Low confidence (50-69%) - Ask clarifying questions before proceeding"
+            return (
+                "Low confidence (50-69%) - Ask clarifying questions before proceeding"
+            )
         else:
             return "Very low confidence (<50%) - STOP and investigate further"
 

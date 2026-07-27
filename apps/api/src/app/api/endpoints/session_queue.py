@@ -18,6 +18,7 @@ import these primitives without pulling in the full SSE/bridge/handler
 graph — and lets us test the lifecycle in isolation (see
 ``tests/unit/test_session_queue.py``).
 """
+
 from __future__ import annotations
 
 import asyncio
