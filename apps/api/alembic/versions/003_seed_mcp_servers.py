@@ -245,7 +245,7 @@ def upgrade() -> None:
             "command": "npx",
             "args": ["-y", "@modelcontextprotocol/server-slack"],
             "env": {
-                "SLACK_BOT_TOKEN": "${SLACK_BOT_TOKEN}",
+                "SLACK_BOT_TOKEN": "${SLACK_BOT_TOKEN}",  # nosec B105
                 "SLACK_TEAM_ID": "${SLACK_TEAM_ID}",
             },
             "description": "Slack messaging and collaboration",
@@ -256,7 +256,7 @@ def upgrade() -> None:
             "enabled": False,
             "command": "npx",
             "args": ["-y", "@hapins/figma-mcp"],
-            "env": {"FIGMA_ACCESS_TOKEN": "${FIGMA_ACCESS_TOKEN}"},
+            "env": {"FIGMA_ACCESS_TOKEN": "${FIGMA_ACCESS_TOKEN}"},  # nosec B105
             "description": "Figma design integration",
             "category": "Productivity & Collaboration",
         },
@@ -291,7 +291,7 @@ def upgrade() -> None:
             "enabled": False,
             "command": "npx",
             "args": ["-y", "@modelcontextprotocol/server-github"],
-            "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"},
+            "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"},  # nosec B105
             "description": "GitHub repository operations",
             "category": "Development Tools",
         },
@@ -310,7 +310,7 @@ def upgrade() -> None:
             "command": "npx",
             "args": ["-y", "@modelcontextprotocol/server-sentry"],
             "env": {
-                "SENTRY_AUTH_TOKEN": "${SENTRY_AUTH_TOKEN}",
+                "SENTRY_AUTH_TOKEN": "${SENTRY_AUTH_TOKEN}",  # nosec B105
                 "SENTRY_ORG": "${SENTRY_ORG}",
             },
             "description": "Sentry error tracking and monitoring",

@@ -10,16 +10,17 @@ class APIKeyValidator:
     # API Key patterns
     PATTERNS = {
         "TAVILY_API_KEY": r"^tvly[-_][A-Za-z0-9_-]{16,}$",
-        "STRIPE_SECRET_KEY": r"^sk_(test|live)_[A-Za-z0-9]{24,}$",
-        "FIGMA_ACCESS_TOKEN": r"^figd_[A-Za-z0-9_-]{40,}$",
-        "GITHUB_PERSONAL_ACCESS_TOKEN": r"^gh[ps]_[A-Za-z0-9]{36,}$",
-        "OPENAI_API_KEY": r"^sk-[A-Za-z0-9]{48,}$",
-        "ANTHROPIC_API_KEY": r"^sk-ant-[A-Za-z0-9\-_]{95,}$",
-        "SUPABASE_URL": r"^https://[a-z0-9]+\.supabase\.co$",
-        "SUPABASE_ANON_KEY": r"^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$",  # JWT
-        "PG_DSN": r"^postgres(?:ql)?://[^\s]+$",
-        "POSTGREST_URL": r"^https?://[^\s]+$",
-        "POSTGREST_JWT": r"^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$",  # JWT
+        # These are format validators, not embedded credentials.
+        "STRIPE_SECRET_KEY": r"^sk_(test|live)_[A-Za-z0-9]{24,}$",  # nosec B105
+        "FIGMA_ACCESS_TOKEN": r"^figd_[A-Za-z0-9_-]{40,}$",  # nosec B105
+        "GITHUB_PERSONAL_ACCESS_TOKEN": r"^gh[ps]_[A-Za-z0-9]{36,}$",  # nosec B105
+        "OPENAI_API_KEY": r"^sk-[A-Za-z0-9]{48,}$",  # nosec B105
+        "ANTHROPIC_API_KEY": r"^sk-ant-[A-Za-z0-9\-_]{95,}$",  # nosec B105
+        "SUPABASE_URL": r"^https://[a-z0-9]+\.supabase\.co$",  # nosec B105
+        "SUPABASE_ANON_KEY": r"^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$",  # nosec B105
+        "PG_DSN": r"^postgres(?:ql)?://[^\s]+$",  # nosec B105
+        "POSTGREST_URL": r"^https?://[^\s]+$",  # nosec B105
+        "POSTGREST_JWT": r"^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$",  # nosec B105
         "READ_ONLY": r"^(true|false)$",
         "FEATURES": r"^[a-z][a-z\-]*(,[a-z][a-z\-]*)*$",
     }

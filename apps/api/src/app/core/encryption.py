@@ -115,7 +115,8 @@ class EncryptionManager:
                     "Set ENCRYPTION_MASTER_KEY in your environment to override the persisted key"
                 )
 
-        assert isinstance(master_key, str)
+        if not isinstance(master_key, str):
+            raise TypeError("master_key must be a string")
         self.master_key = master_key
         self._fernet = self._create_fernet(master_key)
 
