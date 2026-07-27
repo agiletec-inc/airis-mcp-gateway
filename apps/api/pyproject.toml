@@ -30,7 +30,7 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [dependency-groups]
-dev = ["ruff>=0.14,<1.0"]
+dev = ["ruff>=0.14,<0.16"]
 
 [tool.ruff]
 target-version = "py312"
