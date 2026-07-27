@@ -61,7 +61,7 @@ requires-dist = [
 provides-extras = ["test"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "ruff", specifier = ">=0.14,<1.0" }]
+dev = [{ name = "ruff", specifier = ">=0.14,<0.16" }]
 
 [[package]]
 name = "annotated-doc"

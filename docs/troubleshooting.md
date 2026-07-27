@@ -46,10 +46,10 @@ Codex should connect to the Streamable HTTP endpoint, not the SSE endpoint.
 
 ```bash
 # Re-sync Codex registration with the AIRIS global registry
-airis-gateway init
+airis-mcp-gateway init
 
 # Verify there is no repo-local drift left behind
-airis-gateway doctor ~/github
+airis-mcp-gateway doctor ~/github
 ```
 
 If you register `http://localhost:9400/sse` in Codex, Codex can fail during the `initialize` request because `/sse` is for SSE clients, while Codex expects the HTTP MCP endpoint at `/mcp`.
@@ -59,9 +59,9 @@ If you register `http://localhost:9400/sse` in Codex, Codex can fail during the 
 AIRIS treats repository-local `mcp.json` as migration input only. Once imported, it should be backed up and removed.
 
 ```bash
-airis-gateway import ~/github --apply
-airis-gateway clean ~/github
-airis-gateway doctor ~/github
+airis-mcp-gateway import ~/github --apply
+airis-mcp-gateway clean ~/github
+airis-mcp-gateway doctor ~/github
 ```
 
 ### "Server not found"

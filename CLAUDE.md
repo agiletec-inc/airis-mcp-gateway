@@ -4,21 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-FastAPI-based MCP multiplexer that exposes many MCP servers (process + Docker Gateway) through two transports:
+FastAPI-based local MCP endpoint for one on-demand process server:
 - **Streamable HTTP** at `http://localhost:9400/mcp/` — for Codex and Claude Code (recommended)
 - **SSE** at `http://localhost:9400/sse` — for Gemini CLI, Cursor, Windsurf
 
-Dynamic MCP mode (default) exposes 4 meta-tools (`airis-find`, `airis-schema`, `airis-workflow`, `airis-exec`) plus every discoverable COLD server's indexed tools with a lazy stub schema (`{"type":"object"}`), instead of 60+ fully-schema'd raw tools. A client that only reads `tools/list` can call a COLD tool by name directly — the server auto-discovers and auto-enables it on first call, one hop, no meta-tool round trip. `airis-find`/`airis-schema` remain available as an optional discovery aid (server browsing, full schemas); `airis-exec` remains as the compat router for older clients. Set `COLD_TOOLS_IN_LIST=false` to restore the old meta-tool-only listing for context-constrained clients.
+Do not register this endpoint as a global MCP server. The `airis-mcp-gateway`
+Codex skill creates a short-lived session only when Context7 is needed for
+exact current library or framework documentation.
 
-Source of truth for server config: `mcp-config.json` (runtime) and `workflows/*.yaml`. Workflows split by `compile_to`: `mcp_instructions` ones are baked into the MCP `initialize` instructions by `apps/api/src/app/core/behavior_compiler.py`; `airis_workflow` ones are served on-demand by the `airis-workflow` meta-tool keyed by `topic`.
+Source of truth for the retained server: `mcp-config.json` (runtime), with
+`mcp-config.json.example` as its tracked mirror. The only retained server is
+the COLD `context7` process server.
 
 ## Repo layout
 
 - `apps/api/` — Python 3.12 + FastAPI gateway (uv-managed). The actual MCP multiplexer.
-- `apps/gateway-control/` — TypeScript MCP server exposing gateway control tools to agents.
-- `apps/airis-commands/` (`@airis/commands`) — TypeScript MCP server bundling slash-command tooling.
-- `mcp-config.json` — runtime server registry (HOT/COLD, tools index, behavior).
-- `workflows/*.yaml` — behavior recipes. `compile_to: mcp_instructions` → baked into `initialize`; `compile_to: airis_workflow` (named `airis-workflow-<topic>.yaml`) → served on-demand via the `airis-workflow` meta-tool.
+- `mcp-config.json` — local runtime registry for Context7.
 - `docs/architecture.md` — current + target architecture (the old root `ARCHITECTURE.md` was moved here).
 - Native project files are hand-maintained; do not add generated-file markers to them.
 
@@ -107,10 +108,10 @@ What NOT to route through the Gateway:
 
 1. **Global registration via CLI only.** Register once as a user-scoped MCP server (Streamable HTTP):
    ```bash
-   claude mcp add --transport http --scope user airis-gateway http://localhost:9400/mcp/
+   claude mcp add --transport http --scope user airis-mcp-gateway http://localhost:9400/mcp/
    ```
    Registering as a user-scoped MCP server is the only install method — there is no separate plugin. Codex uses Streamable HTTP at `http://localhost:9400/mcp/`. Claude Desktop is intentionally unmanaged.
-2. **All MCP servers go through the gateway.** Users do not register individual servers. Add new ones to `mcp-config.json`. Repo-local `mcp.json` is forbidden after migration — use `airis-gateway import <dir> --apply` + `airis-gateway clean <dir>` to migrate.
+2. **All MCP servers go through the gateway.** Users do not register individual servers. Add new ones to `mcp-config.json`. Repo-local `mcp.json` is forbidden after migration — use `airis-mcp-gateway import <dir> --apply` + `airis-mcp-gateway clean <dir>` to migrate.
 3. **Auto-start on boot.** `task autostart:install` creates a macOS LaunchAgent or Linux systemd user unit. `task autostart:status` to verify.
 
 ## Debugging

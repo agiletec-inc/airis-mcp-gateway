@@ -120,8 +120,8 @@ install() {
 
     # Step 6: Initialize AIRIS registry and managed client config
     local registry_initialized=false
-    if [ -x "$DIR/scripts/airis-gateway" ]; then
-        if "$DIR/scripts/airis-gateway" init "$DIR" --apply >/dev/null 2>&1; then
+    if [ -x "$DIR/scripts/airis-mcp-gateway" ]; then
+        if "$DIR/scripts/airis-mcp-gateway" init "$DIR" --apply >/dev/null 2>&1; then
             registry_initialized=true
         fi
     fi
@@ -171,7 +171,7 @@ install() {
         echo "    Path: ~/.airis/mcp/registry.json"
     else
         echo "  Initialize AIRIS registry:"
-        echo "    $DIR/scripts/airis-gateway init"
+        echo "    $DIR/scripts/airis-mcp-gateway init"
     fi
     echo ""
     if $claude_registered; then
@@ -183,10 +183,10 @@ install() {
     echo "  Claude Desktop: unmanaged (AIRIS does not modify its MCP config automatically)"
     echo ""
     echo "  Commands:"
-    echo "    $DIR/scripts/airis-gateway init ~/github         # Initialize global registry"
-    echo "    $DIR/scripts/airis-gateway import ~/github --apply"
-    echo "    $DIR/scripts/airis-gateway clean ~/github"
-    echo "    $DIR/scripts/airis-gateway doctor ~/github"
+    echo "    $DIR/scripts/airis-mcp-gateway init ~/github         # Initialize global registry"
+    echo "    $DIR/scripts/airis-mcp-gateway import ~/github --apply"
+    echo "    $DIR/scripts/airis-mcp-gateway clean ~/github"
+    echo "    $DIR/scripts/airis-mcp-gateway doctor ~/github"
     echo "    cd $DIR && docker compose logs -f    # View logs"
     echo "    cd $DIR && docker compose down       # Stop"
     echo "    cd $DIR && docker compose up -d      # Start"

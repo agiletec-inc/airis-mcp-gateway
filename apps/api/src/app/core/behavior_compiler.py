@@ -27,30 +27,14 @@ _BASE_INSTRUCTIONS = (
 )
 
 _META_TOOLS_SECTION = (
-    "## Additional Meta-Tools\n"
-    "- 'airis-workflow': Get the safe step-by-step procedure for a task type. "
-    "Call it with the matching topic (database / debugging / implementation / research) "
-    "BEFORE querying or modifying a database, debugging an issue involving external "
-    "services, implementing with an unfamiliar library/API, or researching an API.\n"
-    "- 'airis-confidence': Pre-implementation confidence check. Use before starting complex tasks.\n"
-    "- 'airis-repo-index': Generate repository structure overview for unfamiliar codebases.\n"
-    "- 'airis-suggest': Get tool recommendations from natural language intent.\n\n"
-    "Use airis-find to discover tools by keyword or server name. "
-    "Use airis-schema to inspect a tool's required arguments."
+    "## Available Service\n"
+    "Use context7 only when exact current library or framework documentation is needed. "
+    "Resolve the library ID, then query its documentation."
 )
 
 _TOOL_ROUTING_GUIDE = (
-    "## Tool Routing Guide\n"
-    "Call MCP tools directly by name. Use host tools for everything else.\n\n"
-    "Gateway tools: library docs → context7 | web search → tavily | "
-    "database → supabase | payments → stripe | DNS/workers → cloudflare | design files → figma\n\n"
-    "Host tools (NOT Gateway): browser automation → playwright-cli skill (needs host Chrome) | "
-    "file generation (docx/xlsx/pdf) → claude-api plugin | "
-    "TDD/debugging/planning → superpowers plugin | "
-    "git operations → gh CLI or native git | "
-    "simple code read/edit → native Read/Edit/Grep tools\n\n"
-    "Rules: docs before code | API/service → Gateway tools | browser testing → Playwright CLI first | "
-    "host-dependent → plugin/skill/CLI | simple file ops → native tools."
+    "Use host tools for all work except exact current library or framework "
+    "documentation, which may use context7."
 )
 
 

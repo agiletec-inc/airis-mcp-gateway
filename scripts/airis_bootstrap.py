@@ -502,8 +502,8 @@ def cmd_doctor(paths: Paths) -> int:
         print(f"- registry not initialized: {paths.registry_path}")
         print("")
         print("Fix:")
-        print(f"  airis-gateway init {paths.scan_root}")
-        print(f"  airis-gateway init {paths.scan_root} --apply")
+        print(f"  airis-mcp-gateway init {paths.scan_root}")
+        print(f"  airis-mcp-gateway init {paths.scan_root} --apply")
         return 1
 
     registry, _ = load_registry(paths)
@@ -563,7 +563,7 @@ def cmd_doctor(paths: Paths) -> int:
             print(f"- {issue}")
         print("")
         print("Fix:")
-        print(f"  airis-gateway init {paths.scan_root} --apply")
+        print(f"  airis-mcp-gateway init {paths.scan_root} --apply")
         if notes:
             print("")
             print("Notes:")

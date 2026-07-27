@@ -6,17 +6,17 @@ AIRIS keeps a single user-level MCP registry at `~/.airis/mcp/registry.json`.
 
 - Repository-local `mcp.json` files are forbidden after migration.
 - Import existing `mcp.json` files into the global registry, then back them up and remove them.
-- `airis-gateway doctor` fails if repo-local `mcp.json` files still exist.
-- `airis-gateway init --apply` deploys AIRIS best-practice assets to Codex, Claude Code, and Gemini.
+- `airis-mcp-gateway doctor` fails if repo-local `mcp.json` files still exist.
+- `airis-mcp-gateway init --apply` deploys AIRIS best-practice assets to Codex, Claude Code, and Gemini.
 - Codex and Gemini can be managed automatically by AIRIS.
 - Claude Desktop is intentionally left unmanaged and is never modified automatically.
 
 Recommended workflow:
 
 ```bash
-airis-gateway init ~/github
-airis-gateway init ~/github --apply
-airis-gateway doctor ~/github
+airis-mcp-gateway init ~/github
+airis-mcp-gateway init ~/github --apply
+airis-mcp-gateway doctor ~/github
 ```
 
 ## Environment Variables

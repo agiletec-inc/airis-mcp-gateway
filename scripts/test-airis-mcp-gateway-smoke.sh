@@ -2,9 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CLI="$ROOT_DIR/scripts/airis-gateway"
+CLI="$ROOT_DIR/scripts/airis-mcp-gateway"
 
-tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/airis-gateway-smoke.XXXXXX")"
+tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/airis-mcp-gateway-smoke.XXXXXX")"
 trap 'rm -rf "$tmpdir"' EXIT
 
 assert_contains() {
@@ -112,10 +112,10 @@ TOML
     fi
 
     assert_contains "$doctor_output" "Codex config points to stale endpoint"
-    assert_contains "$doctor_output" "airis-gateway init"
+    assert_contains "$doctor_output" "airis-mcp-gateway init"
 }
 
 run_global_registry_flow
 run_codex_drift_detection
 
-echo "airis-gateway smoke tests passed"
+echo "airis-mcp-gateway smoke tests passed"

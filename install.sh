@@ -4,7 +4,7 @@ set -euo pipefail
 # AIRIS MCP Gateway - One-Command Installer
 # Usage:
 #   Install:   curl -fsSL https://raw.githubusercontent.com/agiletec-inc/airis-mcp-gateway/main/install.sh | bash
-#   Uninstall: airis-gateway --uninstall
+#   Uninstall: airis-mcp-gateway --uninstall
 #
 # No git required. Uses pre-built Docker images from GHCR.
 
@@ -116,10 +116,10 @@ install() {
     # Step 4: Install CLI + Initialize client configuration
     log_step "4/4 Setting up CLI and client configuration..."
 
-    # Install airis-gateway CLI
+    # Install airis-mcp-gateway CLI
     mkdir -p "$BIN_DIR"
-    download "$BASE_URL/scripts/airis-gateway" "$BIN_DIR/airis-gateway"
-    chmod +x "$BIN_DIR/airis-gateway"
+    download "$BASE_URL/scripts/airis-mcp-gateway" "$BIN_DIR/airis-mcp-gateway"
+    chmod +x "$BIN_DIR/airis-mcp-gateway"
 
     local path_ok=true
     if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
@@ -128,7 +128,7 @@ install() {
 
     # Initialize AIRIS registry and managed client config
     local registry_initialized=false
-    if "$BIN_DIR/airis-gateway" init "$DIR" --apply >/dev/null 2>&1; then
+    if "$BIN_DIR/airis-mcp-gateway" init "$DIR" --apply >/dev/null 2>&1; then
         registry_initialized=true
     fi
 
@@ -136,10 +136,10 @@ install() {
     local claude_registered=false
     if command -v claude >/dev/null 2>&1; then
         # Remove old registrations (current and legacy names)
-        claude mcp remove airis-gateway --scope user 2>/dev/null || true
+        claude mcp remove airis-mcp-gateway --scope user 2>/dev/null || true
         claude mcp remove airis-mcp-gateway --scope user 2>/dev/null || true
 
-        if claude mcp add --scope user --transport http airis-gateway http://localhost:9400/mcp/ 2>/dev/null; then
+        if claude mcp add --scope user --transport http airis-mcp-gateway http://localhost:9400/mcp/ 2>/dev/null; then
             claude_registered=true
         fi
     fi
@@ -165,7 +165,7 @@ install() {
     echo "    Config:  $DIR/mcp-config.json"
     echo "    Compose: $DIR/compose.yaml"
     echo ""
-    echo "  CLI: airis-gateway"
+    echo "  CLI: airis-mcp-gateway"
     if ! $path_ok; then
         echo -e "    ${YELLOW}Add to PATH:${NC} export PATH=\"$BIN_DIR:\$PATH\""
     fi
@@ -176,7 +176,7 @@ install() {
         echo "    Path: ~/.airis/mcp/registry.json"
     else
         echo "  Initialize AIRIS registry:"
-        echo "    airis-gateway init"
+        echo "    airis-mcp-gateway init"
     fi
     echo ""
 
@@ -184,7 +184,7 @@ install() {
         echo -e "  Claude Code: ${GREEN}Registered (global)${NC}"
     else
         echo "  Register with Claude Code:"
-        echo "    claude mcp add --scope user --transport http airis-gateway http://localhost:9400/mcp/"
+        echo "    claude mcp add --scope user --transport http airis-mcp-gateway http://localhost:9400/mcp/"
     fi
     echo "  Claude Desktop: unmanaged (AIRIS does not modify its MCP config automatically)"
     echo ""
@@ -192,9 +192,9 @@ install() {
     # Next steps
     echo -e "  ${BOLD}Next steps:${NC}"
     echo "    1. Import and remove any repo-local mcp.json files:"
-    echo "       airis-gateway import ~/github --apply"
-    echo "       airis-gateway clean ~/github"
-    echo "       airis-gateway doctor ~/github"
+    echo "       airis-mcp-gateway import ~/github --apply"
+    echo "       airis-mcp-gateway clean ~/github"
+    echo "       airis-mcp-gateway doctor ~/github"
     echo "    2. Open Codex or Claude Code"
     echo "    3. Install superpowers plugin for TDD/debugging/planning:"
     echo "       /plugin install superpowers"
@@ -202,16 +202,16 @@ install() {
     echo "       playwright-cli install --skills"
     echo ""
     echo "  Commands:"
-    echo "    airis-gateway up       # Start"
-    echo "    airis-gateway down     # Stop"
-    echo "    airis-gateway logs -f  # View logs"
-    echo "    airis-gateway status   # Check status"
-    echo "    airis-gateway servers  # List MCP servers"
-    echo "    airis-gateway init     # Initialize global registry"
-    echo "    airis-gateway doctor   # Detect repo-local mcp.json drift"
+    echo "    airis-mcp-gateway up       # Start"
+    echo "    airis-mcp-gateway down     # Stop"
+    echo "    airis-mcp-gateway logs -f  # View logs"
+    echo "    airis-mcp-gateway status   # Check status"
+    echo "    airis-mcp-gateway servers  # List MCP servers"
+    echo "    airis-mcp-gateway init     # Initialize global registry"
+    echo "    airis-mcp-gateway doctor   # Detect repo-local mcp.json drift"
     echo ""
     echo "  Uninstall:"
-    echo "    airis-gateway --uninstall"
+    echo "    airis-mcp-gateway --uninstall"
     echo ""
 }
 
@@ -225,7 +225,7 @@ uninstall() {
     # Unregister from Claude Code
     if command -v claude >/dev/null 2>&1; then
         log_step "Unregistering from Claude Code..."
-        claude mcp remove airis-gateway --scope user 2>/dev/null || true
+        claude mcp remove airis-mcp-gateway --scope user 2>/dev/null || true
         claude mcp remove airis-mcp-gateway --scope user 2>/dev/null || true
     fi
 
@@ -244,9 +244,9 @@ uninstall() {
     fi
 
     # Remove CLI
-    if [ -f "$BIN_DIR/airis-gateway" ]; then
-        rm -f "$BIN_DIR/airis-gateway"
-        log_info "Removed $BIN_DIR/airis-gateway"
+    if [ -f "$BIN_DIR/airis-mcp-gateway" ]; then
+        rm -f "$BIN_DIR/airis-mcp-gateway"
+        log_info "Removed $BIN_DIR/airis-mcp-gateway"
     fi
 
     echo ""

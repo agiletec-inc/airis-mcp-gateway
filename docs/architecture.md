@@ -37,6 +37,26 @@ Each repository has ONE responsibility and produces ONE OCI image.
 - Task-to-tool-chain routing (`airis-route`)
 - Prometheus metrics
 
+### Provider-agent boundary
+
+The gateway is an MCP capability and transport layer, not a provider-agent
+runtime. Codex CLI and Claude Code may expose local MCP servers such as
+`codex mcp-server` or `claude mcp serve`, but those processes must stay on the
+host where the user's provider authentication is configured. A separate local
+provider bridge may connect them to the Docker gateway over a local-only
+transport.
+
+The gateway must not:
+
+- mount provider credential directories into its container;
+- accept provider access tokens through MCP arguments or tool results;
+- log provider subprocess stdout/stderr without redaction; or
+- turn provider agent sessions into entries in `mcp-config.json`.
+
+The bridge may pass task identifiers, bounded instructions, artifact references,
+status, and quota metadata. Provider authentication remains owned by the local
+CLI process.
+
 ### This repository does NOT own
 
 - **Orchestration** — PDCA cycles, multi-step workflows
@@ -112,6 +132,7 @@ airis-mcp-gateway (port 9400)
     +-- MCP proxy --> Docker MCP Gateway --> mindbase, time, etc. (COLD, direct tools/list exposure)
     |
     +-- Process mgmt --> context7, stripe, playwright, etc.
+    +-- Local provider bridge (optional) --> host Codex / Claude Code processes
 ```
 
 ### Schema partitioning

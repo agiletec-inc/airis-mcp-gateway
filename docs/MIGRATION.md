@@ -104,10 +104,10 @@ Repository-local `mcp.json` files should be treated as migration input only, not
 Recommended steps:
 
 ```bash
-airis-gateway init ~/github
-airis-gateway import ~/github --apply
-airis-gateway clean ~/github
-airis-gateway doctor ~/github
+airis-mcp-gateway init ~/github
+airis-mcp-gateway import ~/github --apply
+airis-mcp-gateway clean ~/github
+airis-mcp-gateway doctor ~/github
 ```
 
 Notes:
