@@ -1,7 +1,8 @@
 # AIRIS MCP Gateway
 
 必要時だけ起動するlocal MCP endpoint。現行の保持対象はContext7 process serverのみ。runtime registryは
-`mcp-config.json`、tracked mirrorは`mcp-config.json.example`。通常のfile/Git/web/browser操作へ使わない。
+install時のregistry templateは`config/mcp-config.template.json`、local runtimeは`mcp-config.json`。
+`mcp-config.json.example`は空の最小例でserver一覧の正本ではない。通常のfile/Git/web/browser操作へ使わない。
 
 ## 推測できない境界
 
