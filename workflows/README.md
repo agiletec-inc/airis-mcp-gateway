@@ -1,44 +1,42 @@
-# Workflow Recipes
+# Workflow recipes
 
-LLM に MCP ツールの安全な使い方を指令するワークフローレシピ。`workflow_loader.py` が読み込み、`compile_to` で配信先が決まる:
+MCPツールの使い方をLLMへ渡すレシピ。実行契約は
+`apps/api/src/app/core/workflow_loader.py` と `behavior_compiler.py`、回帰契約は
+`apps/api/tests/unit/test_workflow_loader.py` と `test_airis_workflow.py` が所有する。
 
-- `compile_to: mcp_instructions` — `behavior_compiler.py` が MCP initialize response の instructions フィールドに注入(常時ロード)。
-- `compile_to: airis_workflow` — initialize には dump されず、`airis-workflow` メタツールが `topic` 指定で on-demand に返す。
+## 配信先
 
-## ワークフロー追加手順
+- `mcp_instructions`: Gateway起動時にMCP `initialize` の `instructions` へ常時注入する。
+- `airis_workflow`: 常時注入せず、`airis-workflow`メタツールが`topic`指定で返す。
 
-1. 既存の YAML をコピーしてテンプレートにする
-2. 全フィールドを記入（スキーマは下記参照）
-3. `docker compose restart api` でリスタート → ログにバリデーションエラーがないか確認
-4. Claude Code で実際にタスクを投げて、ワークフローが発火するか確認
-5. PR を作成
+常時注入は全リクエストのコンテキストを消費する。安全上常時必要な短い指令だけに使い、手順は
+`airis_workflow`へ置く。
 
-## YAML スキーマ
+## YAML契約
 
 ```yaml
-name: kebab-case-name              # 一意な識別子
-compile_to: mcp_instructions       # mcp_instructions（initialize に注入）| airis_workflow（airis-workflow ツールで on-demand 配信）
-priority: high                     # high | medium | low
-servers:                           # カバーするサーバー名リスト（behavior 重複排除用、任意）
-  - server-name
-topic: database                    # airis_workflow の場合のトピックキー（airis-workflow ツールの enum と一致）
-text: |                            # 確定テキスト（verbatim 出力）
-  ### Section Title
-  WHEN condition:
-  1. FIRST: Call tool:name
-  2. THEN: Next step
-  NEVER skip this.
+name: implement-feature
+compile_to: airis_workflow
+priority: high
+servers:
+  - context7
+topic: implementation
+text: |
+  必要時に返す指令本文
 ```
 
-## 指令文の書き方
+- `name`: 一意なkebab-case。
+- `compile_to`: `mcp_instructions`または`airis_workflow`。
+- `priority`: `high`、`medium`、`low`。出力順だけを決め、件数やtokenを制限しない。
+- `text`: そのまま配信する本文。テンプレート展開はしない。
+- `servers`: このレシピが所有するserver。重複するbehavior行を除外する。
+- `topic`: `airis_workflow`で取得する場合のキー。
 
-- **MUST, FIRST, THEN, NEVER** を使う（提案ではなく指令）
-- 理由を添える（例: `Your training data is outdated.`）
-- `text` は英語で書く（LLM のシステムプロンプトに注入されるため）
-- `text` はそのまま出力される（テンプレート処理なし）
+不正なYAMLはログを出して除外される。サイレントに有効化されたと仮定せず、追加・変更時は次を実行する。
 
-## Priority
+```bash
+cd apps/api
+uv run pytest tests/unit/test_workflow_loader.py tests/unit/test_airis_workflow.py -q
+```
 
-- `high`: 必ず instructions に含まれる
-- `medium`: 通常含まれるが、将来のバジェット制御で除外される可能性
-- `low`: 優先度が低い
+挙動確認が必要ならAPIを再起動し、MCP `initialize`応答または`airis-workflow`の実レスポンスを確認する。
