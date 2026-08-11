@@ -303,12 +303,12 @@ async def sse_event_generator(client_id: str) -> AsyncIterator[str]:
     except asyncio.CancelledError:
         logger.info(f"Client {client_id} stream cancelled")
         raise
-    except Exception as e:
-        logger.error(f"Client {client_id} stream error: {e}")
+    except Exception:
+        logger.exception("Client %s stream error", client_id)
         yield format_sse_event(
             "error",
             {
-                "message": str(e),
+                "message": "Tool discovery stream failed",
                 "timestamp": int(time.time()),
             },
         )

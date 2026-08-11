@@ -9,8 +9,10 @@ Key priority: API-Key header > client IP
 """
 
 import hashlib
+import hmac
 import ipaddress
 import os
+import secrets
 import time
 from collections import defaultdict
 from dataclasses import dataclass
@@ -24,6 +26,10 @@ from ..core.logging import get_logger
 
 
 logger = get_logger(__name__)
+
+# Keep log identifiers stable for the lifetime of this process without making
+# low-entropy credentials vulnerable to offline guessing from log output.
+_LOG_KEY_HMAC_SECRET = secrets.token_bytes(32)
 
 
 # Configuration via environment variables
@@ -170,7 +176,11 @@ def _hash_key(key: str) -> str:
 
     Used in log messages so the raw API key / IP never hits the log stream.
     """
-    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+    return hmac.new(
+        _LOG_KEY_HMAC_SECRET,
+        key.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()[:12]
 
 
 # Global store instance
