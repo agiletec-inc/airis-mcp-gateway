@@ -6,7 +6,6 @@ import time
 
 from app.middleware.rate_limit import (
     RateLimitStore,
-    _hash_key,
 )
 
 
@@ -48,10 +47,12 @@ def test_len_reports_entry_count():
     assert len(store) == 2
 
 
-def test_hash_key_is_deterministic_and_does_not_leak_secret():
+def test_log_id_is_stable_and_does_not_leak_secret():
     key = "apikey:sk-live-supersecret"
-    hashed = _hash_key(key)
+    store = RateLimitStore()
+    store.check_and_increment(key, limit=10)
+    log_id = store.get_log_id(key)
 
-    assert hashed == _hash_key(key)  # deterministic
-    assert "supersecret" not in hashed
-    assert len(hashed) == 12
+    assert log_id == store.get_log_id(key)
+    assert "supersecret" not in log_id
+    assert len(log_id) == 12
