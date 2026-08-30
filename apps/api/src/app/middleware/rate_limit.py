@@ -8,12 +8,12 @@ use Redis-backed rate limiting (see docs/DEPLOYMENT.md).
 Key priority: API-Key header > client IP
 """
 
-import hashlib
 import ipaddress
 import os
+import secrets
 import time
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -80,6 +80,7 @@ class RateLimitEntry:
 
     count: int = 0
     window_start: float = 0.0
+    log_id: str = field(default_factory=lambda: secrets.token_hex(6))
 
 
 class RateLimitStore:
@@ -164,13 +165,9 @@ class RateLimitStore:
     def __len__(self) -> int:
         return len(self._store)
 
-
-def _hash_key(key: str) -> str:
-    """Return a short, non-reversible identifier for a rate-limit key.
-
-    Used in log messages so the raw API key / IP never hits the log stream.
-    """
-    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+    def get_log_id(self, key: str) -> str:
+        """Return an opaque identifier unrelated to the sensitive key value."""
+        return self._store[key].log_id
 
 
 # Global store instance
@@ -223,7 +220,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if not allowed:
             logger.warning(
                 "Rate limit exceeded for key=%s limit=%d/min",
-                _hash_key(key),
+                self.store.get_log_id(key),
                 limit,
             )
             return JSONResponse(

@@ -1610,7 +1610,8 @@ async def handle_airis_exec(
             status_code=200,
             media_type="application/json",
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("Docker gateway request failed for tool: %s", tool_ref)
         return Response(
             content=json.dumps(
                 {
@@ -1618,7 +1619,7 @@ async def handle_airis_exec(
                     "id": rpc_request.get("id"),
                     "error": {
                         "code": -32603,
-                        "message": f"Docker gateway error: {str(e)}",
+                        "message": "Docker gateway request failed",
                     },
                 }
             ),
@@ -2093,18 +2094,18 @@ async def handle_airis_repo_index(
             "result": {"content": [{"type": "text", "text": result.markdown}]},
         }
 
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         response_data = {
             "jsonrpc": "2.0",
             "id": rpc_request.get("id"),
-            "error": {"code": -32602, "message": str(e)},
+            "error": {"code": -32602, "message": "Repository path was not found"},
         }
-    except Exception as e:
-        logger.error(f"airis-repo-index failed: {e}")
+    except Exception:
+        logger.exception("airis-repo-index failed")
         response_data = {
             "jsonrpc": "2.0",
             "id": rpc_request.get("id"),
-            "error": {"code": -32603, "message": f"Indexing failed: {str(e)}"},
+            "error": {"code": -32603, "message": "Repository indexing failed"},
         }
 
     # MCP SSE Transport: Response via SSE stream

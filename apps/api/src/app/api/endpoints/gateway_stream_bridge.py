@@ -310,7 +310,7 @@ async def send_via_stream_bridge(
             request, create=create_session
         )
     except Exception as exc:  # noqa: BLE001
-        logger.error("Failed to open stream bridge session: %s", exc)
+        logger.exception("Failed to open stream bridge session")
         return Response(
             content=json.dumps(
                 {
@@ -318,7 +318,7 @@ async def send_via_stream_bridge(
                     "id": rpc_request.get("id"),
                     "error": {
                         "code": -32000,
-                        "message": f"Failed to open Gateway session: {exc}",
+                        "message": "Failed to open Gateway session",
                     },
                 }
             ),
@@ -374,7 +374,7 @@ async def send_via_stream_bridge(
                 headers={"Content-Type": "application/json"},
             )
         except Exception as exc:  # noqa: BLE001
-            logger.error("Failed to send bridged request to Gateway: %s", exc)
+            logger.exception("Failed to send bridged request to Gateway")
             return Response(
                 content=json.dumps(
                     {
@@ -382,7 +382,7 @@ async def send_via_stream_bridge(
                         "id": rpc_request.get("id"),
                         "error": {
                             "code": -32000,
-                            "message": f"Failed to reach Gateway session: {exc}",
+                            "message": "Failed to reach Gateway session",
                         },
                     }
                 ),
