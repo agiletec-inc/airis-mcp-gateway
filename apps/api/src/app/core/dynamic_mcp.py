@@ -2,6 +2,7 @@
 Dynamic MCP - Token-efficient tool discovery and activation.
 """
 
+import re
 from typing import Any, Optional
 from dataclasses import dataclass, field
 
@@ -456,6 +457,18 @@ class DynamicMCP:
 
         query_keywords = set(_extract_keywords(query)) if query_lower else set()
 
+        # Multi-word queries also match word by word: each word (or one of its
+        # synonyms) must appear somewhere in the tool's name, description or
+        # server, so "breaking changes home assistant" finds a tool described as
+        # "home assistant breaking changes". Single words keep plain substring
+        # matching, with no synonym widening.
+        word_groups = [
+            group
+            for word in re.split(r"[^a-z0-9]+", query_lower or "")
+            if (group := _extract_keywords(word))
+        ]
+        loose_tools = []
+
         # Search servers
         for name, info in self._servers.items():
             if server and name != server:
@@ -511,8 +524,15 @@ class DynamicMCP:
                 )
                 catalog_keywords = TOOL_CATALOG.get(info.server, {}).get(name, [])
                 keyword_match = bool(query_keywords & set(catalog_keywords))
-                if not (substring_match or keyword_match):
+                haystack = f"{name_lower} {desc_lower} {server_lower}"
+                word_match = len(word_groups) > 1 and all(
+                    any(w in haystack for w in group) for group in word_groups
+                )
+                if not (substring_match or keyword_match or word_match):
                     continue
+                exact = substring_match or keyword_match
+            else:
+                exact = True
 
             tool_result = {
                 "name": info.name,
@@ -527,10 +547,13 @@ class DynamicMCP:
                         tool_result["server_error"] = self._truncate(
                             health.last_error, 200
                         )
-            matched_tools.append(tool_result)
+            (matched_tools if exact else loose_tools).append(tool_result)
 
             if len(matched_tools) >= limit:
                 break
+
+        # Phrase/keyword matches first; word-only matches fill the rest of the limit.
+        matched_tools = (matched_tools + loose_tools)[:limit]
 
         # Fallback: search TOOL_CATALOG for tools not yet in cache
         if not matched_tools and query_lower:
