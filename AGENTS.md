@@ -1,6 +1,6 @@
 # AIRIS MCP Gateway
 
-必要時だけ起動するlocal MCP endpoint。現行の保持対象はContext7 process serverのみ。runtime registryは
+必要時だけ起動するlocal MCP endpoint。現行の保持対象はContext7 process serverのみ。
 install時のregistry templateは`config/mcp-config.template.json`、local runtimeは`mcp-config.json`。
 `mcp-config.json.example`は空の最小例でserver一覧の正本ではない。通常のfile/Git/web/browser操作へ使わない。
 
@@ -17,4 +17,4 @@ install時のregistry templateは`config/mcp-config.template.json`、local runti
 - source変更後はlocal processのrestartだけで済むと仮定せず、container imageをrebuildして反映を確認する。
 - `VERSION`がrelease正本。manifest側のversionは`task version:sync`で同期する。
 
-commandは`devbox shell`内の`task --list-all`を正本とし、対象unit/integration/e2eを実行する。
+commandは`devbox shell`内の`task --list-all`を正本とし、変更に対応するunit/integration/e2eを実行する。

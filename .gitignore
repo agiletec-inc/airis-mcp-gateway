@@ -23,9 +23,6 @@ claude-memory/
 # Original repos (nested git repositories)
 original-repos/
 
-# Claude Code configuration (keep this repo focused on MCP servers)
-# CLAUDE.md is for individual project instructions
-
 # Node.js dependencies
 servers/*/node_modules/
 apps/*/node_modules/

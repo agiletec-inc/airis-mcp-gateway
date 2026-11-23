@@ -57,7 +57,7 @@ DISQUALIFIERS = (
 
 SCAN_FILES = [
     "README.md",
-    "CLAUDE.md",
+    "AGENTS.md",
     "config/toolsets.json",
     "catalogs/airis-catalog.yaml",
     # All of docs/*.md, not just architecture.md — issue #212 found
