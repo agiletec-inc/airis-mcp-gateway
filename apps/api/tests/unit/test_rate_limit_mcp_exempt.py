@@ -70,7 +70,7 @@ def test_get_mcp_sse_stream_beyond_limit_is_exempt():
 
 def test_get_classic_sse_beyond_limit_is_exempt():
     """Regression test for #211: the classic SSE transport at `/sse`
-    (Gemini CLI / Cursor / Windsurf per this repo's CLAUDE.md) was also
+    (Gemini CLI / Cursor / Windsurf per this repo's AGENTS.md) was also
     missing from the exemption."""
     client = _build_client()
 
