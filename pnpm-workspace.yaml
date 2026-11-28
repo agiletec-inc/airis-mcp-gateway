@@ -8,8 +8,8 @@ packages:
 # identical dependency set, so versions are declared once here and each app
 # references them with `catalog:`.
 catalog:
-  "@modelcontextprotocol/sdk": "^1.29.0"
-  zod: "^4.4.3"
+  "@modelcontextprotocol/sdk": "^1.32.0"
+  zod: "^4.6.6"
   "@types/node": "^25.6.2"
   esbuild: "^0.28.1"
   typescript: "^6.0.3"
@@ -17,6 +17,10 @@ catalog:
 
 overrides:
   hono: "4.12.25"
-  vite: "8.0.16"
-  fast-uri: "3.1.4"
+  vite: "8.1.6"
+  fast-uri: "3.1.7"
+  ip-address: "10.3.1"
   postcss: "8.5.18"
+  "express>body-parser": "2.4.0"
+  "express>proxy-addr": "2.0.8"
+  "postcss>source-map-js": "1.2.2"
