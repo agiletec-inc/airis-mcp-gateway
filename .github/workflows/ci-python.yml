@@ -1,0 +1,80 @@
+name: Python CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api/**'
+      - 'pyproject.toml'
+      - 'workflows/**'
+      - '.github/workflows/ci-python.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/api/**'
+      - 'pyproject.toml'
+      - 'workflows/**'
+      - '.github/workflows/ci-python.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+
+      - name: Check uv.lock is in sync with pyproject.toml
+        # Fails the build instead of silently re-resolving when uv.lock and
+        # pyproject.toml have drifted apart (issue #192).
+        run: |
+          cd apps/api
+          uv lock --check
+
+      - name: Install dependencies
+        # Frozen, lockfile-driven install: `uv export --frozen` refuses to
+        # re-resolve and errors if uv.lock is stale, so the exact versions
+        # pinned in uv.lock (including the project itself, via `-e .`) are
+        # installed into the system site-packages (issue #192, mirrors
+        # pnpm's --frozen-lockfile).
+        run: |
+          cd apps/api
+          uv export --frozen --extra test --no-hashes -o requirements.lock.txt
+          uv pip install --system -r requirements.lock.txt
+
+      - name: Run tests with coverage
+        # --cov-fail-under is a regression ratchet, not the end goal. It must
+        # never be lowered — raise it as coverage improves. Do not chase a
+        # fixed target with filler tests; bump this number in the same PR
+        # that legitimately adds coverage (issue #195: raised from 48 to 52,
+        # actual measured coverage was 54.15% at the time).
+        run: |
+          cd apps/api
+          python -m pytest tests/unit -v --tb=short --cov=src --cov-report=xml --cov-report=term-missing --cov-fail-under=52
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
+        with:
+          files: apps/api/coverage.xml
+          flags: python
+          fail_ci_if_error: false
+
+      - name: Security scan (bandit)
+        run: |
+          pip install bandit
+          bandit -r apps/api/src -ll -ii
+
+      - name: Audit Python dependencies (pip-audit)
+        run: |
+          pip install --upgrade pip pip-audit
+          cd apps/api
+          pip-audit --skip-editable

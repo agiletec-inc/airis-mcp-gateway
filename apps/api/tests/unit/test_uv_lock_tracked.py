@@ -22,7 +22,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[4]
 UV_LOCK = REPO_ROOT / "apps" / "api" / "uv.lock"
 GITIGNORE = REPO_ROOT / ".gitignore"
-CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci-python.yml"
 DOCKERFILE = REPO_ROOT / "Dockerfile"
 
 # CI runs pytest from a full repo checkout; inside the api container only
