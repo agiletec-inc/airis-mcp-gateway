@@ -8,8 +8,8 @@ packages:
 # identical dependency set, so versions are declared once here and each app
 # references them with `catalog:`.
 catalog:
-  "@modelcontextprotocol/sdk": "^1.29.0"
-  zod: "^4.4.3"
+  "@modelcontextprotocol/sdk": "^1.32.0"
+  zod: "^4.6.6"
   "@types/node": "^25.6.2"
   esbuild: "^0.28.1"
   typescript: "^6.0.3"
