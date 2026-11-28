@@ -36,10 +36,6 @@ from .session_queue import (
     get_response_queue,
     remove_response_queue,
 )
-from .sse_protocol import (
-    format_sse_event as _format_sse_event,
-    parse_sse_json as _parse_sse_json,
-)
 from .tool_shaping import (
     apply_prompts_merging,
     apply_schema_partitioning,
@@ -578,34 +574,20 @@ def _filter_stream_headers(headers: dict[str, str]) -> dict[str, str]:
     return filtered
 
 
-def _method_has_body(method: str) -> bool:
-    return method.upper() in {"POST", "PUT", "PATCH", "DELETE"}
-
-
-async def _proxy_streaming_gateway_request(
-    request: Request,
-    *,
-    include_api_prefix: bool = True,
-    initialize_request_id: Optional[Any] = None,
+async def _proxy_gateway_discovery(
+    request: Request, *, include_api_prefix: bool = True
 ) -> Response:
-    """
-    Proxy Codex RMCP streamable_http traffic to the streaming gateway.
-    """
+    """Forward GET and HEAD discovery requests to the Docker MCP Gateway."""
     target_url = _build_stream_gateway_url(
         request, include_api_prefix=include_api_prefix
     )
-    method = request.method.upper()
-    payload = await request.body() if _method_has_body(method) else None
-
-    # Use context manager pattern to ensure cleanup in all code paths
     client = httpx.AsyncClient(timeout=STREAM_TIMEOUT)
     upstream = None
     try:
         upstream_request = client.build_request(
-            method,
+            request.method,
             target_url,
             headers=_filter_stream_headers(dict(request.headers)),
-            content=payload,
         )
         upstream = await client.send(
             upstream_request, stream=True, follow_redirects=True
@@ -617,8 +599,7 @@ async def _proxy_streaming_gateway_request(
             if key.lower() not in {"transfer-encoding", "connection"}
         }
 
-        if method == "HEAD":
-            await upstream.aread()
+        if request.method == "HEAD":
             await upstream.aclose()
             await client.aclose()
             return Response(
@@ -626,73 +607,14 @@ async def _proxy_streaming_gateway_request(
                 headers=response_headers,
             )
 
-        content_type = response_headers.get("content-type", "")
-        is_sse_response = "text/event-stream" in content_type.lower()
-
-        async def _inject_initialized_notifications():
-            """
-            Yield SSE stream chunks and append notifications/initialized when needed.
-            """
-            if not is_sse_response:
-                async for chunk in upstream.aiter_raw():
-                    yield chunk
-                return
-
-            pending_lines: list[str] = []
-            tracked_initialize_id = initialize_request_id
-
-            def flush_lines() -> list[bytes]:
-                nonlocal pending_lines, tracked_initialize_id
-                if not pending_lines:
-                    return [b"\n"]
-
-                event_text = "\n".join(pending_lines)
-                payload = _parse_sse_json(pending_lines)
-                chunks = [(event_text + "\n\n").encode("utf-8")]
-
-                if isinstance(payload, dict):
-                    method = payload.get("method")
-                    if method == "notifications/initialized":
-                        tracked_initialize_id = None
-                    elif (
-                        tracked_initialize_id is not None
-                        and payload.get("id") == tracked_initialize_id
-                        and "result" in payload
-                    ):
-                        chunks.append(
-                            _format_sse_event(
-                                {
-                                    "jsonrpc": "2.0",
-                                    "method": "notifications/initialized",
-                                }
-                            )
-                        )
-                        tracked_initialize_id = None
-
-                pending_lines = []
-                return chunks
-
-            async for line in upstream.aiter_lines():
-                if line == "":
-                    for chunk in flush_lines():
-                        yield chunk
-                else:
-                    pending_lines.append(line)
-
-            if pending_lines:
-                for chunk in flush_lines():
-                    yield chunk
-
         async def stream_body():
             try:
-                async for chunk in _inject_initialized_notifications():
+                async for chunk in upstream.aiter_raw():
                     yield chunk
             finally:
                 await upstream.aclose()
                 await client.aclose()
 
-        # Successfully created response - ownership transfers to StreamingResponse
-        # The stream_body() finally block will handle cleanup
         return StreamingResponse(
             stream_body(),
             status_code=upstream.status_code,
@@ -1133,14 +1055,14 @@ async def mcp_stream_well_known(request: Request, path: str):
     """
     Forward /.well-known discovery requests under the API prefix.
     """
-    return await _proxy_streaming_gateway_request(request)
+    return await _proxy_gateway_discovery(request)
 
 
 async def proxy_root_well_known(request: Request, path: str) -> Response:
     """
     Public /.well-known proxy mounted at the application root.
     """
-    return await _proxy_streaming_gateway_request(
+    return await _proxy_gateway_discovery(
         request,
         include_api_prefix=False,
     )

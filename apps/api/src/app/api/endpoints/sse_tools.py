@@ -106,19 +106,6 @@ def format_sse_event(event_type: str, data: Any) -> str:
     return f"event: {event_type}\ndata: {json_data}\n\n"
 
 
-async def get_docker_gateway_tools() -> list[dict[str, Any]]:
-    """Fetch tools from Docker MCP Gateway."""
-    try:
-        async with httpx.AsyncClient(timeout=10.0):
-            # Docker Gateway doesn't have a direct tools endpoint
-            # We get tools via the SSE stream, so return empty here
-            # The actual tools come through the MCP protocol
-            return []
-    except Exception as e:
-        logger.error(f"Failed to fetch Docker Gateway tools: {e}")
-        return []
-
-
 async def get_all_server_status() -> list[dict[str, Any]]:
     """Get status of all servers (Docker + Process)."""
     servers = []

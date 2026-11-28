@@ -1,0 +1,58 @@
+name: TypeScript CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/gateway-control/**'
+      - 'apps/airis-commands/**'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.npmrc'
+      - '.github/workflows/ci-typescript.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/gateway-control/**'
+      - 'apps/airis-commands/**'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.npmrc'
+      - '.github/workflows/ci-typescript.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        # --frozen-lockfile fails the build if pnpm-lock.yaml is out of sync
+        # with the manifests instead of silently drifting.
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm -r run test
+
+      - name: Typecheck
+        run: pnpm -r run typecheck
+
+      - name: Build
+        run: pnpm -r run build
+
+      - name: Audit dependencies
+        run: pnpm audit --audit-level=high

@@ -1,0 +1,46 @@
+name: Shell CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/airis-mcp-gateway'
+      - 'scripts/quick-install.sh'
+      - 'scripts/test-airis-mcp-gateway-smoke.sh'
+      - 'scripts/test-compose-references.sh'
+      - 'install.sh'
+      - '.tasks.d/test.yml'
+      - '.tasks.d/dev.yml'
+      - 'compose.yaml'
+      - 'ops/autostart/**'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/ci-shell.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/airis-mcp-gateway'
+      - 'scripts/quick-install.sh'
+      - 'scripts/test-airis-mcp-gateway-smoke.sh'
+      - 'scripts/test-compose-references.sh'
+      - 'install.sh'
+      - '.tasks.d/test.yml'
+      - '.tasks.d/dev.yml'
+      - 'compose.yaml'
+      - 'ops/autostart/**'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/ci-shell.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test-shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run airis-mcp-gateway smoke tests
+        run: bash scripts/test-airis-mcp-gateway-smoke.sh
+
+      - name: Run compose reference tests
+        run: bash scripts/test-compose-references.sh
